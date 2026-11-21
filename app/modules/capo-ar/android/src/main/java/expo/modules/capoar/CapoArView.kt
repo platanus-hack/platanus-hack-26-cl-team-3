@@ -60,6 +60,11 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
   @Volatile internal var outbackParts: List<String> = emptyList()
   private val outbackModel by lazy { OutbackModel.load(context.assets) }
+  private val visualRegistration by lazy {
+    if (org.opencv.android.OpenCVLoader.initLocal()) {
+      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes()) }
+    } else null
+  }
   private val modelRenderer = ModelRenderer()
   private val fondo = FondoCamara()
   private val principal = Handler(Looper.getMainLooper())
@@ -83,10 +88,11 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val registration: List<Double>,
     val volumes: List<List<Double>>,
     val observedCenters: Map<Int, EngineImagePoint>,
+    val allowVisual: Boolean,
     val promise: Promise,
   )
   private val pendingFix = AtomicReference<FixRequest?>()
-  private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh, val model: PlacedModel?)
+  private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh, val model: PlacedModel?, var alignment: ManualModelAlignment = ManualModelAlignment())
   private var placedEngine: PlacedEngine? = null
   private data class OverlayFrame(
     val points: FloatArray?,
@@ -109,6 +115,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val grados: Int, val muestras: HitSamples,
     val prof: Profundidad? // mapa de profundidad completo de ese cuadro (si el teléfono lo entrega)
   ) {
+    @Volatile var visualPose: VisualModelPose? = null
     var scanOutline: FloatArray? = null
     var scanPoints = emptyList<EnginePoint>()
   }
@@ -232,7 +239,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   fun fijar(
     id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
-    observedCenters: List<List<Double>>, promise: Promise,
+    observedCenters: List<List<Double>>, allowVisual: Boolean, promise: Promise,
   ) {
     if (esquinas.size < 6 || esquinas.size % 2 != 0) {
       promise.reject("ERR_AR", "Se necesitan al menos 3 esquinas", null)
@@ -240,7 +247,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val request = FixRequest(
       id, FloatArray(esquinas.size) { esquinas[it].toFloat() }, registration, volumes,
-      decodeObservedCenters(observedCenters, volumes.size), promise,
+      decodeObservedCenters(observedCenters, volumes.size), allowVisual, promise,
     )
     if (!pendingFix.compareAndSet(null, request)) promise.reject("ERR_AR", "Ya se está fijando el vano", null)
   }
@@ -304,6 +311,32 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       semillaMundo = floatArrayOf(t.tx(), t.ty(), t.tz())
       promise.resolve(true)
     }
+  }
+
+  fun editMap(enabled: Boolean) {
+    capa.setOnTouchListener(if (enabled) MapGestureListener { move ->
+      tareas.add { frame ->
+        val engine = placedEngine
+        if (engine != null && frame.camera.trackingState == TrackingState.TRACKING &&
+          engine.anchor.trackingState == TrackingState.TRACKING) {
+          engine.alignment = engine.alignment.gesture(anchorProjection(frame, engine), move)
+        }
+      }
+    } else null)
+  }
+
+  private fun anchorProjection(frame: Frame, engine: PlacedEngine): FloatArray {
+    val anchor = FloatArray(16)
+    val view = FloatArray(16)
+    val projection = FloatArray(16)
+    val modelView = FloatArray(16)
+    val mvp = FloatArray(16)
+    engine.anchor.pose.toMatrix(anchor, 0)
+    frame.camera.getViewMatrix(view, 0)
+    frame.camera.getProjectionMatrix(projection, 0, .05f, 100f)
+    Matrix.multiplyMM(modelView, 0, view, 0, anchor, 0)
+    Matrix.multiplyMM(mvp, 0, projection, 0, modelView, 0)
+    return mvp
   }
 
   fun soltar() {
@@ -400,22 +433,17 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }
     }
     val hitFrame = if (engine?.model != null) {
-      val anchor = FloatArray(16)
-      val view = FloatArray(16)
-      val projection = FloatArray(16)
-      val modelView = FloatArray(16)
-      val mvp = FloatArray(16)
-      engine.anchor.pose.toMatrix(anchor, 0)
-      camara.getViewMatrix(view, 0)
-      camara.getProjectionMatrix(projection, 0, .05f, 100f)
-      Matrix.multiplyMM(modelView, 0, view, 0, anchor, 0)
-      Matrix.multiplyMM(mvp, 0, projection, 0, modelView, 0)
+      val mvp = anchorProjection(frame, engine)
+      val (offset, scale) = engine.alignment
+      Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
+      Matrix.scaleM(mvp, 0, scale, scale, scale)
       modelRenderer.draw(engine.model, mvp, guidePart)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista)
     } else null
     val faces = if (hitFrame == null && engine != null && projector != null) {
       val pose = engine.anchor.pose
-      engine.mesh.project { local ->
+      engine.mesh.project { vertex ->
+        val local = engine.alignment.apply(vertex)
         val world = pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
         projector(world[0], world[1], world[2])
       }
@@ -507,8 +535,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }
     }
     val id = ++contador
-    if (pose != null) {
-      capturas[id] = Captura(pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof)
+    val capture = pose?.let { Captura(it, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof) }
+    val matchOutback = capture != null && outbackParts.isNotEmpty()
+    if (capture != null) {
+      capturas[id] = capture
       while (capturas.size > 8) capturas.remove(capturas.keys.first())
     }
 
@@ -518,6 +548,11 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           // Each caller owns its JPEG, including when recalibration and a contour check share the same frame.
           val archivo = File(context.cacheDir, "capo-ar-$id-$index.jpg")
           val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
+          if (matchOutback && capture != null && request.includeMeasurements) {
+            capture.visualPose = try {
+              visualRegistration?.locate(archivo.path, grados, EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1]))
+            } catch (_: org.opencv.core.CvException) { null } catch (_: UnsatisfiedLinkError) { null }
+          }
           val r = mutableMapOf<String, Any>(
             "id" to id, "uri" to "file://${archivo.absolutePath}", "ancho" to ancho, "alto" to alto,
             "grados" to grados, "rastreando" to (rastreando && (!request.includeMeasurements || measure)),
@@ -525,6 +560,14 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
             "puntos" to puntos,
             "registrationMeasurements" to (puntos >= AnclajeDenso.MIN_REGISTRATION_POINTS || muestras.local.size >= 4)
           )
+          val visual = capture?.visualPose
+          if (visual != null) {
+            val intrinsics = EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1])
+            val polygon = listOf(0, 1, 3, 2).mapNotNull { corner ->
+              intrinsics.project(visual.cameraPoint(outbackModel.corners[corner]))?.let { Imagen.girar(it.x,it.y,grados) }
+            }
+            if (polygon.size == 4) r["visualOutline"] = polygon.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
+          }
           anclasImagen?.let { r["anclas"] = it }
           semillaImagen?.let { r["semilla"] = it }
           request.promise.resolve(r)
@@ -574,7 +617,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   private fun anclar(s: Session, request: FixRequest) {
-    val (captureId, esquinasGiradas, registration, volumes, observedCenters, promise) = request
+    val (captureId, esquinasGiradas, registration, volumes, observedCenters, allowVisual, promise) = request
     val c = capturas[captureId]
     val reference = captureReference?.takeIf { it.session === s }?.anchor
       ?.takeIf { it.trackingState == TrackingState.TRACKING }
@@ -670,14 +713,21 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     var registrationMethod: String? = null
     val mesh = if (registration.size == 8 && volumes.isNotEmpty()) {
       val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
-      val scanMesh = scanPoints?.let { points ->
+      val visualMesh = c.visualPose?.takeIf { allowVisual && outbackParts.isNotEmpty() }?.let { pose ->
+        val corners = outbackModel.corners.map { corner ->
+          val point = pose.cameraPoint(corner)
+          cameraToWorld(floatArrayOf(point.x, point.y, point.z))
+        }
+        EngineMesh.create(corners, volumes, captureDepth = ::captureDepth)
+      }?.also { registrationMethod = "visual" }
+      val scanMesh = scanPoints?.takeIf { visualMesh == null }?.let { points ->
         val rays = frameCorners.map { (u, v) -> intrinsics.ray(EngineImagePoint(u, v)) }
         scanIntersections(points, rays)?.let { corners ->
           EngineMesh.create(corners.map { cameraToWorld(floatArrayOf(it.x, it.y, it.z)) },
             volumes, refinePartFace, captureDepth = ::captureDepth)
         }
       }?.also { registrationMethod = "escaneo" }
-      val denseMesh = if (scanMesh == null && densa != null) {
+      val denseMesh = if (visualMesh == null && scanMesh == null && densa != null) {
         val depthCorners = frameCorners.map { (u, v) -> prof.aPixel(u, v) }
         densa.registrationPoints(depthCorners)?.let { fit ->
           EngineMesh.create(fit.points.map(::cameraToWorld), volumes, refinePartFace, captureDepth = ::captureDepth)?.also {
@@ -685,7 +735,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           }
         }
       } else null
-      scanMesh ?: denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
+      visualMesh ?: scanMesh ?: denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
         EngineMesh.create(
           frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
           volumes, refinePartFace, captureDepth = ::captureDepth,
@@ -810,7 +860,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private fun emitGuide(frame: Frame, engine: PlacedEngine) {
     val part = guidePart
     if (part < 0 || frame.timestamp - lastGuideNs < GUIDE_INTERVAL_NS) return
-    val local = engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
+    val center = engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
+    val local = engine.alignment.apply(center)
     val world = engine.anchor.pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
     val view = FloatArray(16)
     val projection = FloatArray(16)

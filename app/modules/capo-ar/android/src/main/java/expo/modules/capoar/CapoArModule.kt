@@ -84,6 +84,8 @@ class CapoArModule : Module() {
 
       Prop("outbackParts") { view: CapoArView, ids: List<String>? -> view.outbackParts = ids.orEmpty() }
 
+      Prop("editingMap") { view: CapoArView, enabled: Boolean? -> view.editMap(enabled == true) }
+
       Prop("selectedPart") { view: CapoArView, index: Int? ->
         view.capa.selectedPart = index ?: -1
         view.guidePart = index ?: -1
@@ -99,8 +101,8 @@ class CapoArModule : Module() {
 
       AsyncFunction("fijar") {
         vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
-        observedCenters: List<List<Double>>?, promise: Promise ->
-        vista.fijar(id, esquinas, registration, volumes, observedCenters.orEmpty(), promise)
+        observedCenters: List<List<Double>>?, allowVisual: Boolean?, promise: Promise ->
+        vista.fijar(id, esquinas, registration, volumes, observedCenters.orEmpty(), allowVisual == true, promise)
       }
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }

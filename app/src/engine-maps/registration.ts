@@ -11,6 +11,18 @@ export function completeBay(detection: Vano | null, crop: Recorte): Vano | null 
 
 const imageBounds = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
 
+/** Projected model corners may extend beyond the image during a close-up. */
+export function visualBay(outline?: number[], detected?: Vano | null): Vano | null {
+  if (outline?.length !== 8 || !outline.every(Number.isFinite)) return null;
+  const esquinas = [0, 2, 4, 6].map(i => {
+    const x = outline[i], y = outline[i + 1];
+    return { x, y, borde: x < 0 || x > 1 || y < 0 || y > 1 };
+  });
+  const area = iouPoligonos(esquinas, imageBounds);
+  const bay = { esquinas, area, confianza: 1, cortado: esquinas.some(p => p.borde) };
+  return area > 0 && (!detected || overlapsPlacedBay(esquinas, detected)) ? bay : null;
+}
+
 /** For an existing anchor, compare only the portion both outlines could show in this capture. */
 export function overlapsPlacedBay(previous: { x: number; y: number }[], candidate: Vano): boolean {
   const iou = iouPoligonos(previous, candidate.esquinas);
