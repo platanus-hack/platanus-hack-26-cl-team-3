@@ -44,7 +44,9 @@ export function recorteAlrededor(puntos: { x: number; y: number }[], factor = 1.
 }
 
 // La pantalla muestra la franja central de la captura y el panel tapa la parte de abajo: el usuario encuadra arriba del centro.
-const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4)];
+const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4),
+  ...[.3, .7].flatMap(y => [.3, .7].map(x => recorteCentrado(x, y, .6))),
+];
 
 /** Pasa un vano detectado dentro de `r` a coordenadas del cuadro completo. */
 export function aCuadroCompleto(v: Vano, r: Recorte): Vano {
@@ -97,8 +99,9 @@ export class Encuadre {
       // Si venía viendo un vano se tolera un análisis vacío; si no, continúa la ronda de búsqueda.
       if (!(this.conVano && this.vacios < 2)) {
         this.conVano = false;
-        this.paso = (this.paso + 1) % BUSQUEDA.length;
-        this.actual = this.ronda()[this.paso];
+        const crops = this.ronda();
+        this.paso = (this.paso + 1) % crops.length;
+        this.actual = crops[this.paso];
       }
       return { vano: null, valido: false, cambio: !igual(this.actual, r) };
     }
@@ -123,8 +126,9 @@ export class Encuadre {
       const objetivo = recorteCentrado(cx, cy, Math.max(Math.sqrt(completo.area / OCUPACION), HOLGURA * mayor));
       if (objetivo.lado < r.lado * 0.8) this.actual = objetivo;
       else {
-        this.paso = (this.paso + 1) % BUSQUEDA.length;
-        this.actual = this.ronda()[this.paso];
+        const crops = this.ronda();
+        this.paso = (this.paso + 1) % crops.length;
+        this.actual = crops[this.paso];
       }
     }
     return { vano: completo, valido, cambio: !igual(this.actual, r) };

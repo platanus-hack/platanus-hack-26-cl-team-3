@@ -1,0 +1,470 @@
+{
+  "vehicle": "2015–2016 Subaru Outback 3.6R Limited, North America (left-hand drive), EZ36",
+  "coordinateSystem": "Original frame pixels. A null point is occluded or cropped out.",
+  "frames": [
+    {
+      "width": 1920,
+      "height": 1080,
+      "timeSeconds": 16.65,
+      "source": "https://www.carcarekiosk.com/video/2015_Subaru_Outback_3.6R_Limited_3.6L_6_Cyl./hood/open_the_hood",
+      "points": {
+        "strutLeftFrontStud": [
+          578,
+          61
+        ],
+        "strutRightFrontStud": [
+          1746,
+          145
+        ],
+        "airboxLeftLatch": [
+          357,
+          322
+        ],
+        "airboxRightLatch": [
+          488,
+          334
+        ],
+        "engineBadge": [
+          1067,
+          245
+        ],
+        "brakeCap": null,
+        "fuseLidRearLeft": [
+          1609,
+          216
+        ],
+        "fuseLidFrontRight": [
+          1894,
+          384
+        ],
+        "washerCap": null,
+        "oilDipstick": [
+          1330,
+          582
+        ],
+        "oilFiller": [
+          1419,
+          603
+        ],
+        "coolantCap": [
+          1382,
+          659
+        ],
+        "radiatorCap": [
+          1233,
+          660
+        ],
+        "batteryPositiveCover": [
+          1648,
+          398
+        ],
+        "batteryClampStud": [
+          1534,
+          502
+        ]
+      },
+      "file": "mark-hood.jpg",
+      "sourceId": "carcarekiosk-2015-ez36-hood",
+      "publisher": "CarCareKiosk (Flatsix LLC)",
+      "sha256": "24e30499c1058f29b518d6f5309f8781a684c5b9824f041154bfafc34c8563a3"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "timeSeconds": 1.2,
+      "source": "https://www.carcarekiosk.com/video/2015_Subaru_Outback_3.6R_Limited_3.6L_6_Cyl./air_filter_engine/replace",
+      "points": {
+        "strutLeftFrontStud": [
+          277,
+          199
+        ],
+        "strutRightFrontStud": [
+          1657,
+          228
+        ],
+        "airboxLeftLatch": [
+          63,
+          605
+        ],
+        "airboxRightLatch": [
+          236,
+          614
+        ],
+        "engineBadge": [
+          950,
+          415
+        ],
+        "brakeCap": [
+          1431,
+          215
+        ],
+        "fuseLidRearLeft": [
+          1546,
+          329
+        ],
+        "fuseLidFrontRight": [
+          1875,
+          502
+        ],
+        "washerCap": null,
+        "oilDipstick": [
+          1341,
+          817
+        ],
+        "oilFiller": [
+          1442,
+          827
+        ],
+        "coolantCap": [
+          1442,
+          927
+        ],
+        "radiatorCap": [
+          1310,
+          982
+        ],
+        "batteryPositiveCover": [
+          1639,
+          553
+        ],
+        "batteryClampStud": [
+          1535,
+          681
+        ]
+      },
+      "file": "mark-filter.jpg",
+      "sourceId": "carcarekiosk-2015-ez36-filter",
+      "publisher": "CarCareKiosk (Flatsix LLC)",
+      "sha256": "11ebb57d11224a98e5ece8abd35a6380c9734c85c57a1a8c25046d7bf6528eac"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "timeSeconds": 1.3,
+      "source": "https://www.carcarekiosk.com/video/2015_Subaru_Outback_3.6R_Limited_3.6L_6_Cyl./oil/check_oil_level",
+      "points": {
+        "strutLeftFrontStud": [
+          242,
+          136
+        ],
+        "strutRightFrontStud": null,
+        "airboxLeftLatch": [
+          42,
+          515
+        ],
+        "airboxRightLatch": [
+          234,
+          513
+        ],
+        "engineBadge": [
+          959,
+          318
+        ],
+        "brakeCap": null,
+        "fuseLidRearLeft": [
+          1556,
+          224
+        ],
+        "fuseLidFrontRight": [
+          1909,
+          379
+        ],
+        "washerCap": null,
+        "oilDipstick": [
+          1375,
+          682
+        ],
+        "oilFiller": [
+          1473,
+          687
+        ],
+        "coolantCap": [
+          1478,
+          759
+        ],
+        "radiatorCap": [
+          1340,
+          788
+        ],
+        "batteryPositiveCover": [
+          1661,
+          425
+        ],
+        "batteryClampStud": [
+          1564,
+          555
+        ]
+      },
+      "file": "mark-oil.jpg",
+      "sourceId": "carcarekiosk-2015-ez36-oil",
+      "publisher": "CarCareKiosk (Flatsix LLC)",
+      "sha256": "b7397838106f6dae471aa39a2ca916c64998aa4b3d9fa656292669ab91c9ebc7"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "timeSeconds": 29.4,
+      "source": "https://www.carcarekiosk.com/video/2015_Subaru_Outback_3.6R_Limited_3.6L_6_Cyl./coolant_antifreeze/check_coolant_level",
+      "points": {
+        "strutLeftFrontStud": [
+          65,
+          181
+        ],
+        "strutRightFrontStud": null,
+        "airboxLeftLatch": null,
+        "airboxRightLatch": [
+          93,
+          611
+        ],
+        "engineBadge": [
+          905,
+          382
+        ],
+        "brakeCap": null,
+        "fuseLidRearLeft": [
+          1550,
+          269
+        ],
+        "fuseLidFrontRight": null,
+        "washerCap": null,
+        "oilDipstick": [
+          1372,
+          783
+        ],
+        "oilFiller": [
+          1483,
+          787
+        ],
+        "coolantCap": [
+          1494,
+          869
+        ],
+        "radiatorCap": [
+          1348,
+          901
+        ],
+        "batteryPositiveCover": [
+          1684,
+          494
+        ],
+        "batteryClampStud": [
+          1576,
+          638
+        ]
+      },
+      "file": "mark-coolant.jpg",
+      "sourceId": "carcarekiosk-2015-ez36-coolant",
+      "publisher": "CarCareKiosk (Flatsix LLC)",
+      "sha256": "07f367663026976f5d4e6886783011c2f49cb3e9b15b83404f538f3c9f56e8c9"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "timeSeconds": 1.2,
+      "source": "https://www.carcarekiosk.com/video/2015_Subaru_Outback_3.6R_Limited_3.6L_6_Cyl./fuse_engine/check",
+      "points": {
+        "strutLeftFrontStud": [
+          62,
+          404
+        ],
+        "strutRightFrontStud": [
+          1468,
+          344
+        ],
+        "airboxLeftLatch": null,
+        "airboxRightLatch": [
+          39,
+          839
+        ],
+        "engineBadge": [
+          792,
+          575
+        ],
+        "brakeCap": [
+          1249,
+          348
+        ],
+        "fuseLidRearLeft": [
+          1368,
+          442
+        ],
+        "fuseLidFrontRight": [
+          1709,
+          595
+        ],
+        "washerCap": [
+          1753,
+          667
+        ],
+        "oilDipstick": [
+          1224,
+          975
+        ],
+        "oilFiller": [
+          1322,
+          944
+        ],
+        "coolantCap": [
+          1340,
+          1048
+        ],
+        "radiatorCap": null,
+        "batteryPositiveCover": [
+          1488,
+          656
+        ],
+        "batteryClampStud": [
+          1395,
+          792
+        ]
+      },
+      "file": "mark-fuses.jpg",
+      "sourceId": "carcarekiosk-2015-ez36-fuses",
+      "publisher": "CarCareKiosk (Flatsix LLC)",
+      "sha256": "a9c5e96b0462e8f3ae8413f917339f743ebe69c7faf5137becc1d862d43e6f48"
+    },
+    {
+      "width": 720,
+      "height": 476,
+      "timeSeconds": null,
+      "source": "https://www.cars101.com/subaru/outback/outback15-engine5.jpg",
+      "points": {
+        "strutLeftFrontStud": [
+          100,
+          62
+        ],
+        "strutRightFrontStud": [
+          622,
+          77
+        ],
+        "airboxLeftLatch": [
+          41,
+          232
+        ],
+        "airboxRightLatch": [
+          100,
+          234
+        ],
+        "engineBadge": [
+          378,
+          152
+        ],
+        "brakeCap": [
+          546,
+          74
+        ],
+        "fuseLidRearLeft": [
+          576,
+          118
+        ],
+        "fuseLidFrontRight": [
+          701,
+          180
+        ],
+        "washerCap": null,
+        "oilDipstick": [
+          524,
+          307
+        ],
+        "oilFiller": [
+          560,
+          310
+        ],
+        "coolantCap": [
+          568,
+          351
+        ],
+        "radiatorCap": [
+          526,
+          382
+        ],
+        "batteryPositiveCover": [
+          626,
+          205
+        ],
+        "batteryClampStud": [
+          593,
+          249
+        ]
+      },
+      "file": "cars101.jpg",
+      "sourceId": "cars101-2015-ez36-front",
+      "publisher": "Cars101 (Joe Spitz)",
+      "sha256": "c0bb874cc6228c130ee639f8949728233dc6944a53e832eb2d19107ec49107a7",
+      "originalPhoto": "https://www.cars101.com/subaru/outback/outback15-engine5.jpg"
+    },
+    {
+      "width": 1920,
+      "height": 1200,
+      "timeSeconds": null,
+      "source": "https://www.guideautoweb.com/en/articles/36282/2016-subaru-outback-3.6r-limited-the-nonconformist/",
+      "points": {
+        "strutLeftFrontStud": [
+          358,
+          341
+        ],
+        "strutRightFrontStud": [
+          1600,
+          398
+        ],
+        "airboxLeftLatch": [
+          147,
+          670
+        ],
+        "airboxRightLatch": [
+          315,
+          679
+        ],
+        "engineBadge": [
+          988,
+          528
+        ],
+        "brakeCap": [
+          1403,
+          380
+        ],
+        "fuseLidRearLeft": [
+          1516,
+          470
+        ],
+        "fuseLidFrontRight": [
+          1806,
+          615
+        ],
+        "washerCap": [
+          1854,
+          679
+        ],
+        "oilDipstick": [
+          1371,
+          878
+        ],
+        "oilFiller": [
+          1459,
+          891
+        ],
+        "coolantCap": [
+          1482,
+          963
+        ],
+        "radiatorCap": [
+          1365,
+          991
+        ],
+        "batteryPositiveCover": [
+          1619,
+          648
+        ],
+        "batteryClampStud": [
+          1532,
+          771
+        ]
+      },
+      "file": "car-guide.jpg",
+      "sourceId": "car-guide-2016-ez36-front",
+      "publisher": "The Car Guide (Michel Deslauriers)",
+      "originalPhoto": "https://images.guideautoweb.com/content/photos/22/75/227579_2016_Subaru_Outback.jpg",
+      "sha256": "7faf62b34910c0103fc5cedac48e2e4d0ce2cc3ac08b583c92a336179b710aa9"
+    }
+  ]
+}

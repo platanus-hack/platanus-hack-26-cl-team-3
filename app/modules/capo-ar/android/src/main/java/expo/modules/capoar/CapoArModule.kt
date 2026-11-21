@@ -37,14 +37,18 @@ class CapoArModule : Module() {
 
       Prop("selectedPart") { view: CapoArView, index: Int? -> view.capa.selectedPart = index ?: -1 }
 
-      AsyncFunction("capturar") { vista: CapoArView, promise: Promise -> vista.capturar(promise) }
+      AsyncFunction("capturar") { view: CapoArView, includeMeasurements: Boolean?, promise: Promise ->
+        view.capturar(includeMeasurements ?: true, promise)
+      }
 
       AsyncFunction("mostrarVista") { vista: CapoArView, esquinas: List<Double>, bordes: List<Boolean>, grados: Int ->
         vista.mostrarVista(esquinas, bordes, grados)
       }
 
-      AsyncFunction("fijar") { vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>, promise: Promise ->
-        vista.fijar(id, esquinas, registration, volumes, promise)
+      AsyncFunction("fijar") {
+        vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
+        observedCenters: List<List<Double>>?, promise: Promise ->
+        vista.fijar(id, esquinas, registration, volumes, observedCenters.orEmpty(), promise)
       }
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }

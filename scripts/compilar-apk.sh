@@ -48,6 +48,7 @@ fi
 export CMAKE_BUILD_PARALLEL_LEVEL=1
 
 "$RAIZ/scripts/preparar-modelo-vano.sh"   # modelo del vano del motor (CLIPSeg + decodificador propio)
+"$RAIZ/scripts/prepare-outback-landmark-model.sh"
 [ -d node_modules ] || npm ci --no-audit --no-fund
 npx tsc --noEmit
 if [ "${LIMPIO:-0}" = 1 ] || [ ! -d android ]; then
