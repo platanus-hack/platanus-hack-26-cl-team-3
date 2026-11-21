@@ -1,13 +1,23 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { cameraRoute } from '../chat/camera';
 import { runTurn } from '../chat/client';
 import type { AnthropicMessage } from '../chat/contract';
-import { clear, load, save, toView, type Bubble, type ViewCitation, type ViewPart } from '../chat/history';
+import { clear, load, save, toCard, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
+import { parts as catalogParts } from '../engine-maps/catalog';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Boton, Icono, Tarjeta } from '../ui';
+
+const TOOL_STATUS: Record<string, string> = {
+  lookup_fuses: 'Revisando la tabla de fusibles…',
+  lookup_parts: 'Buscando la pieza…',
+  show_in_camera: 'Preparando la cámara…',
+};
+const DEFAULT_TOOL_STATUS = 'Consultando el manual…';
+const QUICK_REPLIES = ['Listo, ¿qué sigue?', 'No lo encuentro'];
 
 export default function Ask() {
   const insets = useSafeAreaInsets();
@@ -16,6 +26,9 @@ export default function Ask() {
   const [version, setVersion] = useState(0);
   const [question, setQuestion] = useState<string | null>(null);
   const [live, setLive] = useState<ViewPart[]>([]);
+  const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
+  const [replies, setReplies] = useState(false);
+  const openedCamera = useRef(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -35,35 +48,58 @@ export default function Ask() {
     });
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (openedCamera.current) {
+        openedCamera.current = false;
+        setReplies(true);
+      }
+    }, []),
+  );
+
+  const openCamera = useCallback((card: ViewCard) => {
+    openedCamera.current = true;
+    router.push(cameraRoute(card));
+  }, []);
+
   const bubbles = useMemo(() => {
     const b: Bubble[] = toView(messages.current);
-    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }] });
-    if (live.length > 0) b.push({ role: 'assistant', parts: live });
+    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [] });
+    if (live.length > 0 || liveCards.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards });
     return b;
-  }, [version, question, live]);
+  }, [version, question, live, liveCards]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  const send = useCallback(async (override?: string) => {
+    const text = (override ?? input).trim();
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
     const userMessage: AnthropicMessage = { role: 'user', content: text };
     const previous = messages.current;
     const parts: ViewPart[] = [];
+    const cards: ViewCard[] = [];
     let breakNext = false;
 
     setInput('');
+    setReplies(false);
     setNote(null);
     setError(null);
     setQuestion(text);
     setLive([]);
+    setLiveCards([]);
     setStatus('Pensando…');
     setBusy(true);
 
     try {
       for await (const ev of runTurn({ messages: [...previous, userMessage] })) {
         if (ev.type === 'tool') {
-          setStatus('Revisando la tabla de fusibles…');
+          setStatus(TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS);
           breakNext = true;
+        } else if (ev.type === 'ar') {
+          const card = toCard(ev.part, ev.instruction);
+          if (card) {
+            cards.push(card);
+            setLiveCards([...cards]);
+          }
         } else if (ev.type === 'text') {
           setStatus(null);
           if (!parts[ev.block]) {
@@ -85,11 +121,13 @@ export default function Ask() {
           setVersion((v) => v + 1);
           setQuestion(null);
           setLive([]);
+          setLiveCards([]);
         } else {
           setError(ev.message);
           setInput(text);
           setQuestion(null);
           setLive([]);
+          setLiveCards([]);
         }
       }
     } catch {
@@ -97,6 +135,7 @@ export default function Ask() {
       setInput(text);
       setQuestion(null);
       setLive([]);
+      setLiveCards([]);
     } finally {
       setStatus(null);
       busyRef.current = false;
@@ -109,6 +148,7 @@ export default function Ask() {
     void clear();
     setError(null);
     setNote(null);
+    setReplies(false);
     setVersion((v) => v + 1);
   }, []);
 
@@ -139,11 +179,15 @@ export default function Ask() {
         {bubbles.length === 0 && (
           <Tarjeta estilo={styles.empty}>
             <Icono nombre="book-open-variant" tam={26} tono={color.textoSuave} />
-            <Text style={tipo.nota}>Cuéntame qué le pasa al Outback. Por ejemplo: «se me quedó abajo la ventana del conductor».</Text>
+            <Text style={tipo.nota}>Cuéntame qué le pasa al Outback. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
           </Tarjeta>
         )}
         {bubbles.map((b, i) => (
-          <BubbleView key={i} bubble={b} streaming={live.length > 0 && i === bubbles.length - 1} onCitation={setCitation} />
+          <BubbleView
+            key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0) && i === bubbles.length - 1}
+            onCitation={setCitation}
+            onCamera={openCamera}
+          />
         ))}
       </ScrollView>
 
@@ -151,6 +195,22 @@ export default function Ask() {
         {error && <Text style={styles.error}>{error}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
         {note && !status && <Text style={styles.status}>{note}</Text>}
+        {replies && (
+          <View style={styles.replies}>
+            {QUICK_REPLIES.map((reply) => (
+              <Pressable
+                key={reply}
+                onPress={() => void send(reply)}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy }}
+                style={[styles.reply, busy && { opacity: 0.4 }]}
+              >
+                <Text style={styles.replyText}>{reply}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <View style={styles.row}>
           <TextInput
             style={[styles.input, (busy || !loaded) && { opacity: 0.5 }]}
@@ -189,7 +249,17 @@ export default function Ask() {
   );
 }
 
-function BubbleView({ bubble, streaming, onCitation }: { bubble: Bubble; streaming: boolean; onCitation: (c: ViewCitation) => void }) {
+function BubbleView({
+  bubble,
+  streaming,
+  onCitation,
+  onCamera,
+}: {
+  bubble: Bubble;
+  streaming: boolean;
+  onCitation: (c: ViewCitation) => void;
+  onCamera: (card: ViewCard) => void;
+}) {
   const mine = bubble.role === 'user';
   const uncited =
     !mine && !streaming && bubble.parts.some((p) => p.text.trim()) && bubble.parts.every((p) => p.citations.length === 0);
@@ -209,6 +279,17 @@ function BubbleView({ bubble, streaming, onCitation }: { bubble: Bubble; streami
         ))}
       </Text>
       {uncited && <Text style={styles.uncited}>Sin cita del manual</Text>}
+      {bubble.cards.map((card, i) => (
+        <View key={i} style={styles.card}>
+          <Boton
+            texto={`Abrir cámara: ${catalogParts[card.part][0]}`}
+            icono="camera"
+            onPress={() => onCamera(card)}
+            estilo={{ paddingHorizontal: espacio.m }}
+          />
+          <Text style={styles.cardNote}>{card.instruction}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -234,6 +315,18 @@ const styles = StyleSheet.create({
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: color.acento },
   bubbleAssistant: { alignSelf: 'flex-start', backgroundColor: color.superficie, borderWidth: 1, borderColor: color.borde },
   uncited: { fontSize: 12, color: color.textoTenue, marginTop: espacio.xs },
+  card: { marginTop: espacio.m, gap: espacio.s },
+  cardNote: { fontSize: 12, color: color.textoSuave, lineHeight: 17 },
+  replies: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginBottom: espacio.s },
+  reply: {
+    paddingVertical: espacio.s,
+    paddingHorizontal: espacio.m,
+    borderRadius: radio.l,
+    backgroundColor: color.superficieAlta,
+    borderWidth: 1,
+    borderColor: color.borde,
+  },
+  replyText: { fontSize: 13, fontWeight: '600', color: color.texto },
   chip: { color: color.acento, fontWeight: '800' },
   footer: { paddingHorizontal: espacio.l, paddingTop: espacio.s, borderTopWidth: 1, borderTopColor: color.borde, backgroundColor: color.fondo },
   status: { fontSize: 13, color: color.textoSuave, marginBottom: espacio.s },

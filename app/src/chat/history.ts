@@ -1,10 +1,20 @@
+import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
 
 const KEY = 'capo-ar:chat-v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
-export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[] };
+export type ViewCard = { part: PartId; instruction: string };
+export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[] };
+
+const MAX_INSTRUCTION = 200;
+
+export function toCard(part: unknown, instruction: unknown): ViewCard | null {
+  if (typeof part !== 'string' || !Object.hasOwn(catalogParts, part)) return null;
+  if (typeof instruction !== 'string' || instruction.trim() === '') return null;
+  return { part: part as PartId, instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
+}
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
 
@@ -36,12 +46,18 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
   const out: Bubble[] = [];
   for (const m of messages) {
     if (m.role === 'user') {
-      if (typeof m.content === 'string') out.push({ role: 'user', parts: [{ text: m.content, citations: [] }] });
+      if (typeof m.content === 'string') out.push({ role: 'user', parts: [{ text: m.content, citations: [] }], cards: [] });
       continue;
     }
     const parts: ViewPart[] = [];
+    const cards: ViewCard[] = [];
     if (Array.isArray(m.content)) {
       for (const b of m.content as any[]) {
+        if (b.type === 'tool_use' && b.name === 'show_in_camera') {
+          const card = toCard(b.input?.part, b.input?.instruction);
+          if (card) cards.push(card);
+          continue;
+        }
         if (b.type !== 'text') continue;
         const citations: ViewCitation[] = (b.citations ?? [])
           .filter((c: any) => c.type === 'search_result_location')
@@ -51,13 +67,14 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
     } else if (typeof m.content === 'string') {
       parts.push({ text: m.content, citations: [] });
     }
-    if (parts.length === 0) continue;
+    if (parts.length === 0 && cards.length === 0) continue;
     const last = out[out.length - 1];
     if (last?.role === 'assistant') {
-      parts[0] = { ...parts[0], breakBefore: true };
+      if (parts.length > 0) parts[0] = { ...parts[0], breakBefore: true };
       last.parts.push(...parts);
+      last.cards.push(...cards);
     }
-    else out.push({ role: 'assistant', parts });
+    else out.push({ role: 'assistant', parts, cards });
   }
   return out;
 }
