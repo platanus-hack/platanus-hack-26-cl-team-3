@@ -78,11 +78,14 @@ class CapoArModule : Module() {
     OnActivityEntersBackground { vistas.toList().forEach { it.pausar() } }
 
     View(CapoArView::class) {
-      Events("onEstado", "onPart")
+      Events("onEstado", "onPart", "onGuia")
 
       Prop("debug") { vista: CapoArView, debug: Boolean? -> vista.capa.debug = debug ?: true }
 
-      Prop("selectedPart") { view: CapoArView, index: Int? -> view.capa.selectedPart = index ?: -1 }
+      Prop("selectedPart") { view: CapoArView, index: Int? ->
+        view.capa.selectedPart = index ?: -1
+        view.guidePart = index ?: -1
+      }
 
       AsyncFunction("capturar") { view: CapoArView, includeMeasurements: Boolean?, promise: Promise ->
         view.capturar(includeMeasurements ?: true, promise)
@@ -99,6 +102,8 @@ class CapoArModule : Module() {
       }
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }
+
+      AsyncFunction("pulso") { vista: CapoArView -> vista.pulso() }
 
       AsyncFunction("acumular") { vista: CapoArView, id: Int, mascara: String, rx: Double, ry: Double, lado: Double, promise: Promise ->
         vista.acumular(id, mascara, rx, ry, lado, promise)

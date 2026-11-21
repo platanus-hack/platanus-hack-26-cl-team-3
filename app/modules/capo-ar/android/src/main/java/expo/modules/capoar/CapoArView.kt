@@ -8,6 +8,7 @@ import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.Looper
+import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -51,6 +52,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   private val onEstado by EventDispatcher<Map<String, Any?>>()
   private val onPart by EventDispatcher<Map<String, Int>>()
+  private val onGuia by EventDispatcher<Map<String, Any>>()
+  @Volatile internal var guidePart = -1
+  private var lastGuideNs = 0L
 
   private val gl = GLSurfaceView(context)
   internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
@@ -397,6 +401,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         projector(world[0], world[1], world[2])
       }
     } else emptyList()
+    if (engine != null) emitGuide(frame, engine)
     // Keep only the newest projection if the UI thread misses a camera frame.
     if (overlayFrame.getAndSet(OverlayFrame(puntos, bordes, anclado, faces)) == null) {
       principal.post {
@@ -772,6 +777,40 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         (clip[0] / w + 1f) / 2f * anchoVista,
         (1f - clip[1] / w) / 2f * altoVista,
         w,
+      )
+    }
+  }
+
+  fun pulso() {
+    principal.post { performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
+  }
+
+  private fun emitGuide(frame: Frame, engine: PlacedEngine) {
+    val part = guidePart
+    if (part < 0 || frame.timestamp - lastGuideNs < GUIDE_INTERVAL_NS) return
+    val local = engine.mesh.center(part) ?: return
+    val world = engine.anchor.pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
+    val view = FloatArray(16)
+    val projection = FloatArray(16)
+    val combined = FloatArray(16)
+    val clip = FloatArray(4)
+    frame.camera.getViewMatrix(view, 0)
+    frame.camera.getProjectionMatrix(projection, 0, 0.05f, 100f)
+    Matrix.multiplyMM(combined, 0, projection, 0, view, 0)
+    Matrix.multiplyMV(clip, 0, combined, 0, floatArrayOf(world[0], world[1], world[2], 1f), 0)
+    val camera = frame.camera.pose
+    val distance = EnginePoint(world[0] - camera.tx(), world[1] - camera.ty(), world[2] - camera.tz()).length()
+    val target = guideTarget(clip[0], clip[1], clip[3], distance) ?: return
+    lastGuideNs = frame.timestamp
+    principal.post {
+      onGuia(
+        mapOf(
+          "part" to part,
+          "x" to target.x.toDouble(),
+          "y" to target.y.toDouble(),
+          "visible" to target.visible,
+          "distance" to target.distance.toDouble(),
+        ),
       )
     }
   }
