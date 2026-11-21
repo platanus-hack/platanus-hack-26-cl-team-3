@@ -6,8 +6,10 @@ import type { ComponentType, Ref } from 'react';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { requireNativeView, requireOptionalNativeModule } from 'expo';
 
-type ModuloNativo = { disponibilidad(): Promise<string> };
+type ModuloNativo = { disponibilidad(): Promise<string>; readPlatePreview(viewTag: number): Promise<string[]> };
 const modulo = requireOptionalNativeModule<ModuloNativo>('CapoAr');
+
+export const readPlatePreview = modulo?.readPlatePreview?.bind(modulo);
 
 /** Cuadro de la cámara AR, ya derecho, listo para el modelo. */
 export type CapturaAR = {
