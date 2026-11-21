@@ -1,5 +1,5 @@
 import { aCuadroCompleto, type Recorte } from '../detector/encuadre';
-import { vanoValido, type Vano } from '../detector/vano';
+import { iouPoligonos, vanoValido, type Vano } from '../detector/vano';
 import type { Volume } from './catalog';
 
 /** A registration or alignment check needs the entire bay in both the crop and the sensor image. */
@@ -7,6 +7,29 @@ export function completeBay(detection: Vano | null, crop: Recorte): Vano | null 
   if (!vanoValido(detection) || detection.cortado) return null;
   const bay = aCuadroCompleto(detection, crop);
   return bay.cortado ? null : bay;
+}
+
+const imageBounds = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+
+/** For an existing anchor, compare only the portion both outlines could show in this capture. */
+export function overlapsPlacedBay(previous: { x: number; y: number }[], candidate: Vano): boolean {
+  const iou = iouPoligonos(previous, candidate.esquinas);
+  if (iou === 0) return false;
+  const priorArea = iouPoligonos(previous, imageBounds);
+  const nextArea = iouPoligonos(candidate.esquinas, imageBounds);
+  const intersection = iou * (priorArea + nextArea) / (1 + iou);
+  return intersection >= .5 * Math.min(priorArea, nextArea);
+}
+
+/** Compare both outlines in the current capture, including coverage beyond its edges. */
+export function extendsPartialMap(previous: { x: number; y: number }[], candidate: Vano): boolean {
+  const area = (points: typeof previous) => Math.abs(points.reduce((sum, a, index) => {
+    const b = points[(index + 1) % points.length];
+    return sum + a.x * b.y - a.y * b.x;
+  }, 0)) / 2;
+  const before = area(previous);
+  const after = area(candidate.esquinas);
+  return before > 0 && after > 1.15 * before && overlapsPlacedBay(previous, candidate);
 }
 
 /** Limit displacement relative to the original bay size, including on small or distant targets. */

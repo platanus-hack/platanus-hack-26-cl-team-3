@@ -65,6 +65,19 @@ internal fun registrationSamples(
   return groups.takeIf { it.all { group -> group.isNotEmpty() } }
 }
 
+/** Intersect camera rays with the measured multiview plane, even outside the current image. */
+internal fun scanIntersections(points: List<EnginePoint>, rays: List<EnginePoint>): List<EnginePoint>? {
+  if (points.size < 3) return null
+  val origin = points.first()
+  var normal = EnginePoint(0f, 0f, 0f)
+  for (i in 1 until points.lastIndex) normal += (points[i] - origin).cross(points[i + 1] - origin)
+  return rays.map { ray ->
+    val depth = normal.dot(origin) / normal.dot(ray)
+    if (!depth.isFinite() || depth < .05f) return null
+    ray * depth
+  }
+}
+
 internal class EngineMesh private constructor(
   val origin: EnginePoint,
   val adjustedParts: List<Int>,

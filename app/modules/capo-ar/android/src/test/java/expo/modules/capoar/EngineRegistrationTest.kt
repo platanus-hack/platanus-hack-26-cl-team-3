@@ -15,6 +15,14 @@ class EngineRegistrationTest {
   private val corners = listOf(29f to 36f, 131f to 36f, 29f to 124f, 131f to 124f)
 
   @Test
+  fun expandedScanUsesTheMeasuredTiltBeyondTheImage() {
+    val outline = listOf(EnginePoint(-1f, 0f, -1f), EnginePoint(1f, 0f, -2f), EnginePoint(1f, 1f, -2f))
+    val result = checkNotNull(scanIntersections(outline, listOf(EnginePoint(-2f, 0f, -1f))))
+    assertEquals(-.75f, result.single().z, .0001f)
+    assertNull(scanIntersections(outline, listOf(EnginePoint(2f, 0f, -1f))))
+  }
+
+  @Test
   fun estimatedPlaneSupportsSmallTargetsOnVerticalScreens() {
     val corners = listOf(
       EnginePoint(-.04f, .03f, -1f), EnginePoint(.04f, .03f, -1f),

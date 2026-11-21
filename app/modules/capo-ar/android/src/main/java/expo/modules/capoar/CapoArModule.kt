@@ -53,6 +53,18 @@ class CapoArModule : Module() {
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }
 
+      AsyncFunction("acumular") { vista: CapoArView, id: Int, mascara: String, rx: Double, ry: Double, lado: Double, promise: Promise ->
+        vista.acumular(id, mascara, rx, ry, lado, promise)
+      }
+
+      AsyncFunction("contornoEscaneo") { vista: CapoArView, id: Int, esquinas: List<Double>, promise: Promise ->
+        vista.contornoEscaneo(id, esquinas, promise)
+      }
+
+      AsyncFunction("reiniciarEscaneo") { vista: CapoArView -> vista.reiniciarEscaneo() }
+
+      AsyncFunction("sembrar") { vista: CapoArView, x: Double, y: Double, promise: Promise -> vista.sembrar(x, y, promise) }
+
       OnViewDestroys { vista -> vista.destruir() }
     }
   }

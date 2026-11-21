@@ -23,6 +23,8 @@ export type CapturaAR = {
   registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];
+  /** Punto que el usuario marcó manteniendo presionado, visto en esta captura: [x, y] normalizado. */
+  semilla?: number[];
 };
 
 export type ResultadoFijar = {
@@ -32,7 +34,7 @@ export type ResultadoFijar = {
    * Dense placement uses a fitted plane or local relief. The part map can also use distributed hit tests.
    * Generic contours retain their existing distance fallbacks.
    */
-  metodo: 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
+  metodo: 'escaneo' | 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
   muestras: number; // puntos de profundidad usados
   mapPlaced: boolean; // el mapa de piezas del vehículo quedó ubicado
   distancia: number; // m, mediana de las distancias medidas
@@ -62,6 +64,26 @@ export type VistaARRef = {
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
   fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
+  /**
+   * Escaneo: suma lo que el modelo vio en la captura `id`. `mascara`: 88×88 caracteres '0'/'1' sobre el recorte
+   * (rx, ry, lado). Devuelve el mapa acumulado del vano (88×88, 0-100) sobre el plano del vano en el mundo.
+   */
+  acumular(id: number, mascara: string, rx: number, ry: number, lado: number): Promise<ResultadoEscaneo>;
+  /**
+   * Deja como vista previa (pegada al mundo) el contorno del escaneo, dado en coordenadas de su mapa, y lo devuelve
+   * proyectado a la captura `id` (x0, y0, x1, y1…; puede salirse de 0..1). Lista vacía si no se pudo.
+   */
+  contornoEscaneo(id: number, esquinas: number[]): Promise<number[]>;
+  reiniciarEscaneo(): Promise<void>;
+  /** «Mantener presionado»: guarda el punto del mundo que hay en (x, y) de la vista, en píxeles. false si no se pudo medir. */
+  sembrar(x: number, y: number): Promise<boolean>;
+};
+
+export type ResultadoEscaneo = {
+  ok: boolean; // el cuadro sirvió (había profundidad y vano)
+  vistas: number; // cuadros acumulados
+  mapa?: number[]; // 88×88, fila por fila
+  semilla?: number[]; // el punto marcado por el usuario, en coordenadas del mapa (0..1)
 };
 
 export type VistaARProps = ViewProps & {

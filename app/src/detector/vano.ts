@@ -59,8 +59,12 @@ export class Suavizador {
   }
 }
 
-/** Probabilidades 88×88 → polígono del vano, o null si no hay una región suficiente. */
-export function poligonoVano(prob: Float32Array, umbral = 0.5): Vano | null {
+/**
+ * Probabilidades 88×88 → polígono del vano, o null si no hay una región suficiente.
+ * `semilla` (0..1): un punto que se sabe que está dentro del vano (el usuario lo marcó): se elige la región que lo
+ * contiene, o la más cercana a pocas celdas, en vez de la más grande.
+ */
+export function poligonoVano(prob: Float32Array, umbral = 0.5, semilla?: { x: number; y: number }): Vano | null {
   const n = CELDAS;
   const cruda = new Uint8Array(n * n);
   for (let i = 0; i < cruda.length; i++) cruda[i] = prob[i] > umbral ? 1 : 0;
@@ -94,6 +98,27 @@ export function poligonoVano(prob: Float32Array, umbral = 0.5): Vano | null {
     if (tam > mejorTam) {
       mejorTam = tam;
       mejor = inicio;
+    }
+  }
+  if (semilla) {
+    // Región que contiene la semilla (o la más cercana dentro de 4 celdas).
+    const sx = Math.min(n - 1, Math.max(0, Math.floor(semilla.x * n)));
+    const sy = Math.min(n - 1, Math.max(0, Math.floor(semilla.y * n)));
+    let elegida = -1;
+    for (let r = 0; r <= 4 && elegida < 0; r++) {
+      for (let y = Math.max(0, sy - r); y <= Math.min(n - 1, sy + r) && elegida < 0; y++) {
+        for (let x = Math.max(0, sx - r); x <= Math.min(n - 1, sx + r); x++) {
+          if (etiqueta[y * n + x] !== -1) {
+            elegida = etiqueta[y * n + x];
+            break;
+          }
+        }
+      }
+    }
+    if (elegida >= 0) {
+      mejor = elegida;
+      mejorTam = 0;
+      for (let c = 0; c < etiqueta.length; c++) if (etiqueta[c] === elegida) mejorTam++;
     }
   }
   const area = mejorTam / (n * n);

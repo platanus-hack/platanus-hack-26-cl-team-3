@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
-import { completeBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
+import { completeBay, extendsPartialMap, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
 import { engineMaps } from '../../app/src/engine-maps/catalog.ts';
 import { normalizeFeatureGrid, sampleDescriptor } from '../../app/src/engine-maps/landmarks/appearance.ts';
 import { locate, type Candidates, type Point } from '../../app/src/engine-maps/landmarks/consensus.ts';
@@ -92,13 +92,16 @@ console.log('13 ok', `recorte lado ${r04.lado} en (${r04.x.toFixed(2)}, ${r04.y.
 res = enc.procesar(poligonoVano(mapa((x, y) => x >= 40 && y >= 20 && y < 70))!);
 assert.ok(!res.valido && res.cambio && enc.recorte().lado > 0.4 * 1.4, 'se aleja'); console.log('14 ok', `lado ${enc.recorte().lado.toFixed(2)}`);
 
-// 15) con el cuadro completo: un vano grande mantiene el cuadro completo; uno chico acerca el zoom sobre él
+// 15) con el cuadro completo: una detección válida NO cambia el recorte (estabilidad); algo demasiado chico para ser
+//     válido sí acerca el zoom sobre eso
 const enc2 = new Encuadre();
 res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 10 && x < 78 && y >= 20 && y < 75))!);
-assert.ok(res.valido && enc2.recorte() === COMPLETO);
-res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 50 && x < 70 && y >= 20 && y < 34))!); // 3,6 % del cuadro, arriba a la derecha
+assert.ok(res.valido && !res.cambio && enc2.recorte() === COMPLETO);
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 30 && x < 80 && y >= 40 && y < 50))!); // franja ancha y baja, 6,5 %: válida
+assert.ok(res.valido && !res.cambio && enc2.recorte() === COMPLETO, 'una franja válida no dispara el zoom');
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 50 && x < 66 && y >= 20 && y < 32))!); // 2,5 % del cuadro: no alcanza
 const rz = enc2.recorte();
-assert.ok(res.cambio && rz.lado < 0.5 && rz.x < 50 / n && rz.x + rz.lado > 70 / n && rz.y < 20 / n && rz.y + rz.lado > 34 / n, 'el recorte contiene al vano');
+assert.ok(!res.valido && res.cambio && rz.lado < 0.5 && rz.x < 50 / n && rz.x + rz.lado > 66 / n && rz.y < 20 / n && rz.y + rz.lado > 32 / n, 'el recorte contiene a lo detectado');
 console.log('15 ok', `lado ${rz.lado.toFixed(2)}`);
 
 // 16) un análisis vacío no hace perder el recorte si venía viendo un vano; dos sí
@@ -204,3 +207,26 @@ for (const x of [.05, .95]) for (const y of [.05, .95]) {
 }
 assert.equal(search.recorte(), COMPLETO);
 console.log('24 ok: partial registration and off-center search');
+// 18) punto marcado por el usuario: con dos zonas candidatas se elige la que lo contiene, no la más grande
+const dos = mapa((x, y) => (x >= 5 && x < 50 && y >= 5 && y < 50) || (x >= 60 && x < 84 && y >= 60 && y < 84));
+assert.ok(poligonoVano(dos)!.esquinas.every(e => e.x <= 50 / n + 1e-9), 'sin punto: la más grande');
+const conPunto = poligonoVano(dos, 0.5, { x: 72 / n, y: 72 / n })!;
+assert.ok(conPunto.esquinas.every(e => e.x >= 60 / n - 1e-9) && Math.abs(conPunto.area - (24 * 24) / (n * n)) < 1e-9, 'con punto: la que lo contiene');
+assert.ok(poligonoVano(dos, 0.5, { x: 0.99, y: 0.01 })!.esquinas.every(e => e.x <= 50 / n + 1e-9), 'punto lejos de todo: se ignora'); console.log('18 ok');
+
+// 19) al marcar un punto, la ronda de búsqueda del zoom se centra en él
+const enc4 = new Encuadre(); enc4.apuntar({ x: 0.7, y: 0.3 }); enc4.procesar(null);
+const r4 = enc4.recorte(); assert.ok(Math.abs(r4.x + r4.lado / 2 - 0.65) < 1e-9 && Math.abs(r4.lado - 0.7) < 1e-9, 'centrado en el punto (ajustado al borde)'); console.log('19 ok');
+
+for (let index = 0; index < 14; index++) {
+  enc4.procesar(null);
+  assert.ok(enc4.recorte().lado > 0);
+}
+
+const prior = clippedByCrop.esquinas;
+const expanded = { ...clippedByCrop, esquinas: prior.map(v => ({ ...v, x: v.x + (v.borde ? .25 : 0) })) };
+assert.ok(extendsPartialMap(prior, expanded));
+assert.ok(!extendsPartialMap(prior, clippedByCrop));
+assert.ok(!extendsPartialMap(prior, { ...expanded, esquinas: expanded.esquinas.map(v => ({ ...v, x: v.x + 2 })) }));
+
+assert.ok(!overlapsPlacedBay(cuad(.1, .1, .5, .5), { ...expanded, esquinas: cuad(.49, .1, .89, .5).map(p => ({ ...p, borde: false })) }));
