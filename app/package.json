@@ -15,6 +15,7 @@
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.32",
     "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
     "jpeg-js": "^0.4.4",
     "onnxruntime-react-native": "^1.24.3",
     "react": "19.3.0",
@@ -25,6 +26,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~58.0.4",
     "patch-package": "^8.0.1",
     "tsx": "4.23.15",
     "typescript": "~6.0.3"
@@ -34,7 +37,13 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@expo/fingerprint@0.21.10": {
+      "minimatch": "11.0.9"
+    }
+  }
 }

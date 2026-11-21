@@ -25,8 +25,9 @@ import kotlin.math.min
  * - Modo debug: relleno rojo claro.
  * Esquinas: puntos rojos; huecos si tocan el borde de la imagen (el vano sigue fuera del cuadro).
  *
- * Mapa de piezas (HUD): cada pieza va rellena con su color, con un punto en su centro y una etiqueta con ícono unida
- * por una línea. Las etiquetas se reparten arriba y abajo de las piezas ([HudLayout]) y se pueden tocar.
+ * Mapa de piezas (HUD): cada pieza lleva un punto en su centro y una etiqueta con ícono unida por una línea. Las
+ * etiquetas se reparten arriba y abajo de las piezas ([HudLayout]) y se pueden tocar. Con prismas del catálogo, esta
+ * capa también los rellena con su color; con el modelo 3D las mallas las dibuja [ModelRenderer] en GL.
  */
 internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit) : View(context) {
   var debug = true
@@ -38,6 +39,8 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
   private class PartStyle(val lines: List<String>, val tone: Int, val icon: Path?, val width: Float, val height: Float)
 
   private var faces: List<EngineFace> = emptyList()
+  private var modelHitFrame: ModelHitFrame? = null
+  private var modelCenters: FloatArray? = null // pieza, x, y por cada pieza del modelo 3D visible
   private var pressedPart: Int? = null
   private var styles: List<PartStyle> = emptyList()
   private var hudTop = 0f // zona libre para etiquetas, en píxeles: entre la barra superior y el panel
@@ -70,11 +73,16 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
   private val aroBorde = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3 * densidad; color = Color.rgb(255, 59, 59) }
   private val camino = Path()
 
-  fun actualizar(p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean, engineFaces: List<EngineFace>) {
+  fun actualizar(
+    p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean, engineFaces: List<EngineFace>,
+    model: ModelHitFrame? = null, centers: FloatArray? = null,
+  ) {
     puntos = p
     bordes = b
     anclado = estaAnclado
     faces = engineFaces
+    modelHitFrame = model
+    modelCenters = centers
     invalidate()
   }
 
@@ -110,15 +118,14 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
     camino.close()
   }
 
-  private fun drawHud(canvas: Canvas) {
+  /** Prismas del catálogo: se rellenan aquí y cada cara visible ancla una etiqueta. Devuelve la caja que los encierra. */
+  private fun drawFaces(canvas: Canvas, labels: MutableList<HudLabel>): HudBox {
     val d = densidad
     canvas.drawColor(SCRIM) // velo azul: el HUD resalta sobre la cámara
-
     var left = Float.MAX_VALUE
     var top = Float.MAX_VALUE
     var right = -Float.MAX_VALUE
     var bottom = -Float.MAX_VALUE
-    val labels = ArrayList<HudLabel>()
     for (face in faces) {
       trazar(face.points)
       val selected = face.part == selectedPart
@@ -153,6 +160,33 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
         labels.add(HudLabel(face.part, cx / face.points.size, cy / face.points.size, style.width, style.height))
       }
     }
+    return HudBox(left, top, right, bottom)
+  }
+
+  /** Modelo 3D: las mallas se dibujan en GL (ModelRenderer); aquí solo se anclan las etiquetas a sus centros. */
+  private fun modelLabels(centers: FloatArray, labels: MutableList<HudLabel>): HudBox {
+    var left = Float.MAX_VALUE
+    var top = Float.MAX_VALUE
+    var right = -Float.MAX_VALUE
+    var bottom = -Float.MAX_VALUE
+    for (k in 0 until centers.size / 3) {
+      val x = centers[3 * k + 1]
+      val y = centers[3 * k + 2]
+      left = min(left, x); right = max(right, x); top = min(top, y); bottom = max(bottom, y)
+      val part = centers[3 * k].toInt()
+      val style = styles.getOrNull(part) ?: continue
+      labels.add(HudLabel(part, x, y, style.width, style.height))
+    }
+    // Los centros no dicen cuánto ocupa cada malla: se deja un margen para no tapar las piezas del borde.
+    val margin = 28 * densidad
+    return HudBox(left - margin, top - margin, right + margin, bottom + margin)
+  }
+
+  private fun drawHud(canvas: Canvas) {
+    val d = densidad
+    val labels = ArrayList<HudLabel>()
+    val centers = modelCenters
+    val parts = if (centers != null && centers.size >= 3) modelLabels(centers, labels) else drawFaces(canvas, labels)
 
     val area = HudBox(8 * d, hudTop + 8 * d, width - 8 * d, (if (hudBottom > hudTop) hudBottom else height.toFloat()) - 8 * d)
     // Esquinas del marco.
@@ -169,7 +203,7 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
       canvas.drawPath(camino, boxEdge)
     }
 
-    val placed = layout.place(labels, HudBox(left, top, right, bottom), area, 6 * d, 70 * d, MAX_LABELS, selectedPart)
+    val placed = layout.place(labels, parts, area, 6 * d, 70 * d, MAX_LABELS, selectedPart)
     shown.keys.retainAll(placed.map { it.part }.toSet())
     for (label in placed) {
       // Las etiquetas se deslizan hacia su lugar en vez de saltar cuando cambia el reparto.
@@ -268,7 +302,7 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
 
   override fun onDraw(canvas: Canvas) {
     super.onDraw(canvas)
-    if (faces.isNotEmpty()) {
+    if (faces.isNotEmpty() || (modelCenters?.size ?: 0) >= 3) {
       drawHud(canvas)
     } else {
       layout.reset()
@@ -300,8 +334,9 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
   }
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
-    // Una etiqueta elige su pieza igual que tocar la pieza misma.
+    // Una etiqueta elige su pieza igual que tocar la pieza misma (en el modelo 3D o en su prisma).
     fun hit() = labelHits.firstOrNull { it.second.contains(event.x, event.y) }?.first
+      ?: modelHitFrame?.hit(event.x, event.y)
       ?: faces.findLast { it.contains(event.x, event.y) }?.part
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {

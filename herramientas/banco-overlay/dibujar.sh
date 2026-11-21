@@ -6,6 +6,7 @@
 #
 # pieza: índice del volumen elegido (-1 = ninguno). zoom y dx (en dp) acercan y corren la foto. Cada «x,y» simula un
 # toque en píxeles (pantalla de 1080 × 2400) y dice qué pieza eligió. VEHICULO y FOTO cambian el mapa y la imagen.
+# MODELO=1 simula el modelo 3D del Outback: sin prismas, solo etiquetas ancladas al centro de cada pieza.
 #
 # Límites: android.graphics está reemplazado por src/*.kt sobre Java2D, así que la letra y el suavizado no son los
 # del teléfono; y las piezas no pasan por ARCore: se ubican con la plantilla del catálogo directo sobre la foto.

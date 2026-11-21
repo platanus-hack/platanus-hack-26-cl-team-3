@@ -99,6 +99,7 @@ export type ResultadoEscaneo = {
 
 export type VistaARProps = ViewProps & {
   debug?: boolean;
+  outbackParts?: string[];
   selectedPart?: number;
   /** Una fila por pieza, en el orden de los volúmenes: [nombre, color #RRGGBB, ícono (trazado SVG de 24 × 24)]. */
   hudParts?: readonly (readonly [string, string, string])[];

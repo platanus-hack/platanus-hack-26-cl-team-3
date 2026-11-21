@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { engineMaps, parts, type PartId } from './catalog';
+import { engineMaps, type PartId } from './catalog';
 import { hudPart } from './hud';
 
 test('cada pieza de cada mapa llega a la vista nativa con nombre, color e ícono', () => {
@@ -18,8 +18,10 @@ test('cada pieza de cada mapa llega a la vista nativa con nombre, color e ícono
 });
 
 test('las piezas de mantención tienen estilo propio y nombre que cabe en dos líneas', () => {
+  // Las nueve piezas que revisa un conductor; las demás del modelo 3D usan el estilo por defecto.
+  const maintenance: PartId[] = ['fuses', 'washer', 'dipstick', 'coolant', 'air_filter', 'oil_cap', 'brake_fluid', 'battery', 'positive'];
   const tones = new Set<string>();
-  for (const part of Object.keys(parts) as PartId[]) {
+  for (const part of maintenance) {
     const [label, tone] = hudPart(part);
     tones.add(tone);
     assert.notEqual(tone, '#49D3FF', `${part} usa el color por defecto`);

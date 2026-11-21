@@ -22,6 +22,19 @@ class HudLayoutTest {
   )
 
   @Test
+  fun modelCentersProjectToViewPixelsAndSkipPointsBehindTheCamera() {
+    // Column-major matrix with w = z: x and y land at the view center plus half a view per unit of x/z and y/z.
+    val mvp = floatArrayOf(1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 1f, 1f, 0f, 0f, 0f, 0f)
+    val out = projectCenters(
+      linkedMapOf(4 to EnginePoint(.5f, -.5f, 1f), 7 to EnginePoint(0f, 0f, -1f)), mvp, 1000, 2000,
+    )
+    assertEquals(3, out.size)
+    assertEquals(4f, out[0], 0f)
+    assertEquals(750f, out[1], .01f)
+    assertEquals(1500f, out[2], .01f)
+  }
+
+  @Test
   fun longNamesWrapNearTheMiddle() {
     assertEquals(listOf("Batería"), wrapLabel("Batería"))
     assertEquals(listOf("Refrigerante"), wrapLabel("Refrigerante"))

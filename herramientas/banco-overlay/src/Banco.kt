@@ -60,7 +60,24 @@ fun main(args: Array<String>) {
   capa.setHudParts(rows)
   capa.setHudArea(96f, 560f) // bajo la barra superior y sobre el panel, en dp
   capa.selectedPart = selectedArg.toInt()
-  capa.actualizar(null, null, true, faces)
+  // MODELO=1: como con el modelo 3D de la #38. Las mallas las dibuja OpenGL (aquí, la cara visible en gris) y la capa
+  // solo recibe el centro de cada pieza.
+  if (System.getenv("MODELO") == "1") {
+    val centers = ArrayList<Float>()
+    for (face in faces.filter { !it.side }) {
+      val shape = java.awt.geom.Path2D.Float()
+      face.points.forEachIndexed { i, p -> if (i == 0) shape.moveTo(p.x, p.y) else shape.lineTo(p.x, p.y) }
+      shape.closePath()
+      g.color = if (face.part == selectedArg.toInt()) java.awt.Color(255, 184, 41, 194) else java.awt.Color(150, 170, 190, 133)
+      g.fill(shape)
+      centers.add(face.part.toFloat())
+      centers.add(face.points.map { it.x }.average().toFloat())
+      centers.add(face.points.map { it.y }.average().toFloat())
+    }
+    capa.actualizar(null, null, true, emptyList(), ModelHitFrame(), centers.toFloatArray())
+  } else {
+    capa.actualizar(null, null, true, faces)
+  }
   // Varios cuadros para que las etiquetas terminen de deslizarse a su lugar; se guarda el último.
   val scratch = BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)
   repeat(30) { SystemClock.ahora = it * 33L; capa.onDraw(Canvas(scratch.createGraphics(), w, h)) }

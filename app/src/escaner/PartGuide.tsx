@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { GuiaAR } from '../../modules/capo-ar';
@@ -31,15 +31,6 @@ export function PartGuide({
   const [found, setFound] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const state = useRef<FoundState>(initialFound);
-  const onFoundRef = useRef(onFound);
-  onFoundRef.current = onFound;
-
-  useEffect(() => {
-    state.current = initialFound;
-    setEvent(null);
-    setFound(false);
-  }, [part, active]);
-
   useImperativeHandle(
     ref,
     () => ({
@@ -49,10 +40,10 @@ export function PartGuide({
         state.current = result.state;
         setEvent(next);
         setFound(result.state.found);
-        if (result.justFound) onFoundRef.current();
+        if (result.justFound) onFound();
       },
     }),
-    [active, part],
+    [active, part, onFound],
   );
 
   const { width, height } = size;

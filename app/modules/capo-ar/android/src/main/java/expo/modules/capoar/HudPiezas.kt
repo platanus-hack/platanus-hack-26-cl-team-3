@@ -22,6 +22,24 @@ internal class HudLabel(val part: Int, val anchorX: Float, val anchorY: Float, v
   var gapFar = 0f
 }
 
+/**
+ * Lleva a la pantalla los centros de las piezas del modelo 3D (en el sistema del ancla) con la matriz MVP del cuadro,
+ * en orden de columnas como las de OpenGL. Devuelve pieza, x, y por cada centro que queda delante de la cámara.
+ */
+internal fun projectCenters(centers: Map<Int, EnginePoint>, mvp: FloatArray, width: Int, height: Int): FloatArray {
+  val out = ArrayList<Float>(centers.size * 3)
+  for ((part, p) in centers) {
+    val w = mvp[3] * p.x + mvp[7] * p.y + mvp[11] * p.z + mvp[15]
+    if (!w.isFinite() || w < .05f) continue
+    val x = mvp[0] * p.x + mvp[4] * p.y + mvp[8] * p.z + mvp[12]
+    val y = mvp[1] * p.x + mvp[5] * p.y + mvp[9] * p.z + mvp[13]
+    out.add(part.toFloat())
+    out.add((x / w + 1f) / 2f * width)
+    out.add((1f - y / w) / 2f * height)
+  }
+  return out.toFloatArray()
+}
+
 /** Parte un nombre largo en dos líneas parejas, para que la etiqueta sea angosta. */
 internal fun wrapLabel(text: String): List<String> {
   if (text.length <= 12 || ' ' !in text) return listOf(text)

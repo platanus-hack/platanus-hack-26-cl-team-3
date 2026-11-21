@@ -63,6 +63,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
 
 export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
+  const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const hudParts = useMemo(() => map ? map.volumes.map(({ part }) => hudPart(part)) : [], [map]);
   const insets = useSafeAreaInsets();
@@ -603,6 +604,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         ref={ar}
         style={StyleSheet.absoluteFill}
         debug={debug}
+        outbackParts={outbackParts}
         selectedPart={selectedIndex}
         hudParts={hudParts}
         hudArea={hudArea}
@@ -610,7 +612,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
-      <PartGuide ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      <PartGuide key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (

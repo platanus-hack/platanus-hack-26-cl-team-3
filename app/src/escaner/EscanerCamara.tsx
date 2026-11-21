@@ -52,7 +52,6 @@ export default function EscanerCamara() {
   }, []);
 
   useEffect(() => {
-    setError(null);
     cargarDetector()
       .then(() => setModeloListo(true))
       .catch((e) => setError(`No se pudo cargar el modelo de reconocimiento. ${String(e?.message ?? e)}`));
@@ -112,6 +111,7 @@ export default function EscanerCamara() {
   }, [camaraLista, modeloListo, activa, error]);
 
   const reintentar = () => {
+    setError(null);
     setCapo(null);
     setVano(null);
     setIntento((i) => i + 1);

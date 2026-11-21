@@ -54,7 +54,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 **B · Foco de luz** — parte hoy.
 - La pieza elegida queda a color; el resto se oscurece y pierde saturación, con borde suave y transición animada. Anillo y etiqueta sobre la pieza. Los prismas pasan al modo debug.
 - Se dibuja en el mismo pase de GL que la cámara, no en Canvas ni en JS, para que la marca no vaya un cuadro atrás.
-- **Ya está (HUD de piezas):** el anillo y la etiqueta sobre la pieza, en Canvas (`CapaPoligono.kt` y `HudPiezas.kt`), con un velo azul parejo sobre toda la cámara. A B le queda oscurecer solo el resto, en el pase de GL, y decidir si los prismas pasan a debug.
+- **Ya está (HUD de piezas):** el anillo y la etiqueta sobre la pieza, en Canvas (`CapaPoligono.kt` y `HudPiezas.kt`), ancladas al centro de cada pieza del modelo 3D (o a su prisma, en los autos sin modelo). Con el modelo no pone velo sobre la cámara: a B le queda oscurecer el resto en el pase de GL.
 - **Zona:** `FondoCamara.kt` (shader), `CapaPoligono.kt` y el paso de la máscara en `CapoArView.kt`.
 - **Listo cuando:** tocar un chip deja solo esa pieza iluminada y la marca no tiembla al mover el teléfono.
 - **No cubre:** la forma sigue siendo la del prisma del catálogo, no el contorno real (F).
