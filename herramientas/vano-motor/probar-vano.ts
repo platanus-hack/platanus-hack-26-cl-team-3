@@ -33,12 +33,28 @@ const areaTramos = tramos(px, 200).reduce((s, t) => s + (t.x1 - t.x0) * (t.alto 
 let areaPol = 0; for (let i = 0; i < px.length; i++) { const a = px[i], b = px[(i + 1) % px.length]; areaPol += a.x * b.y - b.x * a.y; } areaPol = Math.abs(areaPol) / 2 / 1e6;
 assert.ok(Math.abs(areaTramos - areaPol) < 0.01); console.log(`5 ok relleno ${areaTramos.toFixed(3)} ≈ polígono ${areaPol.toFixed(3)}`);
 
-// 6) suavizador: media móvil de sigmoides
-const s = new Suavizador(0.5); const a = s.agregar(new Float32Array([10])); assert.ok(a[0] > 0.99);
-const b = s.agregar(new Float32Array([-10])); assert.ok(Math.abs(b[0] - 0.5) < 0.01); console.log('6 ok');
+// 6) suavizador: media móvil de sigmoides (escena parecida: se promedia)
+const s = new Suavizador(0.5); const a = s.agregar(new Float32Array([10, 10, 10, -10])); assert.ok(a[0] > 0.99);
+const b = s.agregar(new Float32Array([10, 10, 10, 10])); assert.ok(Math.abs(b[3] - 0.5) < 0.01 && b[0] > 0.99); console.log('6 ok');
 // 7) vano chico y lejano (pentágono reducido al 30 %) → mantiene sus 5 esquinas
 const chico = pent.map(([x, y]) => [0.35 + x * 0.3, 0.35 + y * 0.3]);
 const dentroChico = (px: number, py: number) => { let c = false; for (let i = 0, j = chico.length - 1; i < chico.length; j = i++) { const [xi, yi] = chico[i], [xj, yj] = chico[j]; if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) c = !c; } return c; };
 v = poligonoVano(mapa((x, y) => dentroChico((x + 0.5) / n, (y + 0.5) / n)))!;
 console.log('7 esquinas:', v.esquinas.length, v.esquinas.map(e => `(${e.x.toFixed(2)},${e.y.toFixed(2)})`).join(' '));
 assert.equal(v.esquinas.length, 5); console.log('7 ok');
+
+// 8) apertura: una mancha pegada por un puente delgado NO infla el polígono
+v = poligonoVano(mapa((x, y) => (x >= 20 && x < 60 && y >= 30 && y < 70) || (y >= 48 && y < 50 && x >= 60 && x < 84) || (x >= 80 && x < 86 && y >= 44 && y < 54)))!;
+assert.ok(v.esquinas.every(e => e.x <= 60 / n + 1e-9), 'el puente delgado debe cortarse'); assert.equal(v.esquinas.length, 4); console.log('8 ok');
+
+// 9) la apertura no «come» un vano cortado por el borde del cuadro
+v = poligonoVano(mapa((x, y) => y >= 60))!;
+assert.ok(v.cortado && v.esquinas.some(e => e.y > 0.99) && Math.abs(v.area - 28 / 88) < 1e-6); console.log('9 ok');
+
+// 10) confianza = probabilidad media dentro de la región
+assert.ok(Math.abs(v.confianza - 0.9) < 1e-6); console.log('10 ok');
+
+// 11) el suavizador parte de cero si la escena cambió (máscaras casi disjuntas)
+const s2 = new Suavizador(0.5); const L = (f: (i: number) => boolean) => Float32Array.from({ length: n * n }, (_, i) => (f(i) ? 8 : -8));
+s2.agregar(L(i => i % n < 30)); const m2 = s2.agregar(L(i => i % n >= 50));
+assert.ok(m2[0] < 0.01 && m2[60] > 0.99, 'sin fantasma de la posición anterior'); console.log('11 ok');

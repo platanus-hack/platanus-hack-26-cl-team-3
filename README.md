@@ -1,7 +1,7 @@
 # capo-ar — Guía de tu auto en Realidad Aumentada
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
-> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native + expo-router) tiene menú principal, aviso obligatorio y, en el teléfono, **detector de capó abierto + contorno del vano del motor** con sus esquinas y modo debug (CLIPSeg con decodificador propio, ver `herramientas/vano-motor/`). Sin AR todavía. La PWA (`web/`) usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
+> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native + expo-router) tiene menú principal, aviso obligatorio y, en el teléfono, **contorno del vano del motor** con sus esquinas y modo debug (CLIPSeg con decodificador propio), **anclado al auto con ARCore** (se reconoce una vez, queda fijo al moverse; botón Recalibrar). Ver `herramientas/vano-motor/`. Aún no se muestran las piezas en AR. La PWA (`web/`) usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
 >
 > **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk` (la primera vez arma el modelo del vano: ~1 GB de entorno Python en `~/.cache` y ~600 MB de pesos). Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
 

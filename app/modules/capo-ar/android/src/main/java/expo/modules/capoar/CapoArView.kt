@@ -328,16 +328,29 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val c = capturas[fijarCaptura]
     if (c == null) { promise.reject("ERR_AR", "La captura ya no está disponible; vuelve a intentarlo", null); return }
     if (!c.rastreando) { promise.reject("ERR_AR", "Cuando se tomó ese cuadro ARCore aún no seguía el movimiento", null); return }
-    val todas = c.muestras.map { it[2] }.sorted()
+    // Esquinas en coordenadas de la imagen del sensor (las muestras de distancia están en ese sistema).
+    val n = esquinasGiradas.size / 2
+    val us = FloatArray(n)
+    val vs = FloatArray(n)
+    for (k in 0 until n) {
+      val (u, v) = Imagen.desgirar(esquinasGiradas[2 * k], esquinasGiradas[2 * k + 1], c.grados)
+      us[k] = u; vs[k] = v
+    }
+    // Solo las muestras que caen DENTRO del polígono: las de fuera miden el piso o el fondo (mucho más lejos) y, mezcladas,
+    // dejarían las esquinas a una distancia equivocada (el contorno se «deslizaría» al moverse).
+    val dentro = c.muestras.filter { enPoligono(it[0], it[1], us, vs) }
+    val muestras = if (dentro.size >= 4) dentro else c.muestras
+    val todas = muestras.map { it[2] }.sorted()
     val mediana = if (todas.isNotEmpty()) todas[todas.size / 2] else DISTANCIA_POR_DEFECTO
     val nuevas = ArrayList<Anchor>()
     var conMedida = 0
-    for (k in 0 until esquinasGiradas.size / 2) {
-      val (u, v) = Imagen.desgirar(esquinasGiradas[2 * k], esquinasGiradas[2 * k + 1], c.grados)
-      // Distancia: promedio ponderado (1/d²) de las muestras cercanas en la imagen; si no hay, la mediana del cuadro.
+    for (k in 0 until n) {
+      val u = us[k]
+      val v = vs[k]
+      // Distancia: promedio ponderado (1/d²) de las muestras cercanas en la imagen; si no hay, la mediana del vano.
       var suma = 0f
       var peso = 0f
-      for (m in c.muestras) {
+      for (m in muestras) {
         val d2 = (m[0] - u) * (m[0] - u) + (m[1] - v) * (m[1] - v)
         if (d2 > RADIO_MUESTRAS * RADIO_MUESTRAS) continue
         val w = 1f / (d2 + 1e-4f)
@@ -366,7 +379,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       todas.isNotEmpty() -> "distancia-media"
       else -> "estimado"
     }
-    promise.resolve(mapOf("esquinas" to nuevas.size, "metodo" to metodo, "muestras" to c.muestras.size, "distancia" to mediana))
+    promise.resolve(mapOf("esquinas" to nuevas.size, "metodo" to metodo, "muestras" to muestras.size, "distancia" to mediana))
+  }
+
+  /** ¿El punto (x, y) cae dentro del polígono? (regla par-impar) */
+  private fun enPoligono(x: Float, y: Float, xs: FloatArray, ys: FloatArray): Boolean {
+    var dentro = false
+    var j = xs.size - 1
+    for (i in xs.indices) {
+      if ((ys[i] > y) != (ys[j] > y) && x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i]) dentro = !dentro
+      j = i
+    }
+    return dentro
   }
 
   private fun proyectarAnclas(frame: Frame): FloatArray? {

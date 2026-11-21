@@ -11,7 +11,7 @@ import { poligonoVano, Suavizador, tramos, type Vano } from '../detector/vano';
 import { color } from '../theme';
 import { Boton } from '../ui';
 import {
-  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO,
+  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO, vanoValido,
 } from './comun';
 
 const PAUSA_MS = 150;
@@ -38,8 +38,7 @@ export default function EscanerCamara() {
   const [modeloListo, setModeloListo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
-  const [puntaje, setPuntaje] = useState<number | null>(null);
-  const [detectado, setDetectado] = useState(false);
+  const [capo, setCapo] = useState<number | null>(null); // puntaje «capó abierto» de CLIP (solo debug)
   const [vano, setVano] = useState<Vano | null>(null);
   const [foto, setFoto] = useState<Tam | null>(null);
   const [vista, setVista] = useState<Tam | null>(null);
@@ -75,7 +74,7 @@ export default function EscanerCamara() {
     if (!camaraLista || !modeloListo || !activa || error) return;
     let vivo = true;
     let fallos = 0;
-    const capo = new PuntajeCapo();
+    const puntajeCapo = new PuntajeCapo();
     const suavizador = new Suavizador(SUAVIZADO);
     (async () => {
       while (vivo) {
@@ -90,10 +89,8 @@ export default function EscanerCamara() {
             borrar(captura.uri);
           }
           if (!vivo) break;
-          capo.agregar(r.puntaje);
           fallos = 0;
-          setPuntaje(capo.media);
-          setDetectado(capo.detectado);
+          setCapo(puntajeCapo.agregar(r.puntaje).media);
           setVano(poligonoVano(suavizador.agregar(r.vano)));
           setFoto({ ancho: r.ancho, alto: r.alto });
           setMs(Date.now() - t0);
@@ -115,15 +112,15 @@ export default function EscanerCamara() {
   }, [camaraLista, modeloListo, activa, error]);
 
   const reintentar = () => {
-    setPuntaje(null);
-    setDetectado(false);
+    setCapo(null);
     setVano(null);
     setIntento((i) => i + 1);
   };
 
+  const detectado = vanoValido(vano);
   const tono = detectado ? color.exito : color.acento;
-  const cargando = !error && (!modeloListo || !camaraLista || puntaje === null);
-  const mostrarVano = !!vano && !!foto && !!vista && (debug || detectado);
+  const cargando = !error && (!modeloListo || !camaraLista || capo === null);
+  const mostrarVano = detectado && !!foto && !!vista;
 
   return (
     <View style={estilos.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
@@ -156,24 +153,22 @@ export default function EscanerCamara() {
             <Encabezado
               icono={detectado ? 'vector-polygon' : 'line-scan'}
               tono={tono}
-              titulo={detectado ? (vano ? 'Vano del motor detectado' : 'Capó abierto detectado') : 'Buscando un capó abierto'}
+              titulo={detectado ? 'Vano del motor detectado' : 'Buscando el vano del motor'}
             />
             <Detalle>
               {!detectado
-                ? 'Abre el capó y apunta al motor desde arriba.'
-                : !vano
-                  ? 'No logro delimitar el vano. Prueba desde un poco más lejos.'
-                  : vano.cortado
-                    ? 'Parte del vano queda fuera de la imagen: aléjate un poco para verlo completo.'
-                    : 'El contorno marca todo lo que hay bajo el capó.'}
+                ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
+                : vano.cortado
+                  ? 'Parte del vano queda fuera de la imagen: aléjate un poco para verlo completo.'
+                  : 'El contorno marca todo lo que hay bajo el capó.'}
               {' Este teléfono no tiene ARCore: el contorno no queda fijo si mueves la cámara.'}
             </Detalle>
-            <Medidor puntaje={puntaje ?? 0} tono={tono} />
+            <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
             {debug && (
               <LineaDebug
-                texto={`Debug · sin AR · vano ${vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'}${
-                  ms !== null ? ` · ${ms} ms` : ''
-                }`}
+                texto={`Debug · sin AR · vano ${vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'} · capó ${Math.round(
+                  (capo ?? 0) * 100,
+                )} %${ms !== null ? ` · ${ms} ms` : ''}`}
               />
             )}
           </>

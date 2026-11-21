@@ -7,12 +7,14 @@
 export const CELDAS = 88;
 const MAX_ESQUINAS = 8;
 const AREA_MINIMA = 0.02; // fracción del cuadro: menos que esto se considera ruido
+const RADIO_APERTURA = 2; // celdas: quita lo más angosto que ~6 % del cuadro
 const MARGEN_BORDE = 0.025; // una esquina a menos de esto del borde «toca» el borde del cuadro
 
 export type Punto = { x: number; y: number; borde: boolean };
 export type Vano = {
   esquinas: Punto[]; // polígono convexo, en orden
   area: number; // fracción del cuadro cubierta por la región detectada
+  confianza: number; // probabilidad media dentro de la región (0 a 1)
   cortado: boolean; // parte del vano queda fuera del cuadro (alguna esquina toca el borde)
 };
 
@@ -27,9 +29,21 @@ export class Suavizador {
   agregar(logits: Float32Array): Float32Array {
     const p = new Float32Array(logits.length);
     for (let i = 0; i < p.length; i++) p[i] = 1 / (1 + Math.exp(-logits[i]));
-    if (!this.media) this.media = p;
-    else for (let i = 0; i < p.length; i++) this.media[i] = this.peso * p[i] + (1 - this.peso) * this.media[i];
-    return this.media;
+    const m = this.media;
+    if (!m) return (this.media = p);
+    // Si la máscara nueva casi no se parece a la acumulada, la cámara se movió: se parte de cero (evita el «fantasma»
+    // de la posición anterior). Si se parece, se promedia para que no tiemble.
+    let inter = 0;
+    let union = 0;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i] > 0.5;
+      const b = m[i] > 0.5;
+      if (a && b) inter++;
+      if (a || b) union++;
+    }
+    if (union > 0 && inter / union < 0.5) return (this.media = p);
+    for (let i = 0; i < p.length; i++) m[i] = this.peso * p[i] + (1 - this.peso) * m[i];
+    return m;
   }
 
   reiniciar() {
@@ -40,8 +54,11 @@ export class Suavizador {
 /** Probabilidades 88×88 → polígono del vano, o null si no hay una región suficiente. */
 export function poligonoVano(prob: Float32Array, umbral = 0.5): Vano | null {
   const n = CELDAS;
-  const dentro = new Uint8Array(n * n);
-  for (let i = 0; i < dentro.length; i++) dentro[i] = prob[i] > umbral ? 1 : 0;
+  const cruda = new Uint8Array(n * n);
+  for (let i = 0; i < cruda.length; i++) cruda[i] = prob[i] > umbral ? 1 : 0;
+  // Apertura (erosión + dilatación): corta puentes delgados y manchas sueltas pegadas a la región, que inflarían
+  // la envolvente (p. ej. piezas en el piso junto al auto).
+  const dentro = filtro(filtro(cruda, RADIO_APERTURA, true), RADIO_APERTURA, false);
 
   // Región conectada más grande (vecindad 4).
   const etiqueta = new Int32Array(n * n).fill(-1);
@@ -90,12 +107,43 @@ export function poligonoVano(prob: Float32Array, umbral = 0.5): Vano | null {
   // Arista «corta» = menos del 20 % del lado de un cuadrado de igual área: relativo, para no comerse las esquinas
   // de un vano que se ve chico (lejos).
   const casco = juntarBiseles(simple, 0.2 * Math.sqrt(areaPoligono(simple)));
+  let suma = 0;
+  for (let c = 0; c < etiqueta.length; c++) if (etiqueta[c] === mejor) suma += prob[c];
   const esquinas = casco.map(([x, y]) => ({
     x,
     y,
     borde: x <= MARGEN_BORDE || y <= MARGEN_BORDE || x >= 1 - MARGEN_BORDE || y >= 1 - MARGEN_BORDE,
   }));
-  return { esquinas, area, cortado: esquinas.some((e) => e.borde) };
+  return { esquinas, area, confianza: suma / mejorTam, cortado: esquinas.some((e) => e.borde) };
+}
+
+/** Erosión (min) o dilatación (max) con un cuadrado de lado 2r+1; fuera de la grilla cuenta como «no vano». */
+function filtro(src: Uint8Array, r: number, erosion: boolean): Uint8Array {
+  const n = CELDAS;
+  const tmp = new Uint8Array(n * n);
+  const out = new Uint8Array(n * n);
+  for (let pasada = 0; pasada < 2; pasada++) {
+    const a = pasada === 0 ? src : tmp;
+    const b = pasada === 0 ? tmp : out;
+    for (let y = 0; y < n; y++) {
+      for (let x = 0; x < n; x++) {
+        let v = erosion ? 1 : 0;
+        for (let d = -r; d <= r; d++) {
+          const xx = pasada === 0 ? x + d : x;
+          const yy = pasada === 0 ? y : y + d;
+          // En la erosión, el borde de la imagen no «come» la región: un vano cortado por el cuadro sigue llegando al borde.
+          const fuera = xx < 0 || yy < 0 || xx >= n || yy >= n;
+          const c = fuera ? (erosion ? 1 : 0) : a[yy * n + xx];
+          if (erosion ? c === 0 : c === 1) {
+            v = erosion ? 0 : 1;
+            break;
+          }
+        }
+        b[y * n + x] = v;
+      }
+    }
+  }
+  return out;
 }
 
 /** Envolvente convexa (cadena monótona de Andrew), en sentido antihorario. */

@@ -2,24 +2,28 @@
  * Escáner con ARCore: reconoce el vano UNA vez y lo «engancha» al espacio real.
  *
  * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado).
- * 2. Cuando la detección es estable (capó abierto, vano completo en la imagen y ARCore siguiendo el movimiento, 3
+ * 2. Cuando la detección es estable (contorno válido, completo en la imagen y ARCore siguiendo el movimiento, 3
  *    análisis seguidos) —o el usuario toca «Fijar ahora»— cada esquina pasa a ser un ancla de ARCore.
  * 3. Anclado: el modelo se detiene; el polígono (verde) se dibuja en nativo en cada cuadro con la pose actual del
- *    teléfono y queda fijo sobre el auto mientras el usuario se mueve. «Volver a detectar» suelta las anclas.
+ *    teléfono y queda fijo sobre el auto mientras el usuario se mueve.
+ *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas (para cuando el contorno
+ *      quedó corrido tras alejarse y volver). El contorno anterior se mantiene hasta que hay uno nuevo.
+ *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { VistaAR, type CapturaAR, type EstadoAR, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { poligonoVano, Suavizador, type Vano } from '../detector/vano';
-import { color } from '../theme';
+import { color, espacio } from '../theme';
 import { Boton } from '../ui';
 import {
-  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO,
+  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO, vanoValido,
 } from './comun';
 
 const ESTABLES_PARA_FIJAR = 3;
+const INTENTOS_RECALIBRAR = 3;
 
 const plano = (v: Vano) => v.esquinas.flatMap((e) => [e.x, e.y]);
 
@@ -29,17 +33,18 @@ export default function EscanerAR() {
   const [modeloListo, setModeloListo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
-  const [puntaje, setPuntaje] = useState<number | null>(null);
-  const [detectado, setDetectado] = useState(false);
+  const [capo, setCapo] = useState(0); // puntaje «capó abierto» de CLIP (solo debug)
   const [vano, setVano] = useState<Vano | null>(null);
   const [estables, setEstables] = useState(0);
   const [anclaje, setAnclaje] = useState<ResultadoFijar | null>(null);
   const [fijando, setFijando] = useState(false);
+  const [recalibrando, setRecalibrando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [ultima, setUltima] = useState<CapturaAR | null>(null);
   const [ms, setMs] = useState<number | null>(null);
   const [debug, setDebug] = useState(true);
   const [activa, setActiva] = useState(AppState.currentState === 'active');
-  const fijandoRef = useRef(false);
+  const ocupado = useRef(false); // fijando o recalibrando
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => setActiva(s === 'active'));
@@ -54,15 +59,16 @@ export default function EscanerAR() {
   }, [intento]);
 
   const fijar = useCallback(async (captura: CapturaAR, v: Vano) => {
-    if (fijandoRef.current || !ar.current) return;
-    fijandoRef.current = true;
+    if (ocupado.current || !ar.current) return;
+    ocupado.current = true;
     setFijando(true);
     try {
       setAnclaje(await ar.current.fijar(captura.id, plano(v)));
+      setAviso(null);
     } catch (e) {
       setError(`No se pudo fijar el contorno. ${String((e as Error)?.message ?? e)}`);
     } finally {
-      fijandoRef.current = false;
+      ocupado.current = false;
       setFijando(false);
     }
   }, []);
@@ -75,7 +81,7 @@ export default function EscanerAR() {
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
-    const capo = new PuntajeCapo();
+    const puntajeCapo = new PuntajeCapo();
     const suavizador = new Suavizador(SUAVIZADO);
     (async () => {
       while (vivo && ar.current) {
@@ -89,18 +95,17 @@ export default function EscanerAR() {
             borrar(cap.uri);
           }
           if (!vivo) break;
-          capo.agregar(r.puntaje);
           const v = poligonoVano(suavizador.agregar(r.vano));
-          await ar.current?.mostrarVista(v ? plano(v) : [], v ? v.esquinas.map((e) => e.borde) : [], cap.grados);
-          seguidos = capo.detectado && v && !v.cortado && cap.rastreando ? seguidos + 1 : 0;
+          const valido = vanoValido(v);
+          await ar.current?.mostrarVista(valido ? plano(v) : [], valido ? v.esquinas.map((e) => e.borde) : [], cap.grados);
+          seguidos = valido && !v.cortado && cap.rastreando ? seguidos + 1 : 0;
           fallos = 0;
-          setPuntaje(capo.media);
-          setDetectado(capo.detectado);
+          setCapo(puntajeCapo.agregar(r.puntaje).media);
           setVano(v);
           setUltima(cap);
           setEstables(seguidos);
           setMs(Date.now() - t0);
-          if (v && seguidos >= ESTABLES_PARA_FIJAR) {
+          if (valido && seguidos >= ESTABLES_PARA_FIJAR) {
             await fijar(cap, v);
             break;
           }
@@ -121,25 +126,57 @@ export default function EscanerAR() {
     };
   }, [modeloListo, sesionActiva, activa, anclaje, error, fijar]);
 
-  const volverADetectar = async () => {
+  /** Reconoce de nuevo desde la posición actual y reemplaza las anclas. Si no reconoce, deja el contorno como estaba. */
+  const recalibrar = async () => {
+    if (ocupado.current || !ar.current) return;
+    ocupado.current = true;
+    setRecalibrando(true);
+    setAviso(null);
+    try {
+      for (let i = 0; i < INTENTOS_RECALIBRAR; i++) {
+        const cap = await ar.current.capturar();
+        let r;
+        try {
+          r = await analizarFoto(cap.uri);
+        } finally {
+          borrar(cap.uri);
+        }
+        const v = poligonoVano(new Suavizador().agregar(r.vano));
+        if (vanoValido(v) && cap.rastreando) {
+          setAnclaje(await ar.current.fijar(cap.id, plano(v)));
+          setVano(v);
+          setUltima(cap);
+          return;
+        }
+      }
+      setAviso('No reconocí el vano desde aquí, así que dejé el contorno como estaba. Apunta al motor completo y vuelve a intentarlo.');
+    } catch (e) {
+      setAviso(`No se pudo recalibrar. ${String((e as Error)?.message ?? e)}`);
+    } finally {
+      ocupado.current = false;
+      setRecalibrando(false);
+    }
+  };
+
+  const empezarDeNuevo = async () => {
     await ar.current?.soltar();
     setAnclaje(null);
     setVano(null);
     setEstables(0);
-    setPuntaje(null);
+    setAviso(null);
   };
 
   const reintentar = () => {
-    setPuntaje(null);
     setVano(null);
     setIntento((i) => i + 1);
   };
 
   if (!VistaAR) return null;
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
-  const tono = anclaje ? color.exito : detectado ? color.exito : color.acento;
   const rastreando = estadoAR?.estado === 'rastreando';
-  const puedeFijar = !anclaje && !fijando && !!vano && !!ultima?.rastreando;
+  const detectado = vanoValido(vano);
+  const tono = anclaje || detectado ? color.exito : color.acento;
+  const puedeFijar = !anclaje && !fijando && detectado && !!ultima?.rastreando;
 
   let panel;
   if (error || errorAR) {
@@ -147,7 +184,7 @@ export default function EscanerAR() {
       <>
         <Encabezado icono="alert-circle-outline" tono={color.peligro} titulo="Algo falló" />
         <Detalle>{error ?? errorAR}</Detalle>
-        <Boton texto="Reintentar" icono="refresh" onPress={reintentar} estilo={{ marginTop: 12 }} />
+        <Boton texto="Reintentar" icono="refresh" onPress={reintentar} estilo={{ marginTop: espacio.m }} />
       </>
     );
   } else if (estadoAR?.estado === 'instalando') {
@@ -167,21 +204,32 @@ export default function EscanerAR() {
   } else if (anclaje) {
     panel = (
       <>
-        <Encabezado icono="vector-polygon" tono={color.exito} titulo="Contorno fijado" />
+        <Encabezado
+          icono="vector-polygon"
+          tono={color.exito}
+          cargando={recalibrando}
+          titulo={recalibrando ? 'Recalibrando…' : 'Contorno fijado'}
+        />
         <Detalle>
-          {rastreando
-            ? 'Recorre el motor: el contorno se queda sobre el vano aunque muevas el teléfono.'
-            : 'La realidad aumentada perdió el seguimiento: vuelve a apuntar al motor y muévete despacio.'}
-          {anclaje.metodo === 'estimado' || anclaje.metodo === 'distancia-media'
-            ? ' La distancia al motor se estimó; si el contorno se desliza al moverte, vuelve a detectar.'
-            : ''}
+          {recalibrando
+            ? 'Mantén el teléfono quieto apuntando al motor.'
+            : rastreando
+              ? 'Recorre el motor: el contorno se queda sobre el vano. Si se corre, apunta al motor completo y toca Recalibrar.'
+              : 'La realidad aumentada perdió el seguimiento: vuelve a apuntar al motor y muévete despacio.'}
         </Detalle>
+        {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <View style={estilos.botones}>
-          <Boton texto="Volver a detectar" icono="refresh" variante="secundario" onPress={volverADetectar} estilo={styles.flex} />
+          <Boton
+            texto="Recalibrar"
+            icono="crosshairs-gps"
+            onPress={recalibrar}
+            estilo={[styles.flex, recalibrando && styles.apagado]}
+          />
+          <Boton texto="Empezar de nuevo" variante="secundario" onPress={empezarDeNuevo} estilo={[styles.flex, recalibrando && styles.apagado]} />
         </View>
         {debug && (
           <LineaDebug
-            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · anclas ${anclaje.esquinas} · ${anclaje.metodo} · ${anclaje.muestras}/49 medidas · ${anclaje.distancia.toFixed(2)} m`}
+            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · anclas ${anclaje.esquinas} · ${anclaje.metodo} · ${anclaje.muestras} medidas en el vano · ${anclaje.distancia.toFixed(2)} m`}
           />
         )}
       </>
@@ -192,34 +240,32 @@ export default function EscanerAR() {
         <Encabezado
           icono={detectado ? 'vector-polygon' : 'line-scan'}
           tono={tono}
-          titulo={detectado ? (vano ? 'Vano del motor detectado' : 'Capó abierto detectado') : 'Buscando un capó abierto'}
+          titulo={detectado ? 'Vano del motor detectado' : 'Buscando el vano del motor'}
         />
         <Detalle>
           {!rastreando
             ? 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno.'
             : !detectado
-              ? 'Abre el capó y apunta al motor desde arriba.'
-              : !vano
-                ? 'No logro delimitar el vano. Prueba desde un poco más lejos.'
-                : vano.cortado
-                  ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
-                  : `Mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
+              ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
+              : vano.cortado
+                ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
+                : `Mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>
-        <Medidor puntaje={puntaje ?? 0} tono={tono} />
+        <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
         <View style={estilos.botones}>
           <Boton
             texto={fijando ? 'Fijando…' : 'Fijar ahora'}
             icono="vector-polygon"
             variante={puedeFijar ? 'primario' : 'secundario'}
             onPress={() => puedeFijar && ultima && vano && fijar(ultima, vano)}
-            estilo={[styles.flex, !puedeFijar && { opacity: 0.5 }]}
+            estilo={[styles.flex, !puedeFijar && styles.apagado]}
           />
         </View>
         {debug && (
           <LineaDebug
             texto={`Debug · AR ${estadoAR?.estado ?? '–'}${estadoAR?.profundidad ? ' · profundidad' : ''} · vano ${
               vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'
-            } · ${ultima?.muestras ?? 0}/49 medidas${ms !== null ? ` · ${ms} ms` : ''}`}
+            } · capó ${Math.round(capo * 100)} % · ${ultima?.muestras ?? 0}/49 medidas${ms !== null ? ` · ${ms} ms` : ''}`}
           />
         )}
       </>
@@ -230,11 +276,14 @@ export default function EscanerAR() {
     <View style={estilos.raiz}>
       {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
       <VistaAR ref={ar} style={StyleSheet.absoluteFill} debug={debug} onEstado={(e) => setEstadoAR(e.nativeEvent)} />
-
       <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
       <Panel>{panel}</Panel>
     </View>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  apagado: { opacity: 0.5 },
+  aviso: { color: color.acento, fontSize: 13, lineHeight: 19, marginTop: espacio.s },
+});

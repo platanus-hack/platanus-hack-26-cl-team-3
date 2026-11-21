@@ -5,14 +5,19 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { Vano } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
 
-// «Capó abierto»: histéresis sobre el puntaje suavizado. Entra con ≥ 0,5 (y al menos 2 análisis), sale con < 0,35.
-// 0,5 medido con el CLIP ViT-B/16 int8 del modelo: 97,6 % de aciertos en 166 fotos (herramientas/vano-motor/).
-export const UMBRAL_ENTRA = 0.5;
-export const UMBRAL_SALE = 0.35;
+// La detección sale del propio contorno: hay vano si el modelo marca una región con suficiente confianza y tamaño.
+// (El puntaje «capó abierto» de CLIP quedó solo como dato de debug: fallaba al apuntar a una pantalla.)
+export const CONFIANZA_MIN = 0.7; // probabilidad media dentro de la región
+export const AREA_MIN = 0.03; // fracción del cuadro
 export const SUAVIZADO = 0.5; // peso del análisis nuevo en las medias móviles
+
+export function vanoValido(v: Vano | null): v is Vano {
+  return !!v && v.confianza >= CONFIANZA_MIN && v.area >= AREA_MIN;
+}
 
 export const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -24,17 +29,14 @@ export function borrar(uri: string) {
   }
 }
 
-/** Media móvil + histéresis del puntaje de «capó abierto». */
+/** Media móvil del puntaje «capó abierto» de CLIP (solo informativo, se muestra en debug). */
 export class PuntajeCapo {
   media = 0;
-  detectado = false;
   private n = 0;
 
   agregar(p: number) {
     this.n += 1;
     this.media = this.n === 1 ? p : SUAVIZADO * p + (1 - SUAVIZADO) * this.media;
-    if (!this.detectado && this.n >= 2 && this.media >= UMBRAL_ENTRA) this.detectado = true;
-    else if (this.detectado && this.media < UMBRAL_SALE) this.detectado = false;
     return this;
   }
 }
@@ -116,12 +118,12 @@ export function Medidor({ puntaje, tono }: { puntaje: number; tono: string }) {
   return (
     <View style={estilos.medidor}>
       <View style={estilos.medidorFila}>
-        <Text style={estilos.medidorEtiqueta}>Capó abierto</Text>
+        <Text style={estilos.medidorEtiqueta}>Confianza del contorno</Text>
         <Text style={[estilos.medidorValor, { color: tono }]}>{pct} %</Text>
       </View>
       <View style={estilos.pista}>
         <View style={[estilos.relleno, { width: `${pct}%`, backgroundColor: tono }]} />
-        <View style={[estilos.marcaUmbral, { left: `${UMBRAL_ENTRA * 100}%` }]} />
+        <View style={[estilos.marcaUmbral, { left: `${CONFIANZA_MIN * 100}%` }]} />
       </View>
     </View>
   );
