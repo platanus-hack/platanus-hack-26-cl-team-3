@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: android-${{ github.ref }}-${{ github.ref_name == 'dev' && github.sha || 'latest' }}
+  group: android-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -49,6 +49,9 @@ jobs:
 
   publish:
     needs: apk
+    concurrency:
+      group: publish-android-${{ github.ref }}-${{ github.ref_name == 'dev' && github.sha || 'latest' }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
       contents: write
