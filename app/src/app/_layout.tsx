@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ProveedorAviso, useAviso } from '../aviso';
 import { PantallaAviso } from '../PantallaAviso';
+import { VehicleSelection } from '../plates/selection';
 import { color } from '../theme';
 
 export default function Layout() {
@@ -13,15 +14,17 @@ export default function Layout() {
       <ProveedorAviso>
         <StatusBar style="light" />
         <View style={styles.raiz}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: color.fondo },
-              animation: 'slide_from_right',
-            }}
-          >
-            <Stack.Screen name="aviso" options={{ animation: 'slide_from_bottom' }} />
-          </Stack>
+          <VehicleSelection>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: color.fondo },
+                animation: 'slide_from_right',
+              }}
+            >
+              <Stack.Screen name="aviso" options={{ animation: 'slide_from_bottom' }} />
+            </Stack>
+          </VehicleSelection>
           <AvisoPrimerUso />
         </View>
       </ProveedorAviso>

@@ -101,6 +101,35 @@ test("4: two tool_use in one round produce a single user message with two tool_r
   assert.equal(reg.executed.length, 2);
 });
 
+test("4: tool events are emitted after the round tools, in tool order, before the next round text", async () => {
+  const ar = (part: string): ChatEvent => ({ event: "ar", data: { part, instruction: "i" } });
+  const emitting = (name: string, events: ChatEvent[]): Tool => ({
+    definition: { name, input_schema: { type: "object" } },
+    run: async () => ({ content: [{ type: "text", text: "ok" }], events }),
+  });
+  const tools: ToolRegistry = {
+    first: emitting("first", [ar("washer")]),
+    second: emitting("second", [ar("battery"), ar("positive")]),
+    quiet: emitting("quiet", []),
+  };
+  const use = (id: string, name: string) => ({ type: "tool_use", id, name, input: {} }) as ToolUseBlock;
+  const { adapter } = fake([
+    {
+      events: [{ event: "tool", data: { name: "first" } }],
+      message: toolMsg(use("t1", "first"), use("t2", "quiet"), use("t3", "second")),
+    },
+    { events: [{ event: "text", data: { block: 0, text: "Listo." } }], message: endMsg([{ type: "text", text: "Listo." } as ContentBlock]) },
+  ]);
+  const events = await collect(runTurn({ messages, profile, adapter, tools }));
+  assert.deepEqual(events.map((e) => e.event), ["tool", "ar", "ar", "ar", "text", "done"]);
+  assert.deepEqual(
+    events.flatMap((e) => (e.event === "ar" ? [e.data.part] : [])),
+    ["washer", "battery", "positive"],
+  );
+  const m = (events.at(-1)!.data as unknown as { messages: { content: Record<string, unknown>[] }[] }).messages;
+  assert.deepEqual(Object.keys(m[1].content[0]).sort(), ["content", "tool_use_id", "type"]);
+});
+
 test("unknown tool produces a tool_result with is_error", async () => {
   const { adapter } = fake([
     { message: toolMsg({ type: "tool_use", id: "t1", name: "nothing", input: {} } as ToolUseBlock) },

@@ -8,6 +8,8 @@ export function toEvent(name: string, data: any): ChatEvent | null {
       return { type: 'text', block: data.block, text: data.text };
     case 'citation':
       return { type: 'citation', block: data.block, title: data.title, source: data.source, cited_text: data.cited_text };
+    case 'ar':
+      return { type: 'ar', part: data.part, instruction: data.instruction };
     case 'done':
       return data.truncated === true ? { type: 'done', messages: data.messages, truncated: true } : { type: 'done', messages: data.messages };
     case 'error':

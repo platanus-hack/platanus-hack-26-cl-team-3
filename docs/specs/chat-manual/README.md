@@ -30,35 +30,35 @@ Diagrama: [`docs/arquitectura/chat-manual.html`](../../arquitectura/chat-manual.
 
 ## Contrato back↔front
 
-Se congela en la fase 1; ver [`fase-1.md`](fase-1.md). `POST /api/chat` recibe la conversación completa en formato Anthropic y responde SSE con `tool`, `text`, `citation`, `done` y `error`. En la fase 2 se agrega `ar`; es aditivo.
+Se congela en la fase 1; ver [`fase-1.md`](fase-1.md). `POST /api/chat` recibe la conversación completa en formato Anthropic y responde SSE con `tool`, `text`, `citation`, `done` y `error`. La fase 2 agrega `ar`, que es aditivo; ver [`fase-2.md`](fase-2.md).
 
 ## Flujo objetivo: chat ↔ cámara
 
 El chat es el hilo conductor. Cuando un paso lleva a una pieza, el usuario abre la cámara, resuelve y vuelve al chat, donde la conversación sigue:
 
 ```
-Chat: «se me quedó abajo la ventana»
-  → respuesta con pasos + tarjeta «Abrir cámara: caja de fusibles del motor»
+Chat: «no sale agua del limpiaparabrisas»
+  → respuesta con pasos + tarjeta «Abrir cámara: Sapito»
 Cámara (/escanear): arriba, la instrucción del paso; abajo, «Volver al chat»
-  → el usuario saca el extractor y el repuesto
+  → el usuario ubica la tapa y rellena
 Chat (/ask): mismo historial + respuestas rápidas «Listo, ¿qué sigue?» / «No lo encuentro»
   → el modelo sigue con el paso siguiente
 ```
 
-El chat abre la cámara con `router.push('/escanear')` y «Volver al chat» es `router.back()`. La pantalla del chat queda montada debajo en el stack: si el modelo todavía está respondiendo cuando el usuario abre la cámara, el turno termina en segundo plano y queda guardado.
+El chat abre la cámara con `router.push` a `/escanear?vehicleId=outback&part=…&instruction=…` y «Volver al chat» es `router.back()`. La pantalla del chat queda montada debajo en el stack: si el modelo todavía está respondiendo cuando el usuario abre la cámara, el turno termina en segundo plano y queda guardado.
 
 ## Fases
 
 | # | Demuestra | Incluye | Depende de |
 |---|---|---|---|
 | **1** | «Se me quedó abajo la ventana» → respuesta en streaming que cita la tabla de fusibles | Servidor `api/` (`/api/chat`, `lookup_fuses`, adaptador OpenRouter) + servicio en compose + pantalla de chat en el APK | Key de OpenRouter en el servidor (Lucas) |
-| **2** | La ida y vuelta chat ↔ cámara de arriba | Herramienta `show_in_camera` (evento `ar`) → tarjeta «Abrir cámara» → `/escanear` con la instrucción del paso y «Volver al chat» → respuestas rápidas al volver | Fase 1 |
+| **2** | La ida y vuelta chat ↔ cámara de arriba | Herramientas `lookup_parts` (las 9 piezas del vano) y `show_in_camera` (evento `ar`) → tarjeta «Abrir cámara» → `/escanear` con la pieza elegida, la instrucción del paso y «Volver al chat» → respuestas rápidas al volver. Spec: [`fase-2.md`](fase-2.md) | Fase 1 |
 | **3** | Cambiar de modelo desde la UI; errores bien mostrados | Selector de perfiles; bordes (rechazo, red caída, sin key, sin crédito, «Nueva conversación») | Fase 1 |
 | **4** | Preguntas generales («¿dónde está el sapito?») con cita de página del manual oficial | `buscar_manual` en el servidor sobre el PDF de subaru.ca. El texto del manual queda fuera del repo, en un volumen de solo lectura (regla 7) | PDF descargado + decisión |
 
 **Después (versión final): agente por voz.** Hablarle y que guíe con voz. El orquestador ya emite eventos que no dependen de la UI (`text`, `citation`, `tool`, `ar`, `done`), así que una interfaz de voz consumiría los mismos eventos: dictado → `messages`, `text` → voz. No se construye ahora.
 
-Las specs de las fases 2 y 3 se escriben cuando les toque, con lo aprendido en la anterior.
+La spec de la fase 3 se escribe cuando le toque, con lo aprendido en las anteriores.
 
 ## Proveedor del modelo: OpenRouter
 
