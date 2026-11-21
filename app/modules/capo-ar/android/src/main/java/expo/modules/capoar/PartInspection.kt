@@ -1,6 +1,7 @@
 package expo.modules.capoar
 
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -34,7 +35,9 @@ internal class InspectionPart(
     .flatMap { listOf(it.a, it.b, it.c) }.distinct() else emptyList()
   private val bottom = neck.minOfOrNull { it.y } ?: 0f
   private val rim = neck.maxOfOrNull { it.y } ?: 0f
-  private val mouth = neck.filter { it.y > rim - .003f }.let { ring ->
+  // The bundled neck has three vertex rings. Its upper ring is tilted relative to asset Y.
+  private val mouthRing = neck.filter { it.y > rim - (rim - bottom) * .2f }.toSet()
+  private val mouth = mouthRing.let { ring ->
     if (ring.isEmpty()) part.center else ring.reduce(EnginePoint::plus) * (1f / ring.size)
   }
   private val hinge = EnginePoint(points.minOf { it.x }, mouth.y, mouth.z)
@@ -69,7 +72,10 @@ internal class InspectionPart(
       return hinge + EnginePoint(d.x*cosine - d.y*sine, d.x*sine + d.y*cosine, d.z)
     }
     val surface = ArrayList<ModelTriangle>(source.size)
+    val waterline = mutableSetOf<EnginePoint>()
     for (triangle in source) {
+      if (open > 0f && triangle.primitive == 0 &&
+        triangle.a in mouthRing && triangle.b in mouthRing && triangle.c in mouthRing) continue
       fun vertex(p: EnginePoint) = place(if (open > 0 && triangle.primitive == 1) lid(p) else p)
       if (refill && time > 4.35f && triangle.primitive == 0 && level > bottom) {
         // Split at the level so it rises continuously even on long, sparsely tessellated faces.
@@ -78,7 +84,13 @@ internal class InspectionPart(
           val polygon = ArrayList<EnginePoint>(4)
           var a = vertices.last()
           for (b in vertices) {
-            if ((a.y < level) != (b.y < level)) polygon.add(a + (b-a)*((level-a.y)/(b.y-a.y)))
+            if ((a.y < level) != (b.y < level)) {
+              val low = if (a.y < b.y) a else b
+              val high = if (a.y < b.y) b else a
+              val crossing = low + (high-low)*((level-low.y)/(high.y-low.y))
+              polygon.add(crossing)
+              if (filled) waterline.add(crossing)
+            }
             if ((b.y < level) == filled) polygon.add(b)
             a = b
           }
@@ -86,6 +98,14 @@ internal class InspectionPart(
             place(polygon[i]), place(polygon[i+1]), index, if (filled) liquid else triangle.rgb))
         }
       } else surface.add(triangle.copy(a = vertex(triangle.a), b = vertex(triangle.b), c = vertex(triangle.c), part = index))
+    }
+    var liquidCenter = mouth.copy(y = bottom)
+    if (waterline.size >= 3) {
+      liquidCenter = waterline.reduce(EnginePoint::plus) * (1f / waterline.size)
+      val boundary = waterline.sortedBy { atan2(it.z-liquidCenter.z, it.x-liquidCenter.x) }
+      val center = place(liquidCenter)
+      for (i in boundary.indices) surface.add(ModelTriangle(center, place(boundary[i]),
+        place(boundary[(i+1) % boundary.size]), index, liquid))
     }
     val effects = mutableListOf<ModelTriangle>()
     fun quad(a: EnginePoint, b: EnginePoint, c: EnginePoint, d: EnginePoint, rgb: FloatArray) {
@@ -119,6 +139,7 @@ internal class InspectionPart(
       tube(spout,shoulder,.004f,bottle)
       tube(shoulder,shoulder+EnginePoint(.025f,.019f,0f),.011f,bottle)
       tube(spout, spout + (mouth-spout)*pour, .0022f*pour, liquid)
+      if (pour >= .99f && (liquidCenter-mouth).length() > .002f) tube(mouth, liquidCenter, .0022f, liquid)
     }
     return InspectionFrame(index, place(part.center), surface, effects, brightness)
   }

@@ -534,8 +534,10 @@ export default function EscanerAR({ vehicle, initialPart, initialAction }: { veh
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
                 {inspectionActions(selected).map((action) => (
                   <Pressable key={action} accessibilityRole="button" style={styles.part}
-                    onPress={() => void ar.current?.playPartAction(selected, action)
-                      .catch(() => setAviso('No se pudo mostrar la acción.'))}>
+                    onPress={() => {
+                      controls.setMode('compact');
+                      void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
+                    }}>
                     <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
                   </Pressable>
                 ))}

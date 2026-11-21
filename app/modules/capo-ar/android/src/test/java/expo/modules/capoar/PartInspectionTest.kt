@@ -34,4 +34,28 @@ class PartInspectionTest {
     assertEquals(origin,part.frame(InspectionAction.REFILL,9.8f)!!.center)
     assertNull(part.frame(InspectionAction.REFILL,10f))
   }
+
+  @Test fun aSealedNeckOpensAndItsLiquidSurfaceRises() {
+    val top = listOf(origin, origin + EnginePoint(.04f,0f,0f), origin + EnginePoint(0f,0f,.04f))
+    val base = top.map { it + EnginePoint(0f,-.1f,0f) }
+    fun face(a: EnginePoint, b: EnginePoint, c: EnginePoint) = neck.copy(a=a, b=b, c=c)
+    val mesh = buildList {
+      add(face(top[0],top[1],top[2]))
+      add(face(base[0],base[1],base[2]))
+      for (i in top.indices) {
+        val j = (i+1) % top.size
+        add(face(base[i],base[j],top[j]))
+        add(face(base[i],top[j],top[i]))
+      }
+    }
+    val part = InspectionPart(ModelPart("washer",origin),0,mesh) { it }
+    val closed = part.frame(InspectionAction.REFILL,3.12f)!!
+    val opened = part.frame(InspectionAction.REFILL,4.1f)!!
+    assertEquals(closed.surface.size-1,opened.surface.size)
+    fun surfaceHeight(time: Float) = part.frame(InspectionAction.REFILL,time)!!.surface.first {
+      it.rgb[2] > it.rgb[1] && kotlin.math.abs(it.a.y-it.b.y) < .00001f &&
+        kotlin.math.abs(it.b.y-it.c.y) < .00001f && it.a.y > closed.surface[1].a.y + .001f
+    }.a.y
+    assertTrue(surfaceHeight(5.8f) > surfaceHeight(4.8f))
+  }
 }
