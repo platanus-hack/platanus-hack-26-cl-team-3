@@ -47,6 +47,11 @@ export function sameRegistrationView(reference: number[], current: number[]): bo
  * Match the rear and front edges of the reference to a complete bay seen from
  * the front bumper. Sample just inside the silhouette to avoid the rounded
  * corners and the background. Coordinates refer to the original capture.
+ *
+ * The detector returns a convex hull whose corners are often cut diagonally, so
+ * the silhouette is much narrower near its top and bottom than the bay really
+ * is. The left and right edges are therefore fitted through the middle of the
+ * silhouette, where they follow the fenders, and extended to the two sampled rows.
  */
 export function registrationCorners(bay: Vano): number[] {
   if (bay.esquinas.length < 3) return [];
@@ -55,20 +60,44 @@ export function registrationCorners(bay: Vano): number[] {
   const bottom = Math.max(...vertices.map(({ y }) => y));
   if (bottom <= top) return [];
 
-  const corners: number[] = [];
-  for (const row of [.12, .88]) {
-    const y = top + (bottom - top) * row;
+  const span = (y: number): [number, number] | null => {
     const intersections: number[] = [];
     vertices.forEach((a, index) => {
       const b = vertices[(index + 1) % vertices.length];
       if ((a.y > y) !== (b.y > y)) intersections.push(a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y));
     });
-    if (intersections.length < 2) return [];
+    if (intersections.length < 2) return null;
     const left = Math.min(...intersections);
     const right = Math.max(...intersections);
-    const inset = (right - left) * .04;
-    if (right <= left) return [];
-    corners.push(left + inset, y, right - inset, y);
+    return right > left ? [left, right] : null;
+  };
+  // Least-squares x = slope * y + offset through each side, between 30 % and 70 % of the height.
+  const sides: [number, number, number][] = [];
+  for (let step = 0; step <= 8; step++) {
+    const y = top + (bottom - top) * (.3 + .05 * step);
+    const edges = span(y);
+    if (edges) sides.push([y, ...edges]);
+  }
+  const fit = (side: 1 | 2): ((y: number) => number) | null => {
+    const n = sides.length;
+    const sumY = sides.reduce((sum, row) => sum + row[0], 0);
+    const sumX = sides.reduce((sum, row) => sum + row[side], 0);
+    const spread = sides.reduce((sum, row) => sum + row[0] * row[0], 0) * n - sumY * sumY;
+    if (n < 3 || spread <= 0) return null;
+    const slope = (sides.reduce((sum, row) => sum + row[0] * row[side], 0) * n - sumY * sumX) / spread;
+    return (y) => slope * y + (sumX - slope * sumY) / n;
+  };
+  const leftSide = fit(1);
+  const rightSide = fit(2);
+
+  const corners: number[] = [];
+  for (const row of [.12, .88]) {
+    const y = top + (bottom - top) * row;
+    const fitted = leftSide && rightSide ? [leftSide(y), rightSide(y)] : null;
+    const edges = fitted && fitted[1] > fitted[0] ? fitted : span(y);
+    if (!edges) return [];
+    const inset = (edges[1] - edges[0]) * .04;
+    corners.push(edges[0] + inset, y, edges[1] - inset, y);
   }
   return corners;
 }

@@ -230,3 +230,28 @@ assert.ok(!extendsPartialMap(prior, clippedByCrop));
 assert.ok(!extendsPartialMap(prior, { ...expanded, esquinas: expanded.esquinas.map(v => ({ ...v, x: v.x + 2 })) }));
 
 assert.ok(!overlapsPlacedBay(cuad(.1, .1, .5, .5), { ...expanded, esquinas: cuad(.49, .1, .89, .5).map(p => ({ ...p, borde: false })) }));
+
+// 25) Esquinas de registro con el casco «mordido»: el detector suele cortar en diagonal las esquinas del vano. Los
+// costados se ajustan en la franja media, así que el cuadrilátero recupera el ancho real arriba y abajo.
+{
+  const bay = (esquinas: { x: number; y: number }[]) => ({ esquinas, confianza: 1, area: .3, cortado: false, bordes: esquinas.map(() => false) }) as never;
+  const rectangle = registrationCorners(bay([{ x: .1, y: .2 }, { x: .9, y: .2 }, { x: .9, y: .8 }, { x: .1, y: .8 }]));
+  // El mismo vano con las cuatro esquinas cortadas (octágono) y con el frente en punta (como en las fotos reales).
+  const cut = registrationCorners(bay([
+    { x: .3, y: .2 }, { x: .7, y: .2 }, { x: .9, y: .35 }, { x: .9, y: .65 }, { x: .7, y: .8 }, { x: .3, y: .8 }, { x: .1, y: .65 }, { x: .1, y: .35 },
+  ]));
+  const pointed = registrationCorners(bay([{ x: .1, y: .2 }, { x: .9, y: .2 }, { x: .9, y: .7 }, { x: .5, y: .8 }, { x: .1, y: .7 }]));
+  for (const corners of [cut, pointed]) {
+    assert.equal(corners.length, 8);
+    corners.forEach((value, index) => assert.ok(Math.abs(value - rectangle[index]) < 1e-9, `esquina ${index}: ${value} vs ${rectangle[index]}`));
+  }
+  // Un trapecio limpio (más angosto al fondo) da lo mismo que cortar el contorno en cada fila.
+  const trapezoid = registrationCorners(bay([{ x: .3, y: .2 }, { x: .7, y: .2 }, { x: .9, y: .8 }, { x: .1, y: .8 }]));
+  const expected = [.12, .88].flatMap((row) => {
+    const y = .2 + .6 * row, left = .3 - .2 * row, right = .7 + .2 * row, inset = (right - left) * .04;
+    return [left + inset, y, right - inset, y];
+  });
+  trapezoid.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9));
+  console.log('25 ok: las esquinas de registro recuperan el ancho del vano con el casco cortado');
+}
+
