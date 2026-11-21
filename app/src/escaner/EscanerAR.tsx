@@ -10,8 +10,9 @@
  *    Escaneo: además, cada cuadro con vano y profundidad se suma a un mapa del vano en el mundo real (módulo nativo,
  *    Escaneo.kt). Así el vano se arma completo aunque en ningún cuadro quepa entero —lo normal parado frente al
  *    auto— y se fija solo cuando ese contorno deja de cambiar. El usuario solo tiene que recorrerlo con el teléfono.
- *    Marcar a mano («lazo»): el usuario rodea con el dedo todo lo que está bajo el capó; ese trazo pasa a ser el
- *    contorno y se fija igual que uno detectado. La precisión la pone la persona que está mirando el auto.
+ *    Marcar a mano: el usuario presiona y arrastra el dedo para formar un recuadro sobre todo lo que está bajo el
+ *    capó; al soltar, ese recuadro pasa a ser el contorno y se fija igual que uno detectado. La precisión la pone
+ *    la persona que está mirando el auto. (Antes era un lazo libre; el recuadro es un gesto más fácil.)
  * 3. Anclado: el contorno o el mapa de piezas se dibuja en nativo en cada cuadro con la pose actual del teléfono.
  *    - Cada pocos segundos se compara el contorno anclado con una detección nueva («calce», 0-100 %): mide cuánto se
  *      corrió. Si baja mucho, se sugiere recalibrar.
@@ -45,6 +46,11 @@ const VISTAS_PARA_FIJAR = 5; // cuadros del escaneo antes de fijar solo
 const ACUERDO_MINIMO = 0.5; // coincidencia mínima entre el contorno del escaneo y lo que se ve en el cuadro actual
 const CAMBIO_ESTABLE = 0.08; // el contorno del escaneo «dejó de cambiar» si su área varía menos que esto
 const CALCE_BAJO = 0.5;
+
+const LADO_MINIMO_CAJA = 60; // puntos de pantalla: un recuadro más chico se toma como toque accidental
+
+/** Recuadro que dibuja el dedo: empieza donde presiona (x0, y0) y llega hasta donde va (x1, y1). */
+type Caja = { x0: number; y0: number; x1: number; y1: number };
 
 const plano = (v: Vano) => v.esquinas.flatMap((e) => [e.x, e.y]);
 const pares = (c: number[]) => Array.from({ length: c.length / 2 }, (_, k) => ({ x: c[2 * k], y: c[2 * k + 1] }));
@@ -88,9 +94,9 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [escaneo, setEscaneo] = useState<{ vistas: number; estable: boolean; acuerdo: number } | null>(null);
   const [vanoEscaneo, setVanoEscaneo] = useState<Vano | null>(null); // contorno del escaneo visto en la última captura
-  const [lazo, setLazo] = useState(false); // modo «marcar a mano»: el dedo dibuja el contorno
-  const [trazo, setTrazo] = useState<{ x: number; y: number }[]>([]); // recorrido del dedo, en puntos de pantalla
-  const puntosTrazo = useRef<{ x: number; y: number }[]>([]);
+  const [lazo, setLazo] = useState(false); // modo «marcar a mano»: el dedo arrastra un recuadro
+  const [caja, setCaja] = useState<Caja | null>(null); // recuadro en curso, en puntos de pantalla
+  const cajaActual = useRef<Caja | null>(null);
   const [ultima, setUltima] = useState<CapturaAR | null>(null);
   const [ms, setMs] = useState<number | null>(null);
   const [debug, setDebug] = useState(true);
@@ -348,15 +354,15 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     setEscaneo(null);
     setVanoEscaneo(null);
     setLazo(false);
-    setTrazo([]);
+    setCaja(null);
     setAviso(null);
   };
 
   /** Entra o sale del modo «marcar a mano». Al entrar se limpia la vista previa para dibujar sobre la imagen sola. */
   const alternarLazo = async () => {
     const activar = !lazo;
-    puntosTrazo.current = [];
-    setTrazo([]);
+    cajaActual.current = null;
+    setCaja(null);
     setAviso(null);
     setLazo(activar);
     if (activar) {
@@ -369,32 +375,43 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     }
   };
 
-  /** El dedo se levantó: el trazo pasa a ser el contorno del vano y se fija con la pose y la profundidad de este instante. */
-  const terminarTrazo = async () => {
-    const puntos = puntosTrazo.current;
-    puntosTrazo.current = [];
-    if (!ar.current || ocupado.current) return;
-    if (puntos.length < 12) {
-      setTrazo([]);
-      setAviso('El trazo fue muy corto. Rodea con el dedo todo lo que está bajo el capó, en una sola vuelta.');
+  /** El dedo se levantó: el recuadro pasa a ser el contorno del vano y se fija con la pose y la profundidad de este instante. */
+  const terminarCaja = async () => {
+    const c = cajaActual.current;
+    cajaActual.current = null;
+    if (!c || !ar.current || ocupado.current) return;
+    const x0 = Math.min(c.x0, c.x1);
+    const x1 = Math.max(c.x0, c.x1);
+    const y0 = Math.min(c.y0, c.y1);
+    const y1 = Math.max(c.y0, c.y1);
+    if (x1 - x0 < LADO_MINIMO_CAJA || y1 - y0 < LADO_MINIMO_CAJA) {
+      setCaja(null);
+      setAviso('El recuadro quedó muy chico. Presiona en una esquina del vano y arrastra hasta la esquina opuesta.');
       return;
     }
     try {
+      // Borde del recuadro, con varios puntos por lado (la geometría del contorno espera un recorrido, no 4 puntos).
       // La vista nativa trabaja en píxeles físicos; React Native entrega puntos independientes de la densidad.
       const d = PixelRatio.get();
-      const r = await ar.current.capturarTrazo(puntos.flatMap((q) => [q.x * d, q.y * d]));
+      const borde: number[] = [];
+      const POR_LADO = 5;
+      for (let k = 0; k < POR_LADO; k++) borde.push((x0 + ((x1 - x0) * k) / POR_LADO) * d, y0 * d);
+      for (let k = 0; k < POR_LADO; k++) borde.push(x1 * d, (y0 + ((y1 - y0) * k) / POR_LADO) * d);
+      for (let k = 0; k < POR_LADO; k++) borde.push((x1 - ((x1 - x0) * k) / POR_LADO) * d, y1 * d);
+      for (let k = 0; k < POR_LADO; k++) borde.push(x0 * d, (y1 - ((y1 - y0) * k) / POR_LADO) * d);
+      const r = await ar.current.capturarTrazo(borde);
       if (!r.ok || r.id === undefined || !r.trazo) {
-        setTrazo([]);
-        setAviso('La realidad aumentada aún no sigue el movimiento. Mueve un poco el teléfono y vuelve a dibujar.');
+        setCaja(null);
+        setAviso('La realidad aumentada aún no sigue el movimiento. Mueve un poco el teléfono y vuelve a marcar.');
         return;
       }
       const v = vanoDeTrazo(pares(r.trazo));
       if (!v) {
-        setTrazo([]);
-        setAviso('El trazo quedó muy chico o casi en línea. Rodea todo lo que está bajo el capó.');
+        setCaja(null);
+        setAviso('El recuadro quedó muy chico. Presiona en una esquina del vano y arrastra hasta la esquina opuesta.');
         return;
       }
-      // La captura del trazo no tiene imagen: solo importan su id y que había seguimiento.
+      // La captura del recuadro no tiene imagen: solo importan su id y que había seguimiento.
       const captura: CapturaAR = {
         id: r.id, uri: '', ancho: 0, alto: 0, grados: 0, rastreando: true,
         muestras: r.muestras ?? 0, profundidad: (r.puntos ?? 0) > 0, puntos: r.puntos ?? 0,
@@ -404,34 +421,36 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
         setValido(true);
         setLazo(false);
       }
-      setTrazo([]);
+      setCaja(null);
     } catch (e) {
-      setTrazo([]);
-      setAviso(`No se pudo fijar el trazo. ${String((e as Error)?.message ?? e)}`);
+      setCaja(null);
+      setAviso(`No se pudo fijar el recuadro. ${String((e as Error)?.message ?? e)}`);
     }
   };
-  // El PanResponder se crea una vez; llama siempre a la versión más reciente de terminarTrazo.
-  const alTerminar = useRef(terminarTrazo);
-  alTerminar.current = terminarTrazo;
+  // El PanResponder se crea una vez; llama siempre a la versión más reciente de terminarCaja.
+  const alTerminar = useRef(terminarCaja);
+  alTerminar.current = terminarCaja;
   const gestos = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderGrant: (e) => {
-        puntosTrazo.current = [{ x: e.nativeEvent.locationX, y: e.nativeEvent.locationY }];
-        setTrazo(puntosTrazo.current.slice());
+        // El recuadro nace donde se presiona…
+        const { locationX: x, locationY: y } = e.nativeEvent;
+        cajaActual.current = { x0: x, y0: y, x1: x, y1: y };
+        setCaja(cajaActual.current);
       },
       onPanResponderMove: (e) => {
-        const p = { x: e.nativeEvent.locationX, y: e.nativeEvent.locationY };
-        const u = puntosTrazo.current[puntosTrazo.current.length - 1];
-        if (u && Math.hypot(p.x - u.x, p.y - u.y) < 6) return; // un punto cada 6 puntos de pantalla alcanza
-        puntosTrazo.current.push(p);
-        if (puntosTrazo.current.length % 2 === 0) setTrazo(puntosTrazo.current.slice());
+        // …y crece hasta donde va el dedo.
+        const c = cajaActual.current;
+        if (!c) return;
+        cajaActual.current = { ...c, x1: e.nativeEvent.locationX, y1: e.nativeEvent.locationY };
+        setCaja(cajaActual.current);
       },
       onPanResponderRelease: () => void alTerminar.current(),
       onPanResponderTerminate: () => {
-        puntosTrazo.current = [];
-        setTrazo([]);
+        cajaActual.current = null;
+        setCaja(null);
       },
     }),
   ).current;
@@ -554,11 +573,11 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
   } else if (lazo) {
     panel = (
       <>
-        <Encabezado icono="vector-polygon" tono={color.acento} cargando={fijando} titulo={fijando ? 'Fijando tu trazo…' : 'Marca el vano a mano'} />
+        <Encabezado icono="vector-polygon" tono={color.acento} cargando={fijando} titulo={fijando ? 'Fijando tu recuadro…' : 'Marca el vano a mano'} />
         <Detalle>
           {rastreando
-            ? 'Con el teléfono quieto, rodea con el dedo todo lo que está bajo el capó, en una sola vuelta. Al soltar queda fijado.'
-            : 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno, y luego dibuja.'}
+            ? 'Con el teléfono quieto, presiona en una esquina del vano y arrastra el dedo hasta la esquina opuesta: el recuadro debe cubrir todo lo que está bajo el capó. Al soltar queda fijado.'
+            : 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno, y luego marca.'}
         </Detalle>
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <View style={estilos.botones}>
@@ -588,7 +607,7 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
                   : `Desde el frente, mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
-        {leCuesta && <Text style={styles.aviso}>¿Le cuesta encontrarlo? Toca «Marcar a mano» y rodea el vano con el dedo.</Text>}
+        {leCuesta && <Text style={styles.aviso}>¿Le cuesta encontrarlo? Toca «Marcar a mano» y arrastra un recuadro sobre el vano.</Text>}
         <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
         <View style={estilos.botones}>
           <Boton
@@ -624,12 +643,23 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
         onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
       />
-      {/* Modo «marcar a mano»: esta capa recibe el dedo y muestra el trazo. Va debajo de la barra y del panel. */}
+      {/* Modo «marcar a mano»: esta capa recibe el dedo y muestra el recuadro. Va debajo de la barra y del panel. */}
       {lazo && !anclaje && (
-        <View style={styles.lienzo} {...gestos.panHandlers} accessibilityLabel="Rodea con el dedo todo lo que está bajo el capó">
-          {trazo.map((q, i) => (
-            <View key={i} pointerEvents="none" style={[styles.puntoTrazo, { left: q.x - 4, top: q.y - 4 }]} />
-          ))}
+        <View style={styles.lienzo} {...gestos.panHandlers} accessibilityLabel="Presiona y arrastra para marcar con un recuadro lo que está bajo el capó">
+          {caja && (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.caja,
+                {
+                  left: Math.min(caja.x0, caja.x1),
+                  top: Math.min(caja.y0, caja.y1),
+                  width: Math.abs(caja.x1 - caja.x0),
+                  height: Math.abs(caja.y1 - caja.y0),
+                },
+              ]}
+            />
+          )}
         </View>
       )}
       <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
@@ -647,5 +677,5 @@ const styles = StyleSheet.create({
   link: { ...tipo.cuerpo, color: color.acento, paddingVertical: espacio.s },
   aviso: { color: color.acento, fontSize: 13, lineHeight: 19, marginTop: espacio.s },
   lienzo: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.12)' },
-  puntoTrazo: { position: 'absolute', width: 8, height: 8, borderRadius: 4, backgroundColor: color.acento },
+  caja: { position: 'absolute', borderWidth: 3, borderColor: color.acento, borderRadius: 6, backgroundColor: 'rgba(255, 176, 32, 0.18)' },
 });

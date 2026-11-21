@@ -90,16 +90,17 @@ muestra **pegado al mundo** mientras se escanea. Se fija solo cuando hay ≥ 5 v
 de 8 % en tres análisis y, como control cruzado, coincide ≥ 50 % con lo que el modelo ve en el cuadro actual
 («acuerdo» en debug). Así el vano se arma completo aunque nunca quepa entero en la imagen.
 
-**Marcar a mano («lazo»).** Reemplaza al «mantener presionado» de la versión anterior. Con el botón «Marcar a mano»
-el usuario **rodea con el dedo todo lo que está bajo el capó**. Al soltar, el módulo nativo registra ese instante como
-captura (pose y profundidad, `capturarTrazo`) y devuelve el trazo en coordenadas de la imagen; la app lo reduce a su
-envolvente convexa de ≤ 8 esquinas (`vanoDeTrazo`) y lo fija por el mismo camino que un contorno detectado, incluido
-el registro del mapa de piezas. La precisión la pone la persona que mira el auto, no el modelo. Mientras se dibuja,
-la detección automática se detiene. La app lo sugiere cuando menos de la mitad de los análisis encuentra el vano.
-Límite: el trazo se convierte con la pose del momento en que se levanta el dedo, así que hay que dibujar con el
-teléfono quieto.
+**Marcar a mano (recuadro).** Con el botón «Marcar a mano» el usuario **presiona en una esquina del vano y arrastra
+hasta la opuesta**: se forma un recuadro que crece con el dedo y debe cubrir todo lo que está bajo el capó. Al soltar,
+el módulo nativo registra ese instante como captura (pose y profundidad, `capturarTrazo`) y devuelve el borde del
+recuadro en coordenadas de la imagen; la app lo convierte en contorno (`vanoDeTrazo`) y lo fija por el mismo camino
+que uno detectado, incluido el registro del mapa de piezas. La precisión la pone la persona que mira el auto, no el
+modelo. Mientras se marca, la detección automática se detiene. La app lo sugiere cuando menos de la mitad de los
+análisis encuentra el vano. Historia: primero fue «mantener presionado» sobre el motor, después un lazo libre; quedó
+el recuadro porque es el gesto más fácil. Límite: se convierte con la pose del momento en que se levanta el dedo, así
+que hay que marcar con el teléfono quieto; y un recuadro alineado con la pantalla no sigue un vano visto en diagonal.
 
-**Sin probar en un teléfono:** el escaneo, el lazo y la corrección del zoom. La geometría de la app
+**Sin probar en un teléfono:** el escaneo, el recuadro y la corrección del zoom. La geometría de la app
 tiene pruebas (`probar-vano.ts`); la parte nativa del escaneo solo se verificó compilando.
 
 ## Datos

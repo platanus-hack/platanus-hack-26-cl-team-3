@@ -129,3 +129,14 @@ assert.ok(vt.esquinas.length >= 4 && vt.esquinas.length <= 8 && Math.abs(vt.area
 assert.ok(iouPoligonos(vt.esquinas, [{ x: 0.2, y: 0.3 }, { x: 0.8, y: 0.3 }, { x: 0.8, y: 0.7 }, { x: 0.2, y: 0.7 }]) > 0.93);
 assert.equal(vanoDeTrazo(trazo.map((q) => ({ x: 0.5 + (q.x - 0.5) * 0.1, y: 0.5 + (q.y - 0.5) * 0.1 }))), null, 'trazo demasiado chico');
 assert.equal(vanoDeTrazo(trazo.slice(0, 5)), null, 'muy pocos puntos'); console.log('20 ok', `${vt.esquinas.length} esquinas, área ${vt.area.toFixed(3)}`);
+
+// 21) recuadro: el borde de un rectángulo con 5 puntos por lado (así lo manda la pantalla) da sus 4 esquinas exactas
+const bordeCaja: { x: number; y: number }[] = [];
+for (let k = 0; k < 5; k++) bordeCaja.push({ x: 0.25 + (0.5 * k) / 5, y: 0.3 });
+for (let k = 0; k < 5; k++) bordeCaja.push({ x: 0.75, y: 0.3 + (0.3 * k) / 5 });
+for (let k = 0; k < 5; k++) bordeCaja.push({ x: 0.75 - (0.5 * k) / 5, y: 0.6 });
+for (let k = 0; k < 5; k++) bordeCaja.push({ x: 0.25, y: 0.6 - (0.3 * k) / 5 });
+const vc = vanoDeTrazo(bordeCaja)!;
+assert.equal(vc.esquinas.length, 4); assert.ok(Math.abs(vc.area - 0.15) < 1e-9);
+for (const [x, y] of [[0.25, 0.3], [0.75, 0.3], [0.75, 0.6], [0.25, 0.6]]) assert.ok(vc.esquinas.some((e) => Math.abs(e.x - x) < 1e-9 && Math.abs(e.y - y) < 1e-9));
+console.log('21 ok');
