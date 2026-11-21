@@ -27,9 +27,8 @@
       <ul class="features"><li>Preguntar al manual</li><li>Luces del tablero</li><li>Ampolletas</li><li>Fusibles</li></ul>
     </section>
     <section hidden class="viewer" aria-label="Visor del capó">
-      <video id="camera" playsinline muted hidden></video>
-      <div class="guide" aria-hidden="true"></div>
-      <p id="camera-status" role="status">Apunta la cámara al capó abierto.</p>
+      <div class="guide"><video id="camera" playsinline muted hidden></video></div>
+      <p id="camera-status"><span id="status-text" role="status">Apunta la cámara al capó abierto.</span><span id="metrics"></span></p>
     </section>
     <footer hidden>
       <button type="button" id="back" class="quiet">Volver al menú</button>

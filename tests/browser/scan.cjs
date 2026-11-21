@@ -14,7 +14,17 @@ async function verifyScan(url) {
     await page.getByRole('button', { name: 'Escanear capó' }).click();
     await page.getByRole('button', { name: 'Activar cámara' }).click();
     // A finite score requires a successful forward pass through the bundled model.
-    await page.getByRole('status').filter({ hasText: /Confianza \d+ %/ }).waitFor({ timeout: 90000 });
+    await page.locator('#camera-status').filter({ hasText: /Confianza \d+ %/ }).waitFor({ timeout: 90000 });
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) {
+        await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+      }
+    });
+    await context.setOffline(true);
+    await page.reload();
+    await page.getByRole('button', { name: 'Activar cámara' }).click();
+    await page.locator('#camera-status').filter({ hasText: /Confianza \d+ %/ }).waitFor({ timeout: 90000 });
     await page.getByRole('button', { name: 'Volver al menú' }).click();
     assert.equal(await page.locator('video').evaluate(video => video.srcObject), null);
   } finally {

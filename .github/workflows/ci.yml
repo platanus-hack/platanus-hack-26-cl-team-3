@@ -18,4 +18,7 @@ jobs:
         with:
           persist-credentials: false
       - run: npm ci --prefix tests/browser --ignore-scripts --no-audit
-      - run: CAPO_CHROME="$(command -v google-chrome)" bash .github/ci.sh
+      - run: |
+          CAPO_CHROME=$(command -v google-chrome)
+          export CAPO_CHROME
+          bash .github/ci.sh

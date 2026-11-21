@@ -1,7 +1,8 @@
 'use strict';
 
 const camera = document.querySelector('#camera');
-const statusText = document.querySelector('#camera-status');
+const statusText = document.querySelector('#status-text');
+const metrics = document.querySelector('#metrics');
 const cameraButton = document.querySelector('#toggle-camera');
 const notice = document.querySelector('#notice');
 const noticeButton = document.querySelector('#show-notice');
@@ -50,8 +51,9 @@ function scanFrames(id) {
     if (frames >= 2 && average >= 0.6) detected = true;
     if (average < 0.45) detected = false;
     viewer.classList.toggle('detected', detected);
-    statusText.textContent = (detected ? 'Capó abierto detectado' : 'Buscando un capó abierto')
-      + ' · Confianza ' + Math.round(average * 100) + ' % · ' + Math.round(performance.now() - started) + ' ms';
+    const label = detected ? 'Capó abierto detectado' : 'Buscando un capó abierto';
+    if (statusText.textContent !== label) statusText.textContent = label;
+    metrics.textContent = ' · Confianza ' + Math.round(average * 100) + ' % · ' + Math.round(performance.now() - started) + ' ms';
     timer = setTimeout(capture, 200);
   };
   worker.postMessage(null);
@@ -59,6 +61,7 @@ function scanFrames(id) {
 
 function stopCamera(message = idleMessage) {
   requestId += 1;
+  metrics.textContent = '';
   clearTimeout(timer);
   worker?.terminate();
   worker = undefined;
