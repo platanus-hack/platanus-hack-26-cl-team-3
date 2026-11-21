@@ -173,3 +173,17 @@ Es la parte más incierta. Evidencia disponible:
 - **AR:** Realidad Aumentada.
 - **RAG:** respuesta generada a partir de pasajes recuperados de documentos propios (aquí, los manuales).
 - **EZ36 / 3.6R:** motor boxer de 6 cilindros 3.6 L del Outback de la época.
+
+## Android download automation
+
+Each push to `main` builds the ARM64 APK, checks its Android package, update
+code and hackathon signing certificate, then publishes the verified APK and
+its SHA-256 checksum in a public Release tagged with the source commit.
+Only the publication job can write releases. Pull requests build and verify
+the package without publishing. Failed builds leave the previous APK available.
+
+Download `capo-ar.apk` from the repository's latest Release. Keep that latest
+designation for Android builds so the stable download link works. Android's
+update code increases with the first-parent history of main. The Expo template
+signing key preserves compatibility with hackathon installations and is publicly
+known. Obtain the app from the project's official download link.
