@@ -1,4 +1,4 @@
-// Cómo se ve cada pieza en el HUD del escáner: color del relleno, ícono y nombre corto de la etiqueta.
+// Cómo se ve cada pieza en el HUD del escáner: color de su punto, ícono y nombre corto de la etiqueta.
 // La vista nativa (CapaPoligono.kt) recibe una fila por volumen y dibuja con eso; aquí no hay coordenadas.
 import { parts, type PartId } from './catalog';
 
@@ -33,10 +33,13 @@ const styles: Partial<Record<PartId, HudStyle>> = {
 
 const fallback: HudStyle = { tone: '#49D3FF', icon: icons.fallback };
 
-export type HudPart = readonly [label: string, tone: string, icon: string];
+export type HudPart = readonly [label: string, tone: string, icon: string, pin: '1' | '0'];
 
-/** Fila que recibe la vista nativa para una pieza. Las piezas sin estilo propio usan el nombre del catálogo. */
+/**
+ * Fila que recibe la vista nativa para una pieza. Las piezas con estilo propio (las de mantención) llevan un punto
+ * siempre visible; las demás usan el nombre del catálogo y solo se marcan cuando se eligen.
+ */
 export function hudPart(part: PartId): HudPart {
-  const style = styles[part] ?? fallback;
-  return [style.label ?? parts[part][0], style.tone, style.icon];
+  const style = styles[part];
+  return [style?.label ?? parts[part][0], (style ?? fallback).tone, (style ?? fallback).icon, style ? '1' : '0'];
 }

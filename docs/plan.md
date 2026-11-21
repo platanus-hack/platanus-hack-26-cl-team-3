@@ -39,7 +39,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Clave común:** `PartId` de `app/src/engine-maps/catalog.ts` (`fuses`, `washer`, `dipstick`, `coolant`, `air_filter`, `oil_cap`, `brake_fluid`, `battery`, `positive`).
 - **D → cámara:** evento SSE `ar { part, instruction }` → `/escanear?vehicleId=…&part=…`. Es aditivo sobre el contrato del chat.
 - **Cámara → B:** la prop nativa `selectedPart`, que ya existe. B cambia cómo se dibuja, no cómo se elige.
-- **Cámara → HUD:** las props nativas `hudParts` (una fila por volumen: nombre, color e ícono; salen de `app/src/engine-maps/hud.ts`) y `hudArea` (zona libre entre la barra superior y el panel, donde van las etiquetas).
+- **Cámara → HUD:** las props nativas `hudParts` (una fila por volumen: nombre, color, ícono y si lleva punto; salen de `app/src/engine-maps/hud.ts`) y `hudArea` (zona libre entre la barra superior y el panel, donde van las etiquetas).
 - **Nativo → C:** evento `onGuia { part, x, y, visible, distance }`, unas 10 veces por segundo, con la pieza elegida en pantalla y su distancia al teléfono. Aquí `part` es el índice del volumen, igual que en `selectedPart`. Detalle en [`specs/guiado-espacial/fase-1.md`](specs/guiado-espacial/fase-1.md).
 - **E → cámara:** `POST /api/locate { image, parts }` → `{ parts: { [part]: { point: [x, y], mask?: [[x, y], …] } | null } }`. `null` = se usa la ubicación de hoy.
 - **J → menú:** `POST /api/identify { image }` → `{ vehicleId: string | null, variant?: string }`, con `vehicleId` de `app/src/vehicles.ts`. `null` = no lo reconoce y se elige a mano.
@@ -54,7 +54,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 **B · Foco de luz** — parte hoy.
 - La pieza elegida queda a color; el resto se oscurece y pierde saturación, con borde suave y transición animada. Anillo y etiqueta sobre la pieza. Los prismas pasan al modo debug.
 - Se dibuja en el mismo pase de GL que la cámara, no en Canvas ni en JS, para que la marca no vaya un cuadro atrás.
-- **Ya está (HUD de piezas):** el anillo y la etiqueta sobre la pieza, en Canvas (`CapaPoligono.kt` y `HudPiezas.kt`), ancladas al centro de cada pieza del modelo 3D (o a su prisma, en los autos sin modelo). Con el modelo no pone velo sobre la cámara: a B le queda oscurecer el resto en el pase de GL.
+- **Ya está (HUD de piezas):** un punto por pieza de mantención y, solo sobre la pieza elegida, el anillo y la etiqueta con ícono; en Canvas (`CapaPoligono.kt` y `HudPiezas.kt`), anclados al centro de cada pieza del modelo 3D (o a su prisma, en los autos sin modelo). No pone velo sobre la cámara: a B le queda oscurecer el resto en el pase de GL.
 - **Zona:** `FondoCamara.kt` (shader), `CapaPoligono.kt` y el paso de la máscara en `CapoArView.kt`.
 - **Listo cuando:** tocar un chip deja solo esa pieza iluminada y la marca no tiembla al mover el teléfono.
 - **No cubre:** la forma sigue siendo la del prisma del catálogo, no el contorno real (F).

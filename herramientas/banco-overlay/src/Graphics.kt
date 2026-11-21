@@ -82,6 +82,7 @@ class Canvas(val g: Graphics2D, val width: Int, val height: Int) {
     val e = Ellipse2D.Float(x - r, y - r, 2 * r, 2 * r)
     if (p.style == Paint.Style.FILL) g.fill(e) else g.draw(e)
   }
+  fun drawLine(x1: Float, y1: Float, x2: Float, y2: Float, p: Paint) { prepare(p); g.draw(java.awt.geom.Line2D.Float(x1, y1, x2, y2)) }
   fun drawText(s: String, x: Float, y: Float, p: Paint) { g.color = java.awt.Color(p.color, true); g.font = p.font; g.drawString(s, x, y) }
   fun save() = saved.push(g.transform)
   fun restore() { g.transform = saved.pop() }
