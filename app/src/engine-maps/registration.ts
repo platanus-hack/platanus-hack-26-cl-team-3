@@ -23,6 +23,21 @@ export function visualBay(outline?: number[], detected?: Vano | null): Vano | nu
   return area > 0 && (!detected || overlapsPlacedBay(esquinas, detected)) ? bay : null;
 }
 
+/** Compare corresponding corners in one capture, with distances relative to the visible image. */
+export function consistentCorrection(previous: number[] | null, current: number[] | null): boolean {
+  if (!previous || !current || previous.length !== 8 || current.length !== 8) return false;
+  const agreement = previous.reduce((sum, value, i) => sum + value * current[i], 0);
+  const length = Math.hypot(...current);
+  const priorLength = Math.hypot(...previous);
+  return agreement > .8 * length * priorLength && length < 2 * priorLength && priorLength < 2 * length;
+}
+
+export function needsVisualCorrection(registered: number[] | undefined, current: Vano): boolean {
+  if (registered?.length !== 8 || !overlapsPlacedBay([0,2,4,6].map(i => ({x: registered[i], y: registered[i+1]})), current)) return false;
+  const errors = current.esquinas.map(({x,y}, i) => Math.hypot(x-registered[2*i], y-registered[2*i+1])).sort((a,b) => a-b);
+  return (errors[1] + errors[2]) / 2 > .02;
+}
+
 /** For an existing anchor, compare only the portion both outlines could show in this capture. */
 export function overlapsPlacedBay(previous: { x: number; y: number }[], candidate: Vano): boolean {
   const iou = iouPoligonos(previous, candidate.esquinas);

@@ -28,4 +28,16 @@ class ModelAlignmentTest {
     val pose = VisualModelPose(doubleArrayOf(0.0,-1.0,0.0,1.0,0.0,0.0,0.0,0.0,1.0), doubleArrayOf(.5,1.0,2.0))
     assertEquals(EnginePoint(-1.5f,-2f,-5f), pose.cameraPoint(EnginePoint(1f,2f,3f)))
   }
+  @Test fun denseDepthScalesTheWholePoseWithoutChangingItsProjection() {
+    val ratio = visualMetricScale(listOf(1.2f, 1.18f, 1.21f, 1.2f, 1.2f, 1.22f, .7f))
+    assertEquals(1.2f, ratio, .001f)
+    assertEquals(1f, visualMetricScale(listOf(.6f,.8f,1f,1.2f,1.4f,1.6f)), 0f)
+    val rotation = doubleArrayOf(1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0)
+    val translation = doubleArrayOf(.2,.1,1.0)
+    val point = EnginePoint(.2f,-.1f,.25f)
+    val raw = VisualModelPose(rotation, translation).cameraPoint(point)
+    val scaled = VisualModelPose(rotation, translation, ratio).cameraPoint(point)
+    assertEquals(raw.z * ratio, scaled.z, .0001f)
+    assertEquals(raw.x / raw.z, scaled.x / scaled.z, .0001f)
+  }
 }

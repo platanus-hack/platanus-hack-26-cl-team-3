@@ -23,7 +23,7 @@ import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '.
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
-import { completeBay, extendsPartialMap, encodeVolumes, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
+import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
 import { PartGuide, type PartGuideRef } from './PartGuide';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
@@ -96,6 +96,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
+  const registrationGeneration = useRef(0);
   const ocupado = useRef(false); // fijando o recalibrando
 
   useEffect(() => {
@@ -131,7 +132,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
       }
       if (anclaje) {
         setAviso('Se mantiene el mapa anterior. Puedes volver a recalibrar.');
-        return true;
+        return false;
       }
       setError(`No se pudo fijar el vano. ${String((e as Error)?.message ?? e)}`);
       return true;
@@ -148,6 +149,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   // Bucle de detección: solo mientras NO está anclado (después, ARCore sostiene el polígono solo).
   useEffect(() => {
     if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
+    const generation = registrationGeneration.current;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
@@ -268,7 +270,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
             const centers = attempt && volumes.length && !visual ? await lookForPartCenters(cap, bay) : [];
             if (!vivo) break;
             setRegistrationCandidate({ capture: cap, bay: attempt ? bay : (delEscaneo ?? bay), centers, partial });
-            if (attempt && await fijar(cap, bay, centers, partial)) break;
+            if (generation === registrationGeneration.current && attempt && await fijar(cap, bay, centers, partial)) break;
           } else {
             setRegistrationCandidate(null);
           }
@@ -281,8 +283,10 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           fallos += 1;
           if (fallos >= 5) {
             if (anclaje) {
-              setAviso('Se mantiene el mapa anterior. Puedes volver a recalibrar.');
-              break;
+              setAviso('Se mantiene el mapa mientras se recupera la cámara.');
+              fallos = 0;
+              await esperar(PAUSA_CALCE_MS);
+              continue;
             }
             setError(`El análisis falló varias veces seguidas. ${String((e as Error)?.message ?? e)}`);
             break;
@@ -303,15 +307,18 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
     if (!anclaje || anclaje.partial || awaitingVisual || !modeloListo || !activa || error) return;
+    const generation = registrationGeneration.current;
     let vivo = true;
     const ultimos: number[] = [];
+    let previousCorrection: number[] | null = null;
+    const monitor = anclaje.metodo === 'visual' && !anclaje.manual;
     (async () => {
       while (vivo) {
         await esperar(PAUSA_CALCE_MS);
         if (!vivo) break;
         if (ocupado.current || !ar.current) continue;
         try {
-          const cap = await ar.current.capturar(false);
+          const cap = await ar.current.capturar(monitor);
           // El modelo mira la zona donde quedó el contorno anclado, con holgura (zoom): así también mide vanos chicos.
           const anclas = cap.anclas && cap.anclas.length >= 6 ? pares(cap.anclas) : null;
           const recorte = anclas ? recorteAlrededor(anclas, 2) : COMPLETO;
@@ -323,6 +330,17 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           }
           if (!vivo) break;
           const bay = completeBay(poligonoVano(new Suavizador().agregar(r.vano)), recorte);
+          const visual = monitor && cap.rastreando ? visualBay(cap.visualOutline, bay) : null;
+          const registered = cap.registeredOutline;
+          const correction = registered && visual && needsVisualCorrection(registered, visual)
+            ? visual.esquinas.flatMap(({ x, y }, i) => [x - registered[2*i], y - registered[2*i+1]])
+            : null;
+          const confirmed = consistentCorrection(previousCorrection, correction);
+          previousCorrection = correction;
+          if (visual && confirmed && generation === registrationGeneration.current) {
+            previousCorrection = null;
+            if (await fijar(cap, bay ?? visual, [])) break;
+          }
           if (!bay || !anclas || anclas.some(({ x, y }) => x <= 0 || x >= 1 || y <= 0 || y >= 1)) {
             ultimos.length = 0;
             setCalce(null);
@@ -332,14 +350,14 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           if (ultimos.length > 3) ultimos.shift();
           setCalce({ valor: ultimos.reduce((a, b) => a + b, 0) / ultimos.length, n: ultimos.length });
         } catch {
-          // una medición fallida no importa: se reintenta en la próxima vuelta
+          previousCorrection = null;
         }
       }
     })();
     return () => {
       vivo = false;
     };
-  }, [anclaje, modeloListo, activa, error, awaitingVisual]);
+  }, [anclaje, modeloListo, activa, error, awaitingVisual, fijar]);
 
   /** Reconoce de nuevo desde la posición actual y reemplaza las anclas. Si no reconoce, deja el contorno como estaba. */
   const recalibrar = async () => {
@@ -402,7 +420,17 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
 
   const empezarDeNuevo = async () => {
     if (ocupado.current) return;
-    await ar.current?.soltar();
+    ocupado.current = true;
+    registrationGeneration.current++;
+    try {
+      await ar.current?.soltar();
+    } catch {
+      setAviso('No se pudo reiniciar el mapa. Vuelve a intentarlo.');
+      setAnclaje(current => current && { ...current });
+      return;
+    } finally {
+      ocupado.current = false;
+    }
     setSelectedIndex(initialIndex);
     setEditingMap(false);
     setAnclaje(null);
@@ -549,6 +577,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         {mapTracking && (
           <Boton texto="Ajustar mapa a mano" icono="gesture-pinch" variante="secundario" onPress={() => {
             if (ocupado.current) return;
+            registrationGeneration.current++;
             setAnclaje(current => current && { ...current, manual: true });
             setEditingMap(true);
             controls.setMode('compact');

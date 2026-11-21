@@ -524,6 +524,17 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val muestras = if (measure) muestrearDistancias(frame) else HitSamples()
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
+    val intrinsics = EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1])
+    val registeredOutline = placedEngine?.takeIf {
+      measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING
+    }?.let { engine ->
+      val localToCamera = camara.pose.inverse().compose(engine.anchor.pose)
+      listOf(0, 1, 3, 2).mapNotNull { i ->
+        val q = engine.alignment.apply(engine.mesh.registrationCorners[i] - engine.mesh.origin)
+        val v = localToCamera.transformPoint(floatArrayOf(q.x, q.y, q.z))
+        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { Imagen.girar(it.x,it.y,grados) }
+      }.takeIf { it.size == 4 }?.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
+    }
     val puntos = prof?.validos ?: 0
     // Punto que el usuario marcó manteniendo presionado, visto desde esta captura (imagen derecha, normalizado).
     val semillaImagen = semillaMundo?.let { m ->
@@ -550,7 +561,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
           if (matchOutback && capture != null && request.includeMeasurements) {
             capture.visualPose = try {
-              visualRegistration?.locate(archivo.path, grados, EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1]))
+              visualRegistration?.locate(archivo.path, grados, intrinsics, capture.prof)
             } catch (_: org.opencv.core.CvException) { null } catch (_: UnsatisfiedLinkError) { null }
           }
           val r = mutableMapOf<String, Any>(
@@ -562,12 +573,12 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           )
           val visual = capture?.visualPose
           if (visual != null) {
-            val intrinsics = EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1])
             val polygon = listOf(0, 1, 3, 2).mapNotNull { corner ->
               intrinsics.project(visual.cameraPoint(outbackModel.corners[corner]))?.let { Imagen.girar(it.x,it.y,grados) }
             }
             if (polygon.size == 4) r["visualOutline"] = polygon.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
           }
+          registeredOutline?.let { r["registeredOutline"] = it }
           anclasImagen?.let { r["anclas"] = it }
           semillaImagen?.let { r["semilla"] = it }
           request.promise.resolve(r)
@@ -752,6 +763,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val usedHitTests = registrationMethod == "hit-test"
     val estimated = registrationMethod == "estimado"
     val localMedian = when {
+      registrationMethod == "visual" && mesh != null -> captureDepth(mesh.origin)
       estimated -> targetDepth
       usedHitTests -> localHits.map { it[2] }.sorted()[localHits.size / 2]
       else -> mediana

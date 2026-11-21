@@ -23,6 +23,7 @@ export type CapturaAR = {
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
   visualOutline?: number[];
+  registeredOutline?: number[];
   registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];

@@ -8,13 +8,23 @@ import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Model-to-sensor pose. OpenCV uses right/down/forward and ARCore uses right/up/back. */
-internal class VisualModelPose(private val rotation: DoubleArray, private val translation: DoubleArray) {
+internal class VisualModelPose(private val rotation: DoubleArray, private val translation: DoubleArray, private val metricScale: Float = 1f) {
   fun cameraPoint(p: EnginePoint): EnginePoint {
     fun row(i: Int) = (rotation[3*i]*p.x + rotation[3*i+1]*p.y + rotation[3*i+2]*p.z + translation[i]).toFloat()
-    return EnginePoint(row(0), -row(1), -row(2))
+    return EnginePoint(row(0), -row(1), -row(2)) * metricScale
   }
+}
+
+/** Depth and model points are measured on the same camera ray. A global scale preserves pixel alignment. */
+internal fun visualMetricScale(ratios: List<Float>): Float {
+  val supported = ratios.filter { it.isFinite() && it in .5f..2f }.sorted()
+  if (supported.size < 6) return 1f
+  val median = supported[supported.size / 2]
+  return if (supported.count { abs(it - median) < .1f * median } >= .7f * supported.size) median else 1f
 }
 
 private class MatScope : AutoCloseable {
@@ -23,7 +33,7 @@ private class MatScope : AutoCloseable {
   override fun close() = mats.forEach { it.release() }
 }
 
-/** Called on the capture worker. Features were registered to the GLB on three views of the test Outback. */
+/** Called on the capture worker. Features were registered to the GLB on portrait and landscape views of the test Outback. */
 internal class VisualModelRegistration(bytes: ByteArray) {
   private data class Reference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
   private data class Match(val point: Point3, val pixel: Point, val ratio: Float)
@@ -49,7 +59,7 @@ internal class VisualModelRegistration(bytes: ByteArray) {
     require(!data.hasRemaining())
   }
 
-  fun locate(path: String, degrees: Int, intrinsics: EngineCaptureIntrinsics): VisualModelPose? = MatScope().use { scope ->
+  fun locate(path: String, degrees: Int, intrinsics: EngineCaptureIntrinsics, depth: Profundidad? = null): VisualModelPose? = MatScope().use { scope ->
     val image = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_GRAYSCALE))
     if (image.empty()) return null
     val enhanced = scope.own(Mat())
@@ -124,6 +134,20 @@ internal class VisualModelRegistration(bytes: ByteArray) {
     val translation = DoubleArray(3).also { t.get(0,0,it) }
     if (!rotation.all(Double::isFinite) || !translation.all(Double::isFinite) ||
       indices.any { val p = objectPoints[it]; rotation[6]*p.x+rotation[7]*p.y+rotation[8]*p.z+translation[2] <= .05 }) return null
-    VisualModelPose(rotation,translation)
+    val ratios = HashMap<Int, Float>()
+    if (depth != null) for (index in indices) {
+      val pixel = sensor[index]
+      val (u,v) = depth.aPixel((pixel.x / intrinsics.width).toFloat(), (pixel.y / intrinsics.height).toFloat())
+      val x = u.roundToInt()
+      val y = v.roundToInt()
+      if (x !in 0 until depth.w || y !in 0 until depth.h) continue
+      val cell = y * depth.w + x
+      val mm = depth.mm[cell].toInt() and 0xffff
+      if (mm !in Profundidad.MIN_MM..Profundidad.MAX_MM) continue
+      val p = objectPoints[index]
+      val opticalDepth = rotation[6]*p.x + rotation[7]*p.y + rotation[8]*p.z + translation[2]
+      ratios[cell] = (mm / (1000.0 * opticalDepth)).toFloat()
+    }
+    VisualModelPose(rotation,translation,visualMetricScale(ratios.values.toList()))
   }
 }
