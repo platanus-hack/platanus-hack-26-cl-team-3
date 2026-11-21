@@ -22,7 +22,7 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. No oscurece el resto ni sigue el contorno real | B, C, F |
 | 8 | Guía el paso y vuelve al chat | Falta | No hay instrucción sobre la cámara ni procedimientos por pasos | D, G |
 
-Aparte: el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
+Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
 
 Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px en una foto de 1080 px: unos 5–12 cm si la foto cubre 1,5 m de vano, distancia que no está medida. Después del ajuste no hay número en cm. En el catálogo del Outback, la varilla y la tapa de aceite están a unos 8 cm.
 
@@ -41,9 +41,12 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Cámara → B:** la prop nativa `selectedPart`, que ya existe. B cambia cómo se dibuja, no cómo se elige.
 - **Nativo → C:** evento `onGuia { part, x, y, visible, distance }`, unas 10 veces por segundo, con la pieza elegida en pantalla y su distancia al teléfono.
 - **E → cámara:** `POST /api/locate { image, parts }` → `{ parts: { [part]: { point: [x, y], mask?: [[x, y], …] } | null } }`. `null` = se usa la ubicación de hoy.
+- **J → menú:** `POST /api/identify { image }` → `{ vehicleId: string | null, variant?: string }`, con `vehicleId` de `app/src/vehicles.ts`. `null` = no lo reconoce y se elige a mano.
 - **G → chat:** pasos `{ text, part?, source, page }`. El `part` de un paso es lo que D manda a la cámara.
 
 ## Fases
+
+**Modelo de visión (decidido el 21-11-2026): Claude Sonnet 5.5**, por OpenRouter como el chat. Lo usan E y J, con una llamada por foto. El vano y el anclaje siguen en el teléfono: el detector corre sin red cada 2,5 s y ARCore sostiene los puntos en cada cuadro, algo que un modelo en la nube no puede hacer.
 
 ### Guía visual (el foco)
 
@@ -61,18 +64,19 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **No cubre:** indicaciones por voz (I).
 
 **E · Ubicar y recortar cada pieza** — el servidor parte hoy.
-- `/api/locate`: recibe el recorte del vano y devuelve, por pieza, un punto y su contorno. Comparar modelos con fotos de prueba y elegir uno.
+- `/api/locate`: manda el recorte del vano a Sonnet 5.5 y devuelve, por pieza, un punto y su contorno. Medir con fotos de prueba cuánto acierta.
 - En el teléfono: al fijar, corregir la ubicación de cada pieza con ese punto. Sin red o sin respuesta, la ubicación de hoy.
-- **Zona:** `api/src/locate/` (nuevo) y `EnginePartPlacement.kt`.
+- **Zona:** `api/src/locate/` (nuevo), un perfil en `api/src/llm/profiles.ts` y `EnginePartPlacement.kt`.
 - **Listo cuando:** en las fotos de prueba no confunde la varilla con la tapa de aceite; en el auto, menos de 4 cm.
 - **Espera:** la medida en cm, a la fase A. Si A muestra que el ajuste del teléfono ya acierta, de esta fase solo hace falta el contorno.
-- **No cubre:** suma una llamada de red al fijar.
+- **No cubre:** suma una llamada de red de varios segundos al fijar.
 
 **F · Contorno real y oclusión** — después de B y E.
 - El contorno que devuelve E se sube a 3D con la profundidad de ARCore al fijar y se reproyecta en cada cuadro: un solo cálculo, sin modelo en vivo.
 - Oclusión con la profundidad de ARCore: la mano tapa la marca.
 - **Zona:** `FondoCamara.kt` y `Profundidad.kt`. Va después de B porque tocan el mismo shader.
 - **Listo cuando:** el brillo sigue el borde de la pieza y desaparece detrás de la mano.
+- **Espera:** que el contorno de Sonnet sirva. Si sale muy grueso, esta fase entrega solo la oclusión.
 - **No cubre:** si la pieza se mueve (sacas la tapa), el contorno queda donde estaba.
 
 ### Recorrido completo
@@ -104,6 +108,12 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Zona:** `app/src/chat/` y `ask.tsx`.
 - **No cubre:** conversación continua como la de Gemini Live.
 
+**J · Reconocer el auto** — parte hoy.
+- Una foto del vano o del frente del auto va a Sonnet 5.5, que propone uno de los modelos de `vehicles.ts`. El usuario confirma antes de seguir: la variante exacta importa (regla 5).
+- **Zona:** `api/src/identify/` (nuevo), un perfil en `api/src/llm/profiles.ts` y la selección de vehículo en `app/src/app/index.tsx`.
+- **Listo cuando:** con una foto del Outback, la app lo propone y basta confirmar.
+- **No cubre:** autos fuera de los 8 del catálogo ni distinguir el motor sin que el usuario confirme. Sin red, se elige a mano como hoy.
+
 **Después:** piezas 3D animadas con Filament (la varilla saliendo), comprobar cada paso (si la tapa salió), la captura 3D por variante y más autos.
 
 ## Dónde se pueden pisar
@@ -114,24 +124,25 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 | `CapoArView.kt` (808 líneas) | B, C, E | Cada una agrega lo suyo en un archivo aparte y deja ahí solo la llamada |
 | `EscanerAR.tsx` (626 líneas) | C, D, E | D entra por `escanear.tsx`; C va en un componente nuevo |
 | `api/src/tools/index.ts` | D, G | Una línea cada una en el registro |
+| `api/src/llm/profiles.ts` | E, J | El perfil de Sonnet lo agrega la primera que llegue; la otra lo reusa |
 
 ## Orden recomendado para la demo
 
 1. B, C y D en paralelo: con las tres ya existe el recorrido completo con la guía nueva.
 2. A en cuanto haya auto: es lo único que no se hace desde el computador.
-3. E, y después F.
+3. E, y después F. J entra cuando haya manos: la demo funciona eligiendo el auto a mano.
 4. Video lado a lado con Gemini Live y la ficha `platanus-hack-project.jsonc` (4 campos sin llenar).
 
 ## Decisiones abiertas
 
 - **La historia de la demo no calza con la AR.** «Se me quedó abajo la ventana» lleva a la caja de la cabina; la AR cubre el vano. Propuesta: una historia bajo el capó. Los textos con página de las 9 piezas del Outback ya están en `partDetails` (`catalog.ts`); falta contrastarlos con el manual.
 - **Qué pieza mostrar.** Si la ubicación acierta entre vecinas, la varilla. Si no, una pieza grande y aislada (batería, caja de fusibles).
-- **Quién ubica y recorta las piezas (E).** Un modelo que segmenta por texto necesita un servidor con GPU; no sabemos si el del equipo la tiene. La alternativa es un modelo de visión por API. Se decide con las fotos de prueba; Claude sigue en el chat.
 - **Luces del tablero y ampolletas:** entran a la demo o se declaran fuera.
 
 ## Sin verificar
 
 - El error real en cm sobre el auto.
+- Qué tan bien devuelve Sonnet 5.5 puntos y contornos sobre una foto del vano, y el id del modelo en OpenRouter. Se prueba con las fotos de `docs/evidence/android-engine-maps/` antes de construir E.
 - Si Gemini Live sostiene la marca al moverse.
 - Que el Canvas de hoy vaya un cuadro atrás de la cámara: es lo esperable por cómo se dibuja, no está medido.
 - La hora de entrega: no está en el repo, así que el orden no está ajustado a un plazo.
