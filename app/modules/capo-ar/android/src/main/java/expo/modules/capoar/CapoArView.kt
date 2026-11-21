@@ -54,6 +54,20 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val onPart by EventDispatcher<Map<String, Int>>()
   private val onGuia by EventDispatcher<Map<String, Any>>()
   @Volatile internal var guidePart = -1
+  private data class Inspection(val model: PlacedModel, val part: Int, val action: InspectionAction, val start: Long)
+  private var inspection: Inspection? = null
+
+  fun playPartAction(id: String, actionName: String) {
+    val action = InspectionAction.resolve(id, actionName) ?: return
+    gl.queueEvent {
+      val model = placedEngine?.model ?: return@queueEvent
+      val index = outbackParts.indexOf(id)
+      if (index == guidePart && index in model.inspections) {
+        inspection = Inspection(model, index, action, android.os.SystemClock.elapsedRealtimeNanos())
+      }
+    }
+  }
+
   private var lastGuideNs = 0L
 
   private val gl = GLSurfaceView(context)
@@ -435,13 +449,19 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         bordes = bordesPrevia
       }
     }
+    val request = inspection
+    val animation = if (request != null && engine?.model === request.model && request.part == guidePart) {
+      val elapsed = (android.os.SystemClock.elapsedRealtimeNanos() - request.start) / 1e9f
+      request.model.inspections[request.part]?.frame(request.action, elapsed)
+    } else null
+    if (animation == null) inspection = null
     val hitFrame = if (engine?.model != null) {
       val mvp = anchorProjection(frame, engine)
       val (offset, scale) = engine.alignment
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
-      modelRenderer.draw(engine.model, mvp, guidePart)
-      ModelHitFrame(engine.model, mvp, anchoVista, altoVista)
+      modelRenderer.draw(engine.model, mvp, guidePart, animation)
+      ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
     } else null
     val faces = if (hitFrame == null && engine != null && projector != null) {
       val pose = engine.anchor.pose
@@ -451,7 +471,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         projector(world[0], world[1], world[2])
       }
     } else emptyList()
-    if (engine != null) emitGuide(frame, engine)
+    if (engine != null) emitGuide(frame, engine, animation)
     // Keep only the newest projection if the UI thread misses a camera frame.
     if (overlayFrame.getAndSet(OverlayFrame(puntos, bordes, anclado, faces, hitFrame)) == null) {
       principal.post {
@@ -815,6 +835,12 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     anclas.forEach { it.detach() }
     anclas.clear()
     anclas.addAll(nuevas)
+    val currentInspection = inspection
+    val replacement = placement?.model
+    if (currentInspection != null && currentInspection.model === placedEngine?.model && replacement != null &&
+      currentInspection.part == guidePart && currentInspection.part in replacement.inspections) {
+      inspection = currentInspection.copy(model = replacement)
+    }
     placedEngine?.anchor?.detach()
     placedEngine = placement
     // Keep the scan in the same reference frame while an approximate map gains coverage.
@@ -885,10 +911,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     principal.post { performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) }
   }
 
-  private fun emitGuide(frame: Frame, engine: PlacedEngine) {
+  private fun emitGuide(frame: Frame, engine: PlacedEngine, animation: InspectionFrame?) {
     val part = guidePart
     if (part < 0 || frame.timestamp - lastGuideNs < GUIDE_INTERVAL_NS) return
-    val center = engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
+    val center = animation?.takeIf { it.index == part }?.center ?: engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
     val local = engine.alignment.apply(center)
     val world = engine.anchor.pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
     val view = FloatArray(16)

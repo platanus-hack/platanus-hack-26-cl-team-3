@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     environment:
       PRT_SEED_PATH: /app/prt-seed/vehicles.sqlite
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     volumes:
       - ${PRT_DATA_DIR:-./api/data}:/app/data:ro
       - prt-seed:/app/prt-seed:ro

@@ -107,6 +107,8 @@ class CapoArModule : Module() {
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }
 
+      AsyncFunction("playPartAction") { view: CapoArView, id: String, action: String -> view.playPartAction(id, action) }
+
       AsyncFunction("pulso") { vista: CapoArView -> vista.pulso() }
 
       AsyncFunction("acumular") { vista: CapoArView, id: Int, mascara: String, rx: Double, ry: Double, lado: Double, promise: Promise ->
