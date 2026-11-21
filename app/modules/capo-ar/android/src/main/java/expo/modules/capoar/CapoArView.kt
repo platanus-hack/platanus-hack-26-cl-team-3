@@ -62,7 +62,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val outbackModel by lazy { OutbackModel.load(context.assets) }
   private val visualRegistration by lazy {
     if (org.opencv.android.OpenCVLoader.initLocal()) {
-      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes()) }
+      val templates = try {
+        context.assets.open("engine-models/outback-oil-templates.bin").use { OutbackLandmarkTemplates(it.readBytes()) }
+      } catch (_: java.io.IOException) { null } catch (_: IllegalArgumentException) { null }
+      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.parts,templates) }
     } else null
   }
   private val modelRenderer = ModelRenderer()
@@ -535,6 +538,16 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { Imagen.girar(it.x,it.y,grados) }
       }.takeIf { it.size == 4 }?.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
     }
+    val registeredFeatures = placedEngine?.takeIf { measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING }?.let { engine ->
+      val localToCamera = camara.pose.inverse().compose(engine.anchor.pose)
+      val ids = outbackParts
+      outbackLandmarks(outbackModel.parts).mapNotNull { feature ->
+        val local = engine.model?.centers?.get(ids.indexOf(feature.id)) ?: return@mapNotNull null
+        val q = engine.alignment.apply(local)
+        val v = localToCamera.transformPoint(floatArrayOf(q.x,q.y,q.z))
+        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { feature.center to it }
+      }.toMap()
+    }
     val puntos = prof?.validos ?: 0
     // Punto que el usuario marcó manteniendo presionado, visto desde esta captura (imagen derecha, normalizado).
     val semillaImagen = semillaMundo?.let { m ->
@@ -573,6 +586,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           )
           val visual = capture?.visualPose
           if (visual != null) {
+            if (!registeredFeatures.isNullOrEmpty()) {
+              landmarkAlignmentGain(visual,registeredFeatures,intrinsics,ancho,alto,grados)?.let { r["landmarkGainPx"] = it }
+            }
             val polygon = listOf(0, 1, 3, 2).mapNotNull { corner ->
               intrinsics.project(visual.cameraPoint(outbackModel.corners[corner]))?.let { Imagen.girar(it.x,it.y,grados) }
             }

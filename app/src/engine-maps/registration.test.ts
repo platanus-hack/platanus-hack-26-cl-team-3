@@ -14,6 +14,8 @@ test('corrects noticeable drift on the same engine without chasing jitter or ano
   assert.equal(needsVisualCorrection(outline.map(x => x+.04), current), true);
   assert.equal(needsVisualCorrection(outline.map(x => x+2), current), false);
   assert.equal(visualBay(outline.map(x => x+.85), current), null);
+  assert.equal(needsVisualCorrection(outline.map(x => x+.004), current, 3), true);
+  assert.equal(needsVisualCorrection(outline.map(x => x+.04), current, -4), false);
 });
 
 test('requires consecutive corrections of comparable size and direction', () => {

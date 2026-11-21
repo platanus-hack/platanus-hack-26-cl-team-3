@@ -314,7 +314,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
     const monitor = anclaje.metodo === 'visual' && !anclaje.manual;
     (async () => {
       while (vivo) {
-        await esperar(PAUSA_CALCE_MS);
+        await esperar(monitor ? 750 : PAUSA_CALCE_MS);
         if (!vivo) break;
         if (ocupado.current || !ar.current) continue;
         try {
@@ -332,7 +332,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           const bay = completeBay(poligonoVano(new Suavizador().agregar(r.vano)), recorte);
           const visual = monitor && cap.rastreando ? visualBay(cap.visualOutline, bay) : null;
           const registered = cap.registeredOutline;
-          const correction = registered && visual && needsVisualCorrection(registered, visual)
+          const correction = registered && visual && needsVisualCorrection(registered, visual, cap.landmarkGainPx)
             ? visual.esquinas.flatMap(({ x, y }, i) => [x - registered[2*i], y - registered[2*i+1]])
             : null;
           const confirmed = consistentCorrection(previousCorrection, correction);

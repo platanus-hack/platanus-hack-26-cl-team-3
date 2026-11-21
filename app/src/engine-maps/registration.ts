@@ -32,8 +32,9 @@ export function consistentCorrection(previous: number[] | null, current: number[
   return agreement > .8 * length * priorLength && length < 2 * priorLength && priorLength < 2 * length;
 }
 
-export function needsVisualCorrection(registered: number[] | undefined, current: Vano): boolean {
+export function needsVisualCorrection(registered: number[] | undefined, current: Vano, landmarkGainPx?: number): boolean {
   if (registered?.length !== 8 || !overlapsPlacedBay([0,2,4,6].map(i => ({x: registered[i], y: registered[i+1]})), current)) return false;
+  if (landmarkGainPx !== undefined) return landmarkGainPx >= 2;
   const errors = current.esquinas.map(({x,y}, i) => Math.hypot(x-registered[2*i], y-registered[2*i+1])).sort((a,b) => a-b);
   return (errors[1] + errors[2]) / 2 > .02;
 }

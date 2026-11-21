@@ -5,18 +5,12 @@ import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 
 /** Centers of colored surfaces in Outback model coordinates, with their approximate visible widths. */
-private data class Landmark(val center: EnginePoint, val width: Double, val red: Boolean = false)
-private val landmarks = listOf(
-  Landmark(EnginePoint(.28555f,.01826f,-.18279f), .039), // Brake fluid cap
-  Landmark(EnginePoint(.25168f,-.06060f,.24057f), .047), // Oil filler
-  Landmark(EnginePoint(.35765f,-.00480f,.08695f), .042, true), // Battery terminal cover
-  Landmark(EnginePoint(.50114f,-.01193f,.09207f), .041), // Washer filler
-  Landmark(EnginePoint(.20630f,-.05020f,.23682f), .025), // Dipstick handle
-)
-
-private fun median(values: List<Double>): Double {
-  val sorted = values.sorted()
-  return (sorted[(sorted.size-1)/2] + sorted[sorted.size/2]) / 2
+internal data class Landmark(val id: String, val center: EnginePoint, val width: Double, val red: Boolean = false)
+internal fun outbackLandmarks(parts: List<ModelPart>): List<Landmark> {
+  val widths = mapOf("brake_fluid" to .039, "oil_cap" to .047, "positive" to .044, "washer" to .041, "dipstick" to .025)
+  return parts.mapNotNull { part ->
+    widths[part.id]?.let { Landmark(part.id,part.guideCenter,it,part.id == "positive") }
+  }
 }
 
 private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Boolean): Point? {
@@ -50,7 +44,17 @@ private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Bo
       if (area < 16 || area < .32*box.area() || ratio !in .52..1.6 || box.height/width !in .16..1.7 ||
         box.x == 0 || box.y == 0 || box.x+box.width == roi.cols() || box.y+box.height == roi.rows()) return@mapNotNull null
       val moments = Imgproc.moments(contour)
-      val point = Point(left + moments.m10/area, top + moments.m01/area)
+      // The red cover has a tall skirt. Its upper face provides the physical registration point.
+      val point = if (red) {
+        val first = box.y + (box.height * .10).toInt()
+        val last = min(box.y + box.height, max(first + 1, box.y + (box.height * .63).toInt()))
+        val strip = mask.submat(first,last,box.x,box.x+box.width)
+        try {
+          val face = Imgproc.moments(strip,true)
+          if (face.m00 < 3) return@mapNotNull null
+          Point(left+box.x+face.m10/face.m00,top+first+face.m01/face.m00)
+        } finally { strip.release() }
+      } else Point(left + moments.m10/area, top + moments.m01/area)
       val distance = hypot(point.x-x,point.y-y)
       if (distance >= max(7.0,.7*width)) null else (distance/width+.35*abs(ln(ratio))) to point
     }.sortedBy { it.first }
@@ -61,30 +65,30 @@ private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Bo
   }
 }
 
-/** Refine lateral translation only when independently identified surfaces support a common correction. */
-internal fun refineOutbackTranslation(image: Mat, degrees: Int, intr: EngineCaptureIntrinsics, rotation: DoubleArray, translation: DoubleArray) {
-  val pose = VisualModelPose(rotation,translation)
+/** Match physical working surfaces in the upright JPEG; return observations in sensor pixels. */
+internal fun observeOutbackLandmarks(image: Mat, degrees: Int, intr: EngineCaptureIntrinsics,
+  pose: VisualModelPose, landmarks: List<Landmark>, templates: OutbackLandmarkTemplates?): List<OutbackLandmarkObservation> {
   val sideways = degrees.mod(180) == 90
   val pixelsPerFocal = if (sideways) intr.fy.toDouble()*image.cols()/intr.height else intr.fx.toDouble()*image.cols()/intr.width
-  val seen = mutableListOf<Point>()
-  val observations = landmarks.mapNotNull { landmark ->
-    val p = pose.cameraPoint(landmark.center)
-    val uv = intr.project(p) ?: return@mapNotNull null
+  fun imagePoint(model: EnginePoint): Point? {
+    val uv = intr.project(pose.cameraPoint(model)) ?: return null
     val (u,v) = Imagen.girar(uv.x+.5f/intr.width,uv.y+.5f/intr.height,degrees)
-    val x = u*image.cols()-.5
-    val y = v*image.rows()-.5
-    val center = colorCenter(image,x,y,landmark.width*pixelsPerFocal/-p.z,landmark.red) ?: return@mapNotNull null
-    if (seen.any { hypot(it.x-center.x,it.y-center.y) < 3 }) return@mapNotNull null
+    return Point(u*image.cols()-.5,v*image.rows()-.5)
+  }
+  val seen = mutableListOf<Point>()
+  return landmarks.mapNotNull { landmark ->
+    val p = pose.cameraPoint(landmark.center)
+    val predicted = imagePoint(landmark.center) ?: return@mapNotNull null
+    val center = if (landmark.id == "oil_cap") {
+      if (templates == null) return@mapNotNull null
+      val step = (landmark.width/24).toFloat()
+      val x = imagePoint(landmark.center + EnginePoint(step,0f,0f)) ?: return@mapNotNull null
+      val z = imagePoint(landmark.center + EnginePoint(0f,0f,step)) ?: return@mapNotNull null
+      templates.oilCenter(image,predicted,Point(x.x-predicted.x,x.y-predicted.y),Point(z.x-predicted.x,z.y-predicted.y))
+    } else colorCenter(image,predicted.x,predicted.y,landmark.width*pixelsPerFocal/-p.z,landmark.red)
+    if (center == null || seen.any { hypot(it.x-center.x,it.y-center.y) < 3 }) return@mapNotNull null
     seen.add(center)
     val (sx,sy) = Imagen.desgirar(((center.x+.5)/image.cols()).toFloat(),((center.y+.5)/image.rows()).toFloat(),degrees)
-    Triple((sx-uv.x)*intr.width.toDouble()-.5,(sy-uv.y)*intr.height.toDouble()-.5,-p.z.toDouble())
+    OutbackLandmarkObservation(landmark.center,Point(sx*intr.width-.5,sy*intr.height-.5))
   }
-  if (observations.size < 2) return
-  val dx = median(observations.map { it.first })
-  val dy = median(observations.map { it.second })
-  val tolerance = 5.0 * (if (sideways) intr.height else intr.width) / image.cols()
-  val agreed = observations.filter { hypot(it.first-dx,it.second-dy) < tolerance }
-  if (agreed.size < 2) return
-  translation[0] += median(agreed.map { it.first*it.third/intr.fx })
-  translation[1] += median(agreed.map { it.second*it.third/intr.fy })
 }

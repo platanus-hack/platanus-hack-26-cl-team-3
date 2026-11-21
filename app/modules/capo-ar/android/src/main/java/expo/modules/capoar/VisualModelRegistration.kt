@@ -13,11 +13,28 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Model-to-sensor pose. OpenCV uses right/down/forward and ARCore uses right/up/back. */
-internal class VisualModelPose(private val rotation: DoubleArray, private val translation: DoubleArray, private val metricScale: Float = 1f) {
+internal class VisualModelPose(private val rotation: DoubleArray, private val translation: DoubleArray, private val metricScale: Float = 1f,
+  val observations: List<OutbackLandmarkObservation> = emptyList()) {
   fun cameraPoint(p: EnginePoint): EnginePoint {
     fun row(i: Int) = (rotation[3*i]*p.x + rotation[3*i+1]*p.y + rotation[3*i+2]*p.z + translation[i]).toFloat()
     return EnginePoint(row(0), -row(1), -row(2)) * metricScale
   }
+}
+
+/** Compare the current anchor and the proposed rigid pose to the same physical image measurements. */
+internal fun landmarkAlignmentGain(pose: VisualModelPose, registered: Map<EnginePoint,EngineImagePoint>,
+  intr: EngineCaptureIntrinsics, width: Int, height: Int, degrees: Int): Double? {
+  val sideways = degrees.mod(180) == 90
+  val sx = (if (sideways) height else width).toDouble()/intr.width
+  val sy = (if (sideways) width else height).toDouble()/intr.height
+  val changes = pose.observations.mapNotNull { mark ->
+    val old = registered[mark.model] ?: return@mapNotNull null
+    val next = intr.project(pose.cameraPoint(mark.model)) ?: return@mapNotNull null
+    fun error(uv: EngineImagePoint) = hypot((uv.x*intr.width-mark.pixel.x)*sx,(uv.y*intr.height-mark.pixel.y)*sy)
+    error(old) - error(next)
+  }.sorted()
+  if (changes.size < 2) return null
+  return if (changes.first() < -3.0) changes.first() else changes[changes.size-2]
 }
 
 /** Depth and model points are measured on the same camera ray. A global scale preserves pixel alignment. */
@@ -35,9 +52,10 @@ private class MatScope : AutoCloseable {
 }
 
 /** Called on the capture worker. Features were registered to the GLB on portrait and landscape views of the test Outback. */
-internal class VisualModelRegistration(bytes: ByteArray) {
+internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>, private val templates: OutbackLandmarkTemplates?) {
   private data class Reference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
   private data class Match(val point: Point3, val pixel: Point, val ratio: Float)
+  private val landmarks = outbackLandmarks(parts)
   private val references: List<Reference>
   private val orb = ORB.create(5200).apply { setFastThreshold(9) }
   private val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
@@ -135,14 +153,16 @@ internal class VisualModelRegistration(bytes: ByteArray) {
     val translation = DoubleArray(3).also { t.get(0,0,it) }
     if (!rotation.all(Double::isFinite) || !translation.all(Double::isFinite) ||
       indices.any { val p = objectPoints[it]; rotation[6]*p.x+rotation[7]*p.y+rotation[8]*p.z+translation[2] <= .05 }) return null
+    var observations = emptyList<OutbackLandmarkObservation>()
     try {
       val color = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_COLOR))
       val candidate = translation.copyOf()
-      if (!color.empty()) refineOutbackTranslation(color,degrees,intrinsics,rotation,candidate)
-      if (!candidate.contentEquals(translation)) {
+      val candidateRotation = rotation.copyOf()
+      if (!color.empty()) observations = observeOutbackLandmarks(color,degrees,intrinsics,VisualModelPose(rotation,translation),landmarks,templates)
+      if (refineOutbackLandmarkPose(observations,intrinsics,candidateRotation,candidate)) {
         val scale = intrinsics.width.toDouble() / (if (degrees.mod(180) == 90) image.rows() else image.cols())
-        fun medianResidual(t: DoubleArray): Double {
-          val pose = VisualModelPose(rotation,t)
+        fun medianResidual(r: DoubleArray,t: DoubleArray): Double {
+          val pose = VisualModelPose(r,t)
           return indices.map { index ->
             val p = objectPoints[index]
             val uv = intrinsics.project(pose.cameraPoint(EnginePoint(p.x.toFloat(),p.y.toFloat(),p.z.toFloat())))
@@ -150,7 +170,10 @@ internal class VisualModelRegistration(bytes: ByteArray) {
               uv.x * intrinsics.width - sensor[index].x, uv.y * intrinsics.height - sensor[index].y)
           }.sorted()[indices.size/2]
         }
-        if (medianResidual(candidate) <= medianResidual(translation) + 3 * scale) candidate.copyInto(translation)
+        if (medianResidual(candidateRotation,candidate) <= medianResidual(rotation,translation) + 4 * scale) {
+          candidateRotation.copyInto(rotation)
+          candidate.copyInto(translation)
+        }
       }
     } catch (_: CvException) {
       // The geometric pose remains available if optional color processing fails.
@@ -169,6 +192,6 @@ internal class VisualModelRegistration(bytes: ByteArray) {
       val opticalDepth = rotation[6]*p.x + rotation[7]*p.y + rotation[8]*p.z + translation[2]
       ratios[cell] = (mm / (1000.0 * opticalDepth)).toFloat()
     }
-    VisualModelPose(rotation,translation,visualMetricScale(ratios.values.toList()))
+    VisualModelPose(rotation,translation,visualMetricScale(ratios.values.toList()),observations)
   }
 }
