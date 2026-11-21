@@ -4,7 +4,10 @@ import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../ap
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
 import { completeBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
 import { engineMaps } from '../../app/src/engine-maps/catalog.ts';
+import { normalizeFeatureGrid, sampleDescriptor } from '../../app/src/engine-maps/landmarks/appearance.ts';
 import { locate, type Candidates, type Point } from '../../app/src/engine-maps/landmarks/consensus.ts';
+import { faceDescriptorSampler } from '../../app/src/engine-maps/landmarks/face-descriptors.ts';
+import { faceOverlap } from '../../app/src/engine-maps/landmarks/local-faces.ts';
 import { confirmedPartCenters, partCenters } from '../../app/src/engine-maps/landmarks/part-centers.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
@@ -152,3 +155,37 @@ assert.ok(fit);
 assert.ok(fit.landmarks.i);
 assert.equal(fit.landmarks.outlier, undefined);
 console.log('21 ok: an appearance match rejected by projective consensus cannot adjust a part');
+
+const tokens = new Float32Array(4 * 384);
+tokens[0] = 1;
+tokens[385] = 1;
+tokens[768] = -1;
+tokens[1152] = .5;
+tokens[1153] = -.5;
+const grid = normalizeFeatureGrid(tokens, 2, 2, 384);
+const sampler = faceDescriptorSampler(grid, 800, 600);
+const reference = new Array<number>(384).fill(0);
+reference[0] = .6;
+reference[1] = -.8;
+const field = sampler.field(reference);
+for (const [x, y] of [[0, 0], [.34, .52], [.47, .56], [.97, .62], [1, 1]] as Point[]) {
+  const vector = sampleDescriptor(grid, [x, y]);
+  const direct = vector.reduce((sum, value, channel) => sum + value * reference[channel], 0);
+  assert.ok(Math.abs(sampler.score(x * 800, y * 600, field) - direct) < 1e-6);
+}
+const oppositeTokens = new Float32Array(2 * 384);
+oppositeTokens[0] = 1;
+oppositeTokens[384] = -1;
+oppositeTokens[385] = .0001;
+const opposing = faceDescriptorSampler(normalizeFeatureGrid(oppositeTokens, 2, 1), 800, 600);
+assert.equal(opposing.score(400, 300, opposing.field(reference)), 0);
+console.log('22 ok: cached descriptor scores match direct normalized patch interpolation');
+
+const face = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 40 }, { x: 0, y: 40 }];
+const shiftFace = (dx: number) => face.map(({ x, y }) => ({ x: x + dx, y }));
+const tiny = (points: typeof face) => points.map(({ x, y }) => ({ x: 112 + x / 500, y: 270 + y / 500 }));
+assert.ok(faceOverlap(face, shiftFace(18)) >= .60);
+assert.ok(faceOverlap(face, shiftFace(25)) < .60);
+assert.equal(faceOverlap(tiny(face), tiny(shiftFace(18))), faceOverlap(face, shiftFace(18)));
+assert.equal(faceOverlap([{ x: 1, y: 2 }], [{ x: 1, y: 5 }]), 0);
+console.log('23 ok: nearby battery outlines must occupy the same surface at any image scale');

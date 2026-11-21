@@ -11,7 +11,7 @@ const observationByPart: Partial<Record<PartId, string>> = {
   positive: 'batteryPositiveCover',
 };
 
-function insideBay(x: number, y: number, bay: Vano): boolean {
+export function insideBay(x: number, y: number, bay: Vano): boolean {
   let inside = false;
   for (const [index, a] of bay.esquinas.entries()) {
     const b = bay.esquinas[(index + 1) % bay.esquinas.length];

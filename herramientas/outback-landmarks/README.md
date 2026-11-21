@@ -53,3 +53,22 @@ node --experimental-strip-types herramientas/outback-landmarks/generate_referenc
 
 The generator writes `app/src/engine-maps/outback-reference-bank.json`. Pass an
 optional third argument to write a comparison bank to a different path.
+
+## Regenerate the local face templates
+
+[face-sources.json](face-sources.json) lists two Outback reference photos and
+their marked coolant reservoir, air-filter lid, and battery faces. The generator
+samples each face and the pixels immediately around it, using the same encoder
+and Node dependencies as the landmark bank. Keep independent validation donors
+out of both source lists.
+
+```sh
+node --experimental-strip-types herramientas/outback-landmarks/generate_face_templates.mjs \
+  "$reference_dir" "$tooling_dir"
+```
+
+Use the exact JPEG filenames in the manifest. The generator checks both source
+hashes and writes `app/src/engine-maps/outback-face-templates.json`. The runtime
+fits both references inside a part-specific region of the detected bay. For the
+battery it checks agreement by outline overlap, then uses the mean center with
+the existing two-capture and local-depth checks.
