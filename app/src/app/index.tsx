@@ -12,7 +12,6 @@ import { vehicles } from '../vehicles';
 
 // Planned MVP features from the README.
 const PROXIMAMENTE: { icono: NombreIcono; titulo: string; detalle: string }[] = [
-  { icono: 'car-light-alert', titulo: 'Luces del tablero', detalle: 'Qué significa cada una' },
   { icono: 'lightbulb-outline', titulo: 'Ampolletas', detalle: 'Cuál lleva y cómo cambiarla' },
   { icono: 'fuse', titulo: 'Fusibles', detalle: 'Dónde está cada uno' },
 ];
@@ -115,6 +114,19 @@ export default function Menu() {
           <Text style={styles.principalDetalle}>Abre el capó y apunta la cámara al motor.</Text>
         </View>
         <Icono nombre="chevron-right" tam={28} tono={color.acentoTexto} />
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push({ pathname: '/dashboard', params: { vehicleId: vehicle.id } })}
+        accessibilityRole="button"
+        style={styles.secundaria}
+      >
+        <Icono nombre="car-light-alert" tam={26} tono={color.acento} />
+        <View style={styles.flex}>
+          <Text style={styles.secundariaTitulo}>Escanear tablero</Text>
+          <Text style={tipo.nota}>Identifica los testigos encendidos del tablero.</Text>
+        </View>
+        <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>
 
       <Pressable

@@ -22,8 +22,7 @@ const QUICK_REPLIES = ['Listo, ¿qué sigue?', 'No lo encuentro'];
 export default function Ask() {
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollViewInstance>(null);
-  const messages = useRef<AnthropicMessage[]>([]);
-  const [version, setVersion] = useState(0);
+  const [messages, setMessages] = useState<AnthropicMessage[]>([]);
   const [question, setQuestion] = useState<string | null>(null);
   const [live, setLive] = useState<ViewPart[]>([]);
   const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
@@ -40,10 +39,7 @@ export default function Ask() {
 
   useEffect(() => {
     load().then((stored) => {
-      if (messages.current.length === 0) {
-        messages.current = stored;
-        setVersion((v) => v + 1);
-      }
+      setMessages((current) => current.length === 0 ? stored : current);
       setLoaded(true);
     });
   }, []);
@@ -63,18 +59,18 @@ export default function Ask() {
   }, []);
 
   const bubbles = useMemo(() => {
-    const b: Bubble[] = toView(messages.current);
+    const b: Bubble[] = toView(messages);
     if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [] });
     if (live.length > 0 || liveCards.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards });
     return b;
-  }, [version, question, live, liveCards]);
+  }, [messages, question, live, liveCards]);
 
   const send = useCallback(async (override?: string) => {
     const text = (override ?? input).trim();
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
     const userMessage: AnthropicMessage = { role: 'user', content: text };
-    const previous = messages.current;
+    const previous = messages;
     const parts: ViewPart[] = [];
     const cards: ViewCard[] = [];
     let breakNext = false;
@@ -115,10 +111,10 @@ export default function Ask() {
           parts[ev.block] = { ...parts[ev.block], citations: [...parts[ev.block].citations, { title, source, cited_text }] };
           setLive(parts.filter(Boolean));
         } else if (ev.type === 'done') {
-          messages.current = [...previous, userMessage, ...ev.messages];
-          void save(messages.current);
+          const updated = [...previous, userMessage, ...ev.messages];
+          setMessages(updated);
+          void save(updated);
           if (ev.truncated) setNote('La respuesta se cortó.');
-          setVersion((v) => v + 1);
           setQuestion(null);
           setLive([]);
           setLiveCards([]);
@@ -141,15 +137,14 @@ export default function Ask() {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [input, loaded]);
+  }, [input, loaded, messages]);
 
   const reset = useCallback(() => {
-    messages.current = [];
+    setMessages([]);
     void clear();
     setError(null);
     setNote(null);
     setReplies(false);
-    setVersion((v) => v + 1);
   }, []);
 
   return (

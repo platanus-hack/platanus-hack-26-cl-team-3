@@ -85,7 +85,7 @@ export function PantallaPermiso({ puedePreguntar, pedir }: { puedePreguntar: boo
         </View>
         <Text style={[tipo.titulo, estilos.textoCentro]}>Necesitamos la cámara</Text>
         <Text style={[tipo.nota, estilos.textoCentro, { marginTop: espacio.s, marginBottom: espacio.xl }]}>
-          La usamos para reconocer el capó abierto. Las imágenes se analizan en tu teléfono y no se envían a ningún lado.
+          La usamos para reconocer el capó o un testigo del tablero. Las imágenes se analizan en tu teléfono y no se envían a ningún lado.
         </Text>
         <Boton
           texto={puedePreguntar ? 'Permitir cámara' : 'Abrir ajustes'}
