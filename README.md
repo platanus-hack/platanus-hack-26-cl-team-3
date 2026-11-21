@@ -152,6 +152,13 @@ Es la parte más incierta. Evidencia disponible:
 8. **Privacidad:** no subir fotos de personas, patentes ni datos personales a servicios externos.
 9. **No usar la identidad personal de integrantes** (nombres, correos) en el repositorio público ni en requests a servicios externos.
 
+## Chat «Preguntar al manual»
+
+El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por OpenRouter. La key vive solo en el servidor.
+
+1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `OPENROUTER_API_KEY` en el entorno del host. En local: `cd api && npm ci && OPENROUTER_API_KEY=… node server.js` (puerto 8787). Tests: `cd api && npm test`.
+2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
+
 ## 10. Futuro (fuera del MVP)
 
 - **Modo mecánico:** contenido avanzado (rutas de correa, mangueras, torques). Requiere datos de taller con licencia (ALLDATA, Mitchell, HaynesPro); dejar la arquitectura de datos abierta a esa capa.
