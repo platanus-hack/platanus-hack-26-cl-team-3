@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CONFIANZA_MIN } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
+import { useVehicleSelection } from '../plates/selection';
 import { vehicles } from '../vehicles';
 
 // La detección sale del propio contorno (umbrales en detector/vano.ts). El puntaje «capó abierto» de CLIP quedó solo
@@ -41,7 +42,8 @@ export function BarraSuperior({ debug, alCambiarDebug }: { debug: boolean; alCam
   const insets = useSafeAreaInsets();
   // Vehículo elegido en el menú (llega como parámetro de la ruta /escanear).
   const { vehicleId } = useLocalSearchParams<{ vehicleId?: string }>();
-  const vehicle = vehicles.find((option) => option.id === vehicleId);
+  const { vehicle: selected } = useVehicleSelection();
+  const vehicle = selected.id === vehicleId ? selected : vehicles.find((option) => option.id === vehicleId);
   return (
     <View style={[estilos.barra, { paddingTop: insets.top + espacio.s }]}>
       <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
@@ -83,7 +85,7 @@ export function PantallaPermiso({ puedePreguntar, pedir }: { puedePreguntar: boo
         </View>
         <Text style={[tipo.titulo, estilos.textoCentro]}>Necesitamos la cámara</Text>
         <Text style={[tipo.nota, estilos.textoCentro, { marginTop: espacio.s, marginBottom: espacio.xl }]}>
-          La usamos para reconocer el capó abierto. Las imágenes se analizan en tu teléfono y no se envían a ningún lado.
+          La usamos para reconocer el capó o un testigo del tablero. Las imágenes se analizan en tu teléfono y no se envían a ningún lado.
         </Text>
         <Boton
           texto={puedePreguntar ? 'Permitir cámara' : 'Abrir ajustes'}

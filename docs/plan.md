@@ -14,13 +14,13 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | # | Paso de la experiencia | Estado | Hoy | Lo cierra |
 |---|---|---|---|---|
 | 1 | Cuentas la falla | Listo | Chat por texto en el APK, en streaming y con historial. Sin voz | I |
-| 2 | Responde con cita | A medias | Solo 6 fusibles de la cabina, de terceros y sin página. El manual no está indexado | G, A |
-| 3 | Abre la cámara en la pieza | Falta | `show_in_camera` y el evento `ar` están diseñados, no escritos | D |
+| 2 | Responde con cita | A medias | 6 fusibles de la cabina (de terceros, sin página) y las fichas de las 9 piezas del vano, con páginas sin contrastar. El manual no está indexado | G, A |
+| 3 | Abre la cámara en la pieza | Hecho, sin probar en el teléfono | El chat muestra «Abrir cámara: <pieza>» y el escáner abre con esa pieza elegida (fase D). No se probó con el modelo real ni en un APK | A |
 | 4 | Encuentra el vano | Listo | En los videos del Outback real lo marca en todos los cuadros | — |
 | 5 | Lo ancla en 3D | Hecho, sin probar en el teléfono | El anclaje funcionó sobre el auto. El escaneo por varias vistas, que arma el vano cuando no cabe en el cuadro, solo se verificó compilando | A |
 | 6 | Ubica cada pieza | A medias | Plantilla del catálogo más un ajuste por apariencia que corre en el teléfono, solo para el Outback (PR #21). Sin error medido en cm sobre el auto (#17) | A, E |
-| 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. No oscurece el resto ni sigue el contorno real | B, C, F |
-| 8 | Guía el paso y vuelve al chat | Falta | No hay instrucción sobre la cámara ni procedimientos por pasos | D, G |
+| 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. Una flecha lleva hasta la pieza y avisa al encontrarla (fase C, sin probar en el teléfono). No oscurece el resto ni sigue el contorno real | B, F, A |
+| 8 | Guía el paso y vuelve al chat | A medias | La cámara muestra la instrucción y «Volver al chat», y el chat ofrece «Listo, ¿qué sigue?». Los procedimientos por pasos no existen | G |
 
 Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
 
@@ -39,7 +39,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Clave común:** `PartId` de `app/src/engine-maps/catalog.ts` (`fuses`, `washer`, `dipstick`, `coolant`, `air_filter`, `oil_cap`, `brake_fluid`, `battery`, `positive`).
 - **D → cámara:** evento SSE `ar { part, instruction }` → `/escanear?vehicleId=…&part=…`. Es aditivo sobre el contrato del chat.
 - **Cámara → B:** la prop nativa `selectedPart`, que ya existe. B cambia cómo se dibuja, no cómo se elige.
-- **Nativo → C:** evento `onGuia { part, x, y, visible, distance }`, unas 10 veces por segundo, con la pieza elegida en pantalla y su distancia al teléfono.
+- **Nativo → C:** evento `onGuia { part, x, y, visible, distance }`, unas 10 veces por segundo, con la pieza elegida en pantalla y su distancia al teléfono. Aquí `part` es el índice del volumen, igual que en `selectedPart`. Detalle en [`specs/guiado-espacial/fase-1.md`](specs/guiado-espacial/fase-1.md).
 - **E → cámara:** `POST /api/locate { image, parts }` → `{ parts: { [part]: { point: [x, y], mask?: [[x, y], …] } | null } }`. `null` = se usa la ubicación de hoy.
 - **J → menú:** `POST /api/identify { image }` → `{ vehicleId: string | null, variant?: string }`, con `vehicleId` de `app/src/vehicles.ts`. `null` = no lo reconoce y se elige a mano.
 - **G → chat:** pasos `{ text, part?, source, page }`. El `part` de un paso es lo que D manda a la cámara.
@@ -57,9 +57,9 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Listo cuando:** tocar un chip deja solo esa pieza iluminada y la marca no tiembla al mover el teléfono.
 - **No cubre:** la forma sigue siendo la del prisma del catálogo, no el contorno real (F).
 
-**C · Guiado espacial** — parte hoy.
+**C · Guiado espacial** — hecha; spec en [`specs/guiado-espacial/fase-1.md`](specs/guiado-espacial/fase-1.md). Falta compilarla en un APK y probarla en el teléfono.
 - Flecha en el borde cuando la pieza queda fuera de cuadro, distancia a la pieza y un «la encontraste» con vibración al centrarla.
-- **Zona:** `EscanerAR.tsx`, el evento `onGuia` en `CapoArModule.kt` y `expo-haptics` (dependencia nueva).
+- **Zona:** `app/src/escaner/PartGuide.tsx` y `guide.ts`, y en el nativo `Guia.kt` más el evento `onGuia` y `pulso()`. La vibración usa el feedback háptico de Android, sin dependencia nueva.
 - **Listo cuando:** partiendo de espaldas a la pieza, la flecha te lleva hasta ella sin leer nada.
 - **No cubre:** indicaciones por voz (I).
 
@@ -88,7 +88,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - Grabar el mismo pedido en Gemini Live, moviéndose alrededor del auto.
 - **Listo cuando:** hay un error en cm por pieza y un video del anclaje en el auto.
 
-**D · Chat → cámara** (fase 2 del chat) — parte hoy.
+**D · Chat → cámara** (fase 2 del chat) — hecha; spec en [`specs/chat-manual/fase-2.md`](specs/chat-manual/fase-2.md). Falta probarla con el modelo real y en un APK.
 - Herramienta `show_in_camera` y evento `ar`; tarjeta «Abrir cámara»; la cámara abre con la pieza elegida, la instrucción arriba y «Volver al chat»; respuestas rápidas al volver.
 - **Zona:** `api/src/tools/`, `app/src/chat/`, `ask.tsx` y los parámetros de `escanear.tsx`.
 - **Listo cuando:** la demo corre de punta a punta sin tocar el menú.

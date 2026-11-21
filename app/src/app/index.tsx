@@ -7,18 +7,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Icono, Insignia, type NombreIcono } from '../ui';
 
-import { vehicles, type Vehicle } from '../vehicles';
+import { useVehicleSelection } from '../plates/selection';
+import { vehicles } from '../vehicles';
 
 // Planned MVP features from the README.
 const PROXIMAMENTE: { icono: NombreIcono; titulo: string; detalle: string }[] = [
-  { icono: 'car-light-alert', titulo: 'Luces del tablero', detalle: 'Qué significa cada una' },
   { icono: 'lightbulb-outline', titulo: 'Ampolletas', detalle: 'Cuál lleva y cómo cambiarla' },
   { icono: 'fuse', titulo: 'Fusibles', detalle: 'Dónde está cada uno' },
 ];
 
 export default function Menu() {
   const insets = useSafeAreaInsets();
-  const [vehicle, setVehicle] = useState<Vehicle>(vehicles[0]);
+  const { vehicle, setVehicle } = useVehicleSelection();
   const [vehicleOptionsOpen, setVehicleOptionsOpen] = useState(false);
   const vehiclePicker = useRef<ComponentRef<typeof Pressable>>(null);
   const version = Constants.expoConfig?.version ?? '';
@@ -45,7 +45,7 @@ export default function Menu() {
         ref={vehiclePicker}
         onPress={() => setVehicleOptionsOpen((open) => !open)}
         accessibilityRole="button"
-        accessibilityLabel={`Elegir auto. Actual: ${vehicle.name} ${vehicle.year}, ${vehicle.engine}`}
+        accessibilityLabel={`Elegir auto. Actual: ${vehicle.name} ${vehicle.year ?? ''}, ${vehicle.engine}`}
         aria-expanded={vehicleOptionsOpen}
         style={styles.vehiclePicker}
       >
@@ -60,6 +60,17 @@ export default function Menu() {
 
       {vehicleOptionsOpen && (
         <View role="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
+          <Pressable
+            accessibilityRole="button"
+            style={styles.vehicleOption}
+            onPress={() => {
+              setVehicleOptionsOpen(false);
+              router.push('/recognize-vehicle');
+            }}
+          >
+            <Icono nombre="camera-outline" tono={color.acento} />
+            <Text style={styles.vehicleName}>Reconocer auto</Text>
+          </Pressable>
           {vehicles.map((option) => {
             const checked = option.id === vehicle.id;
             return (
@@ -106,6 +117,19 @@ export default function Menu() {
       </Pressable>
 
       <Pressable
+        onPress={() => router.push({ pathname: '/dashboard', params: { vehicleId: vehicle.id } })}
+        accessibilityRole="button"
+        style={styles.secundaria}
+      >
+        <Icono nombre="car-light-alert" tam={26} tono={color.acento} />
+        <View style={styles.flex}>
+          <Text style={styles.secundariaTitulo}>Escanear tablero</Text>
+          <Text style={tipo.nota}>Identifica los testigos encendidos del tablero.</Text>
+        </View>
+        <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
+      </Pressable>
+
+      <Pressable
         onPress={() => router.push({ pathname: '/analizar', params: { vehicleId: vehicle.id } })}
         accessibilityRole="button"
         style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
@@ -125,8 +149,8 @@ export default function Menu() {
       >
         <Icono nombre="book-open-variant" tam={26} tono={color.acento} />
         <View style={styles.flex}>
-          <Text style={styles.secundariaTitulo}>Preguntar al manual</Text>
-          <Text style={tipo.nota}>Cuéntanos la falla y te respondemos con citas.</Text>
+          <Text style={styles.secundariaTitulo}>Manual del Subaru Outback 2016</Text>
+          <Text style={tipo.nota}>Consulta el manual del motor 3.6R.</Text>
         </View>
         <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>

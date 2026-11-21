@@ -1,5 +1,9 @@
 name: Android APK
 on:
+  pull_request:
+    paths:
+      - "app/modules/capo-ar/android/src/main/assets/engine-models/**"
+      - "app/modules/capo-ar/android/src/main/java/expo/modules/capoar/*Model*.kt"
   push:
     branches: [dev, main]
 permissions:
@@ -35,6 +39,7 @@ jobs:
         run: |
           bash scripts/compilar-apk.sh
           tools="$ANDROID_HOME/build-tools/37.0.0"
+          unzip -p dist/capo-ar.apk assets/engine-models/outback-ez36.glb | cmp - app/modules/capo-ar/android/src/main/assets/engine-models/outback-ez36.glb
           "$tools/apksigner" verify --print-certs dist/capo-ar.apk > "$RUNNER_TEMP/signer"
           grep -Fx 'V2 Signer: certificate SHA-256 digest: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c' "$RUNNER_TEMP/signer"
           "$tools/aapt2" dump badging dist/capo-ar.apk > "$RUNNER_TEMP/package"
@@ -48,6 +53,7 @@ jobs:
           retention-days: 1
 
   publish:
+    if: github.event_name == 'push'
     needs: apk
     concurrency:
       group: publish-android-${{ github.ref }}-${{ github.ref_name == 'dev' && github.sha || 'latest' }}
