@@ -17,8 +17,48 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.20.0'
+      - name: Verify the PRT seed image and its first-run and retry behavior
+        run: |
+          docker compose build prt-seed
+          docker compose run --rm --no-deps --entrypoint python \
+            -v "$PWD/scripts/prt/test_seed.py:/opt/prt/test_seed.py:ro" prt-seed test_seed.py
       - run: npm ci --prefix tests/browser --ignore-scripts --no-audit
       - run: |
           CAPO_CHROME=$(command -v google-chrome)
           export CAPO_CHROME
           bash .github/ci.sh
+
+  notify-deployment:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.private
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: public-main-deployment-hook
+      cancel-in-progress: false
+    steps:
+      - name: Request deployment of the verified main revision
+        env:
+          DEPLOY_HOOK: ${{ secrets.COMPOSE_DEPLOY_HOOK_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DEPLOY_HOOK" ]]; then
+            echo "::notice::No Compose deploy hook configured. A host subscribed directly to main must apply this revision."
+            exit 0
+          fi
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$head" != "$GITHUB_SHA" ]]; then
+            echo "Skipping a superseded main revision."
+            exit 0
+          fi
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --connect-timeout 10 --max-time 60 \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" \
+              '{repository:$repo,ref:"refs/heads/main",after:$sha}')" -- "$DEPLOY_HOOK")
+          [[ "$status" == 2?? ]] || { echo "::error::Deployment hook returned HTTP $status"; exit 1; }

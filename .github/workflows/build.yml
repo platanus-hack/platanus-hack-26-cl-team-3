@@ -32,6 +32,9 @@ jobs:
             "$GITHUB_REPOSITORY_ID") echo "configured=true" >> "$GITHUB_OUTPUT";;
             *) echo "Repository identity mismatch"; exit 1;;
           esac
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.20.0'
       - name: Build and check the image
         run: bash .github/ci.sh
       - name: Check existing package visibility

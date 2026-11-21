@@ -85,6 +85,11 @@ internal class EngineMesh private constructor(
 ) {
   private data class Volume(val part: Int, val base: List<EnginePoint>, val top: List<EnginePoint>)
 
+  fun center(part: Int): EnginePoint? {
+    val top = volumes.firstOrNull { it.part == part }?.top ?: return null
+    return top.fold(EnginePoint(0f, 0f, 0f)) { sum, point -> sum + point } * (1f / top.size)
+  }
+
   fun project(toScreen: (EnginePoint) -> EngineScreenPoint?): List<EngineFace> {
     val faces = ArrayList<EngineFace>()
     fun add(part: Int, points: List<EngineScreenPoint>, side: Boolean) {

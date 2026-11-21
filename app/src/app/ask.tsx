@@ -156,7 +156,7 @@ export default function Ask() {
     <KeyboardAvoidingView style={styles.root} behavior="padding">
       <View style={[styles.bar, { paddingTop: insets.top + espacio.s }]}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
-        <Text style={styles.title}>Preguntar al manual</Text>
+        <Text style={styles.title}>Manual del Subaru Outback 2016 · 3.6R</Text>
         <Pressable
           onPress={reset}
           disabled={busy}
@@ -179,7 +179,7 @@ export default function Ask() {
         {bubbles.length === 0 && (
           <Tarjeta estilo={styles.empty}>
             <Icono nombre="book-open-variant" tam={26} tono={color.textoSuave} />
-            <Text style={tipo.nota}>Cuéntame qué le pasa al auto. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
+            <Text style={tipo.nota}>Cuéntame qué le pasa al Outback. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
           </Tarjeta>
         )}
         {bubbles.map((b, i) => (

@@ -22,6 +22,7 @@ import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, extendsPartialMap, encodeVolumes, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../engine-maps/registration';
+import { PartGuide, type PartGuideRef } from './PartGuide';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
 import type { Vehicle } from '../vehicles';
@@ -64,6 +65,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
   const ar = useRef<VistaARRef>(null);
+  const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
   const [modeloListo, setModeloListo] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -597,7 +599,9 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         selectedPart={selectedIndex}
         onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
+        onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
+      <PartGuide ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (
