@@ -60,6 +60,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
 
 export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
+  const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
@@ -596,6 +597,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         ref={ar}
         style={StyleSheet.absoluteFill}
         debug={debug}
+        outbackParts={outbackParts}
         selectedPart={selectedIndex}
         onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}

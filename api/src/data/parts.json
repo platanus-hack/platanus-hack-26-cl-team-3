@@ -52,5 +52,113 @@
     "name": "Borne positivo",
     "detail": "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
     "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "engine_cover",
+    "name": "Cubierta del motor",
+    "detail": "Cubierta central con el emblema Subaru sobre el motor bóxer de seis cilindros.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "intake_snorkel",
+    "name": "Toma frontal de aire",
+    "detail": "Conducto ancho que lleva aire desde el frente del auto hasta la caja del filtro.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "intake_hose",
+    "name": "Manguito de admisión",
+    "detail": "Tramo que une la salida de la caja del filtro con la admisión bajo la cubierta.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "abs_unit",
+    "name": "Unidad hidráulica ABS",
+    "detail": "Bloque hidráulico y bomba a los que llegan las tuberías rígidas de freno.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "left_strut_mount",
+    "name": "Copela delantera izquierda",
+    "detail": "Soporte superior de la suspensión izquierda del vehículo, junto al depósito de frenos.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "right_strut_mount",
+    "name": "Copela delantera derecha",
+    "detail": "Soporte superior de la suspensión derecha del vehículo, detrás del módulo ABS.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "radiator_cap",
+    "name": "Tapa de presión del radiador",
+    "detail": "Tapa metálica con advertencia junto al depósito de expansión. Ábrela solo con el motor completamente frío.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "upper_hose",
+    "name": "Manguera superior del radiador",
+    "detail": "Tramo visible de la manguera gruesa que llega al radiador por delante del motor.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "battery_hold_down",
+    "name": "Abrazadera de la batería",
+    "detail": "Barra transversal que sujeta la batería a su bandeja.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "hood_latch",
+    "name": "Cierre del capó",
+    "detail": "Mecanismo de enganche situado al centro del travesaño delantero.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "radiator_support",
+    "name": "Cubierta del soporte del radiador",
+    "detail": "Cubierta plástica del travesaño delantero, a un lado del cierre del capó.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "coolant_cap",
+    "name": "Tapa del depósito de expansión",
+    "detail": "Tapa amarilla del depósito translúcido, junto a la tapa metálica del radiador.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "brake_cap",
+    "name": "Tapa del líquido de frenos",
+    "detail": "Tapa amarilla del depósito de frenos, cerca del parabrisas.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "filter_outer_clip",
+    "name": "Broche exterior del filtro de aire",
+    "detail": "Cierre metálico de la carcasa del filtro, junto al guardabarros.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "filter_inner_clip",
+    "name": "Broche interior del filtro de aire",
+    "detail": "Cierre metálico de la carcasa del filtro más cercano al motor.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "negative",
+    "name": "Borne negativo",
+    "detail": "Terminal metálico sin cubierta roja, conectado al cable de masa de la batería.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "metal_pulley",
+    "name": "Polea metálica de accesorios",
+    "detail": "Cara metálica visible bajo el borde frontal de la cubierta, detrás de la manguera.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "dark_pulley",
+    "name": "Polea negra de accesorios",
+    "detail": "Cara oscura visible bajo la cubierta central, al lado opuesto de la manguera.",
+    "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
   }
 ]

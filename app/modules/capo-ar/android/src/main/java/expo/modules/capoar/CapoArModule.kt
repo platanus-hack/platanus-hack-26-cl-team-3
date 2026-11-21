@@ -82,6 +82,8 @@ class CapoArModule : Module() {
 
       Prop("debug") { vista: CapoArView, debug: Boolean? -> vista.capa.debug = debug ?: true }
 
+      Prop("outbackParts") { view: CapoArView, ids: List<String>? -> view.outbackParts = ids.orEmpty() }
+
       Prop("selectedPart") { view: CapoArView, index: Int? ->
         view.capa.selectedPart = index ?: -1
         view.guidePart = index ?: -1

@@ -99,6 +99,7 @@ export type ResultadoEscaneo = {
 
 export type VistaARProps = ViewProps & {
   debug?: boolean;
+  outbackParts?: string[];
   selectedPart?: number;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;

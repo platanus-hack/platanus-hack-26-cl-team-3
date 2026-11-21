@@ -81,6 +81,7 @@ internal fun scanIntersections(points: List<EnginePoint>, rays: List<EnginePoint
 internal class EngineMesh private constructor(
   val origin: EnginePoint,
   val adjustedParts: List<Int>,
+  val registrationCorners: List<EnginePoint>,
   private val volumes: List<Volume>
 ) {
   private data class Volume(val part: Int, val base: List<EnginePoint>, val top: List<EnginePoint>)
@@ -143,7 +144,18 @@ internal class EngineMesh private constructor(
       val inverseDepths = opticalDepths.map { 1f / it }
       val rayOffsets = corners.mapIndexed { i, corner -> (corner - origin) * inverseDepths[i] }
       val adjustedParts = ArrayList<Int>()
-      val volumes = rows.mapIndexed { part, row ->
+      // A trailing negative integer identifies the face whose measured motion this part follows.
+      val sources = rows.map { row ->
+        if (row.size % 2 == 1) null else {
+          val marker = row.lastOrNull() ?: return null
+          val source = (-1 - marker).toInt()
+          if (source !in rows.indices || marker != -1.0 - source) return null
+          source
+        }
+      }
+      val offsets = HashMap<Int, EnginePoint>()
+      val volumes = rows.mapIndexed { part, encoded ->
+        val row = if (sources[part] == null) encoded else encoded.dropLast(1)
         if (row.size < 7 || row.size % 2 != 1 || row.any { !it.isFinite() || it !in 0.0..1.0 }) return null
         val initialTop = row.drop(1).chunked(2).map { (x, y) ->
           val u = x.toFloat()
@@ -158,13 +170,25 @@ internal class EngineMesh private constructor(
         val correctedFace = refineFace?.invoke(part, initialTop.map { it + origin })
         val top = if (correctedFace != null) {
           adjustedParts.add(part)
+          val delta = correctedFace.indices.fold(EnginePoint(0f, 0f, 0f)) { sum, i ->
+            sum + (correctedFace[i] - origin - initialTop[i])
+          }
+          offsets[part] = delta * (1f / correctedFace.size)
           correctedFace.map { it - origin }
         } else initialTop
         // Height extends below the traced face and is a fraction of the measured bay width.
         val rise = outward * (width * row.first().toFloat())
         Volume(part, top.map { it - rise }, top)
       }
-      return EngineMesh(origin, adjustedParts, volumes)
+      val attached = volumes.map { volume ->
+        val source = sources[volume.part]
+        val offset = offsets[source]
+        if (offset == null || volume.part in offsets) volume else volume.copy(
+          top = volume.top.map { it + offset },
+          base = volume.base.map { it + offset },
+        )
+      }
+      return EngineMesh(origin, adjustedParts, corners, attached)
     }
   }
 }
