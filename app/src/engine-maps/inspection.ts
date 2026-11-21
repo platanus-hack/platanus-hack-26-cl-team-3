@@ -6,6 +6,8 @@ export const inspectionLabels = {
 
 export type InspectionAction = keyof typeof inspectionLabels;
 
+export const inspectionSeconds: Record<InspectionAction, number> = { highlight: 3.2, lift: 5, refill: 10 };
+
 export function supportsInspection(part: string, action: unknown): action is InspectionAction {
   return action === 'highlight' || action === 'lift' || (action === 'refill' && part === 'washer');
 }
