@@ -30,6 +30,7 @@ import expo.modules.kotlin.Promise
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
@@ -100,6 +101,14 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   @Volatile private var vistaPrevia: FloatArray? = null // esquinas en coordenadas normalizadas de la imagen del sensor
   @Volatile private var bordesPrevia: BooleanArray? = null
   private val anclas = ArrayList<Anchor>()
+
+  // Escaneo: mapa del vano acumulado desde varias vistas, y su contorno en el mundo (se dibuja pegado al auto).
+  private val escaneo = Escaneo()
+  @Volatile private var previaMundo: FloatArray? = null // x, y, z de cada esquina
+  // «Mantener presionado sobre el motor»: punto del mundo que marcó el usuario.
+  @Volatile private var semillaMundo: FloatArray? = null
+  // Trabajos pedidos desde JS que necesitan el hilo de OpenGL (ahí viven el Frame y las capturas).
+  private val tareas = ConcurrentLinkedQueue<(Frame) -> Unit>()
 
   init {
     gl.preserveEGLContextOnPause = true
@@ -210,6 +219,62 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     if (!pendingFix.compareAndSet(null, request)) promise.reject("ERR_AR", "Ya se está fijando el vano", null)
   }
 
+  /** Suma al escaneo lo que el modelo vio en la captura `id` (máscara 88×88 sobre el recorte rx, ry, lado). */
+  fun acumular(id: Int, mascara: String, rx: Double, ry: Double, lado: Double, promise: Promise) {
+    tareas.add { _ ->
+      val c = capturas[id]
+      val prof = c?.prof
+      val ok = c != null && prof != null && c.rastreando &&
+        escaneo.acumular(c.pose, prof, c.grados, mascara, rx.toFloat(), ry.toFloat(), lado.toFloat())
+      val r = mutableMapOf<String, Any>("ok" to ok, "vistas" to escaneo.vistas)
+      if (ok) {
+        r["mapa"] = escaneo.mapa()
+        semillaMundo?.let { m -> escaneo.aGrilla(m)?.let { g -> r["semilla"] = listOf(g[0].toDouble(), g[1].toDouble()) } }
+      }
+      promise.resolve(r)
+    }
+  }
+
+  /**
+   * Fija como vista previa (pegada al mundo) el contorno del escaneo, dado en coordenadas de su grilla, y devuelve ese
+   * contorno proyectado a la imagen derecha de la captura `id` (puede salirse de 0..1 si el vano no cabe en el cuadro).
+   */
+  fun contornoEscaneo(id: Int, esquinas: List<Double>, promise: Promise) {
+    tareas.add { _ ->
+      val c = capturas[id]
+      val mundo = ArrayList<FloatArray>()
+      for (k in 0 until esquinas.size / 2) escaneo.aMundo(esquinas[2 * k].toFloat(), esquinas[2 * k + 1].toFloat())?.let { mundo.add(it) }
+      if (c == null || mundo.size < 3 || mundo.size != esquinas.size / 2) { promise.resolve(emptyList<Double>()); return@add }
+      previaMundo = FloatArray(mundo.size * 3) { mundo[it / 3][it % 3] }
+      val inversa = c.pose.inverse()
+      val salida = ArrayList<Double>(esquinas.size)
+      for (m in mundo) {
+        val q = inversa.transformPoint(m)
+        if (q[2] > -0.05f) { promise.resolve(emptyList<Double>()); return@add } // detrás de la cámara de esa captura
+        val u = (c.fx * q[0] / -q[2] + c.cx) / c.anchoImg
+        val v = (c.cy - c.fy * q[1] / -q[2]) / c.altoImg
+        val (x, y) = Imagen.girar(u, v, c.grados)
+        salida.add(x.toDouble()); salida.add(y.toDouble())
+      }
+      promise.resolve(salida)
+    }
+  }
+
+  fun reiniciarEscaneo() {
+    tareas.add { _ -> escaneo.reiniciar(); previaMundo = null }
+  }
+
+  /** El usuario mantuvo presionado en (x, y) de la vista (píxeles): se guarda el punto del mundo que hay ahí. */
+  fun sembrar(x: Double, y: Double, promise: Promise) {
+    tareas.add { frame ->
+      val golpe = if (frame.camera.trackingState == TrackingState.TRACKING) frame.hitTest(x.toFloat(), y.toFloat()).firstOrNull() else null
+      if (golpe == null) { promise.resolve(false); return@add }
+      val t = golpe.hitPose
+      semillaMundo = floatArrayOf(t.tx(), t.ty(), t.tz())
+      promise.resolve(true)
+    }
+  }
+
   fun soltar() {
     soltarPendiente = true
   }
@@ -244,9 +309,16 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       placedEngine?.anchor?.detach()
       placedEngine = null
       vistaPrevia = null
+      previaMundo = null
+      semillaMundo = null
+      escaneo.reiniciar()
       soltarPendiente = false
     }
     atenderCapturas(frame)
+    while (true) {
+      val tarea = tareas.poll() ?: break
+      try { tarea(frame) } catch (e: Exception) { /* una tarea fallida no debe botar el dibujo */ }
+    }
     pendingFix.getAndSet(null)?.let { request ->
       if (camara.trackingState == TrackingState.TRACKING) {
         anclar(s, request)
@@ -272,7 +344,20 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     if (anclado) {
       if (projector != null && placedEngine == null) puntos = proyectarAnclas(projector)
     } else {
-      vistaPrevia?.let { p ->
+      // Vista previa: primero el contorno del escaneo, que está en el mundo y por eso no se mueve con el teléfono.
+      val mundo = previaMundo
+      if (mundo != null && rastreando) {
+        val proyectar = screenProjector(frame)
+        val salida = FloatArray(mundo.size / 3 * 2)
+        var visible = true
+        for (k in 0 until mundo.size / 3) {
+          val q = proyectar(mundo[3 * k], mundo[3 * k + 1], mundo[3 * k + 2])
+          if (q == null) { visible = false; break }
+          salida[2 * k] = q.x; salida[2 * k + 1] = q.y
+        }
+        if (visible) puntos = salida
+      }
+      if (puntos == null) vistaPrevia?.let { p ->
         val salida = FloatArray(p.size)
         frame.transformCoordinates2d(Coordinates2d.IMAGE_NORMALIZED, p, Coordinates2d.VIEW, salida)
         puntos = salida
@@ -323,6 +408,15 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
     val puntos = prof?.validos ?: 0
+    // Punto que el usuario marcó manteniendo presionado, visto desde esta captura (imagen derecha, normalizado).
+    val semillaImagen = semillaMundo?.let { m ->
+      if (!rastreando) null else screenProjector(frame)(m[0], m[1], m[2])?.let { q ->
+        val enImagen = FloatArray(2)
+        frame.transformCoordinates2d(Coordinates2d.VIEW, floatArrayOf(q.x, q.y), Coordinates2d.IMAGE_NORMALIZED, enImagen)
+        val (x, y) = Imagen.girar(enImagen[0], enImagen[1], grados)
+        listOf(x.toDouble(), y.toDouble())
+      }
+    }
     val id = ++contador
     capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando, prof)
     while (capturas.size > 8) capturas.remove(capturas.keys.first())
@@ -337,6 +431,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           "puntos" to puntos
         )
         anclasImagen?.let { r["anclas"] = it }
+        semillaImagen?.let { r["semilla"] = it }
         pedidos.forEach { it.resolve(r) }
       } catch (e: Exception) {
         pedidos.forEach { it.reject("ERR_AR", "No se pudo guardar el cuadro: ${e.message}", e) }
