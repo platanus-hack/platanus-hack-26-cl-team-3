@@ -275,6 +275,40 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
   }
 
+  /**
+   * «Lazo»: el usuario rodeó el vano con el dedo. `puntos`: su trazo en píxeles de la vista (x0, y0, x1, y1…).
+   * Registra el cuadro actual como captura (pose y profundidad de ESTE instante, sin guardar imagen) y devuelve el
+   * trazo en coordenadas de esa captura (imagen derecha, normalizado) para que la app lo simplifique y lo fije.
+   */
+  fun capturarTrazo(puntos: List<Double>, promise: Promise) {
+    tareas.add { frame ->
+      val camara = frame.camera
+      if (puntos.size < 6 || puntos.size % 2 != 0 || camara.trackingState != TrackingState.TRACKING) {
+        promise.resolve(mapOf("ok" to false))
+        return@add
+      }
+      val grados = gradosImagen(frame)
+      val intr = camara.imageIntrinsics
+      val f = intr.focalLength
+      val c = intr.principalPoint
+      val dims = intr.imageDimensions
+      val prof = if (profundidad) Profundidad.leer(frame) else null
+      val muestras = if (prof == null) muestrearDistancias(frame) else emptyList()
+      val id = ++contador
+      capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, true, prof)
+      while (capturas.size > 8) capturas.remove(capturas.keys.first())
+      val enVista = FloatArray(puntos.size) { puntos[it].toFloat() }
+      val enImagen = FloatArray(puntos.size)
+      frame.transformCoordinates2d(Coordinates2d.VIEW, enVista, Coordinates2d.IMAGE_NORMALIZED, enImagen)
+      val salida = ArrayList<Double>(puntos.size)
+      for (k in 0 until puntos.size / 2) {
+        val (x, y) = Imagen.girar(enImagen[2 * k], enImagen[2 * k + 1], grados)
+        salida.add(x.toDouble()); salida.add(y.toDouble())
+      }
+      promise.resolve(mapOf("ok" to true, "id" to id, "trazo" to salida, "puntos" to (prof?.validos ?: 0), "muestras" to muestras.size))
+    }
+  }
+
   fun soltar() {
     soltarPendiente = true
   }

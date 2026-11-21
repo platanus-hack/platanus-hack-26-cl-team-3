@@ -1,6 +1,6 @@
 // Pruebas de la geometría del vano y del zoom automático (app/src/detector/). Correr desde capo-ar/: app/node_modules/.bin/tsx herramientas/vano-motor/probar-vano.ts
 import assert from 'node:assert/strict';
-import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
+import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador, vanoDeTrazo } from '../../app/src/detector/vano.ts';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
@@ -116,3 +116,16 @@ assert.ok(poligonoVano(dos, 0.5, { x: 0.99, y: 0.01 })!.esquinas.every(e => e.x 
 // 19) al marcar un punto, la ronda de búsqueda del zoom se centra en él
 const enc4 = new Encuadre(); enc4.apuntar({ x: 0.7, y: 0.3 }); enc4.procesar(null);
 const r4 = enc4.recorte(); assert.ok(Math.abs(r4.x + r4.lado / 2 - 0.65) < 1e-9 && Math.abs(r4.lado - 0.7) < 1e-9, 'centrado en el punto (ajustado al borde)'); console.log('19 ok');
+
+// 20) lazo: un trazo irregular alrededor de un rectángulo da ese rectángulo (≤ 8 esquinas); un garabato chico, nada
+const trazo: { x: number; y: number }[] = [];
+for (let k = 0; k < 80; k++) { // vuelta completa por el borde de [0.2, 0.8] × [0.3, 0.7], con temblor hacia adentro
+  const t = (k / 80) * 4, lado = Math.floor(t), f = t - lado, tiembla = 0.01 * Math.sin(k * 1.7) ** 2;
+  const [x, y] = lado === 0 ? [0.2 + 0.6 * f, 0.3 + tiembla] : lado === 1 ? [0.8 - tiembla, 0.3 + 0.4 * f] : lado === 2 ? [0.8 - 0.6 * f, 0.7 - tiembla] : [0.2 + tiembla, 0.7 - 0.4 * f];
+  trazo.push({ x, y });
+}
+const vt = vanoDeTrazo(trazo)!;
+assert.ok(vt.esquinas.length >= 4 && vt.esquinas.length <= 8 && Math.abs(vt.area - 0.24) < 0.02 && vt.confianza === 1 && !vt.cortado);
+assert.ok(iouPoligonos(vt.esquinas, [{ x: 0.2, y: 0.3 }, { x: 0.8, y: 0.3 }, { x: 0.8, y: 0.7 }, { x: 0.2, y: 0.7 }]) > 0.93);
+assert.equal(vanoDeTrazo(trazo.map((q) => ({ x: 0.5 + (q.x - 0.5) * 0.1, y: 0.5 + (q.y - 0.5) * 0.1 }))), null, 'trazo demasiado chico');
+assert.equal(vanoDeTrazo(trazo.slice(0, 5)), null, 'muy pocos puntos'); console.log('20 ok', `${vt.esquinas.length} esquinas, área ${vt.area.toFixed(3)}`);

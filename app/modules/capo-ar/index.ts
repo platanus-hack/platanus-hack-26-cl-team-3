@@ -70,6 +70,11 @@ export type VistaARRef = {
    */
   contornoEscaneo(id: number, esquinas: number[]): Promise<number[]>;
   reiniciarEscaneo(): Promise<void>;
+  /**
+   * «Lazo»: registra el cuadro actual como captura y devuelve el trazo del dedo (dado en píxeles de la vista:
+   * x0, y0, x1, y1…) en coordenadas de esa captura. `ok` es false si ARCore aún no sigue el movimiento.
+   */
+  capturarTrazo(puntos: number[]): Promise<{ ok: boolean; id?: number; trazo?: number[]; puntos?: number; muestras?: number }>;
   /** «Mantener presionado»: guarda el punto del mundo que hay en (x, y) de la vista, en píxeles. false si no se pudo medir. */
   sembrar(x: number, y: number): Promise<boolean>;
 };

@@ -57,6 +57,8 @@ class CapoArModule : Module() {
         vista.contornoEscaneo(id, esquinas, promise)
       }
 
+      AsyncFunction("capturarTrazo") { vista: CapoArView, puntos: List<Double>, promise: Promise -> vista.capturarTrazo(puntos, promise) }
+
       AsyncFunction("reiniciarEscaneo") { vista: CapoArView -> vista.reiniciarEscaneo() }
 
       AsyncFunction("sembrar") { vista: CapoArView, x: Double, y: Double, promise: Promise -> vista.sembrar(x, y, promise) }

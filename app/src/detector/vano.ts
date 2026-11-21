@@ -275,6 +275,28 @@ function interseccion(p1: number[], p2: number[], p3: number[], p4: number[]): [
 }
 
 /**
+ * Contorno a partir de un trazo hecho con el dedo alrededor del vano («lazo»). `puntos`: el recorrido del dedo, en
+ * coordenadas normalizadas de la imagen. Se toma su envolvente convexa y se reduce a ≤ 8 esquinas, igual que con la
+ * detección automática. null si el trazo es demasiado chico o casi una línea.
+ */
+export function vanoDeTrazo(puntos: { x: number; y: number }[]): Vano | null {
+  if (puntos.length < 8) return null;
+  const simple = simplificar(envolvente(puntos.map((q) => [q.x, q.y] as [number, number])), MAX_ESQUINAS);
+  if (simple.length < 3) return null;
+  const area = areaPoligono(simple);
+  if (area < AREA_MINIMA) return null;
+  const casco = juntarBiseles(simple, 0.2 * Math.sqrt(area));
+  if (casco.length < 3) return null;
+  const esquinas = casco.map(([x, y]) => ({
+    x,
+    y,
+    borde: x <= MARGEN_BORDE || y <= MARGEN_BORDE || x >= 1 - MARGEN_BORDE || y >= 1 - MARGEN_BORDE,
+  }));
+  // El trazo lo hizo una persona mirando el auto: se toma como cierto (confianza 1) y completo.
+  return { esquinas, area: areaPoligono(casco), confianza: 1, cortado: false };
+}
+
+/**
  * Coincidencia (IoU, 0 a 1) entre dos polígonos en coordenadas normalizadas, medida sobre la grilla del cuadro: lo que
  * queda fuera de la imagen no cuenta. Sirve para comparar el contorno anclado con una detección nueva («calce»).
  */

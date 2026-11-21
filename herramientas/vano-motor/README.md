@@ -90,12 +90,16 @@ muestra **pegado al mundo** mientras se escanea. Se fija solo cuando hay ≥ 5 v
 de 8 % en tres análisis y, como control cruzado, coincide ≥ 50 % con lo que el modelo ve en el cuadro actual
 («acuerdo» en debug). Así el vano se arma completo aunque nunca quepa entero en la imagen.
 
-**Mantener presionado sobre el motor.** Guarda el punto del mundo que hay bajo el dedo. La búsqueda con zoom se centra
-ahí y, si hay varias zonas candidatas (en el cuadro o en el mapa del escaneo), se elige la que contiene ese punto.
-La app lo sugiere cuando menos de la mitad de los análisis encuentra el vano. **No ubica el mapa de piezas por sí
-solo**: el catálogo no tiene medidas reales del vano, así que sin contorno no hay escala ni giro.
+**Marcar a mano («lazo»).** Reemplaza al «mantener presionado» de la versión anterior. Con el botón «Marcar a mano»
+el usuario **rodea con el dedo todo lo que está bajo el capó**. Al soltar, el módulo nativo registra ese instante como
+captura (pose y profundidad, `capturarTrazo`) y devuelve el trazo en coordenadas de la imagen; la app lo reduce a su
+envolvente convexa de ≤ 8 esquinas (`vanoDeTrazo`) y lo fija por el mismo camino que un contorno detectado, incluido
+el registro del mapa de piezas. La precisión la pone la persona que mira el auto, no el modelo. Mientras se dibuja,
+la detección automática se detiene. La app lo sugiere cuando menos de la mitad de los análisis encuentra el vano.
+Límite: el trazo se convierte con la pose del momento en que se levanta el dedo, así que hay que dibujar con el
+teléfono quieto.
 
-**Sin probar en un teléfono:** el escaneo, el mantener presionado y la corrección del zoom. La geometría de la app
+**Sin probar en un teléfono:** el escaneo, el lazo y la corrección del zoom. La geometría de la app
 tiene pruebas (`probar-vano.ts`); la parte nativa del escaneo solo se verificó compilando.
 
 ## Datos
