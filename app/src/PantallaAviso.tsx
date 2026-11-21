@@ -27,7 +27,8 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
 
         <Text style={[tipo.seccion, styles.seccion]}>Créditos</Text>
         <Text style={tipo.nota}>
-          Reconocimiento: modelo CLIP ViT-B/32 de OpenAI (licencia MIT), versión ONNX de Xenova.
+          Reconocimiento del vano del motor: CLIPSeg de CIDAS (licencia Apache-2.0), basado en CLIP ViT-B/16 de OpenAI
+          (licencia MIT), con un decodificador entrenado por el equipo.
         </Text>
       </ScrollView>
       <Boton texto={primerUso ? 'Entendido, continuar' : 'Cerrar'} onPress={onListo} estilo={styles.boton} />

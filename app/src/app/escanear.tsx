@@ -1,20 +1,22 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { File } from 'expo-file-system';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cargarDetector, puntuarFoto } from '../detector/detector';
+import { analizarFoto, cargarDetector } from '../detector/detector';
+import { poligonoVano, Suavizador, tramos, type Vano } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono } from '../ui';
 
-// Histéresis sobre el puntaje suavizado: entra a «detectado» con ≥ 0,6 (y al menos 2 análisis), sale con < 0,45.
-// 0,6 es el umbral medido en herramientas/detector-capo (95,8 % de aciertos con fotos de Wikimedia).
-const UMBRAL_ENTRA = 0.6;
-const UMBRAL_SALE = 0.45;
+// «Capó abierto»: histéresis sobre el puntaje suavizado. Entra con ≥ 0,5 (y al menos 2 análisis), sale con < 0,35.
+// 0,5 medido con el CLIP ViT-B/16 int8 del modelo: 97,6 % de aciertos en 166 fotos (herramientas/vano-motor/).
+const UMBRAL_ENTRA = 0.5;
+const UMBRAL_SALE = 0.35;
 const SUAVIZADO = 0.5; // peso del análisis nuevo en la media móvil
-const PAUSA_MS = 200;
+const PAUSA_MS = 150;
+const ROJO_CLARO = 'rgba(255, 110, 110, 0.32)'; // relleno del polígono en modo debug
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -36,7 +38,7 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Pro
   );
 }
 
-/** Elige la foto más chica cuyo lado menor sea ≥ 480 px: basta para 224×224 y acelera mucho la captura. */
+/** Elige la foto más chica cuyo lado menor sea ≥ 480 px: basta para 352×352 y acelera mucho la captura. */
 function elegirTamano(tamanos: string[]): string | undefined {
   const validos = tamanos
     .map((t) => {
@@ -56,6 +58,8 @@ function borrar(uri: string) {
   }
 }
 
+type Tam = { ancho: number; alto: number };
+
 export default function Escanear() {
   const insets = useSafeAreaInsets();
   const [permiso, pedirPermiso] = useCameraPermissions();
@@ -67,7 +71,11 @@ export default function Escanear() {
   const [intento, setIntento] = useState(0);
   const [puntaje, setPuntaje] = useState<number | null>(null);
   const [detectado, setDetectado] = useState(false);
+  const [vano, setVano] = useState<Vano | null>(null);
+  const [foto, setFoto] = useState<Tam | null>(null);
+  const [vista, setVista] = useState<Tam | null>(null);
   const [ms, setMs] = useState<number | null>(null);
+  const [debug, setDebug] = useState(true);
   const [activa, setActiva] = useState(AppState.currentState === 'active');
 
   useEffect(() => {
@@ -94,7 +102,7 @@ export default function Escanear() {
     setCamaraLista(true);
   };
 
-  // Bucle de análisis: foto → puntaje → media móvil con histéresis. Corre mientras la pantalla esté visible.
+  // Bucle de análisis: foto → (puntaje, mapa del vano) → medias móviles → polígono. Corre mientras la pantalla esté visible.
   useEffect(() => {
     if (!camaraLista || !modeloListo || !permiso?.granted || !activa || error) return;
     let vivo = true;
@@ -102,26 +110,29 @@ export default function Escanear() {
     let n = 0;
     let det = false;
     let fallos = 0;
+    const suavizador = new Suavizador(SUAVIZADO);
     (async () => {
       while (vivo) {
         const t0 = Date.now();
         try {
-          const foto = await camara.current?.takePictureAsync({ quality: 0.7, shutterSound: false });
-          if (!foto) throw new Error('la cámara no devolvió imagen');
-          let p: number;
+          const captura = await camara.current?.takePictureAsync({ quality: 0.7, shutterSound: false });
+          if (!captura) throw new Error('la cámara no devolvió imagen');
+          let r;
           try {
-            p = await puntuarFoto(foto.uri);
+            r = await analizarFoto(captura.uri);
           } finally {
-            borrar(foto.uri);
+            borrar(captura.uri);
           }
           if (!vivo) break;
           n += 1;
-          media = n === 1 ? p : SUAVIZADO * p + (1 - SUAVIZADO) * media;
+          media = n === 1 ? r.puntaje : SUAVIZADO * r.puntaje + (1 - SUAVIZADO) * media;
           if (!det && n >= 2 && media >= UMBRAL_ENTRA) det = true;
           else if (det && media < UMBRAL_SALE) det = false;
           fallos = 0;
           setPuntaje(media);
           setDetectado(det);
+          setVano(poligonoVano(suavizador.agregar(r.vano)));
+          setFoto({ ancho: r.ancho, alto: r.alto });
           setMs(Date.now() - t0);
         } catch (e) {
           if (!vivo) break;
@@ -143,6 +154,7 @@ export default function Escanear() {
   const reintentar = () => {
     setPuntaje(null);
     setDetectado(false);
+    setVano(null);
     setIntento((i) => i + 1);
   };
 
@@ -150,7 +162,19 @@ export default function Escanear() {
     <View style={[styles.barra, { paddingTop: insets.top + espacio.s }]}>
       <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
       <Text style={styles.barraTitulo}>Escanear capó</Text>
-      <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+      <View style={styles.fila}>
+        <Pressable
+          onPress={() => setDebug((d) => !d)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: debug }}
+          accessibilityLabel="Modo debug"
+          style={[styles.chip, debug && styles.chipActivo]}
+        >
+          <Icono nombre="bug-outline" tam={16} tono={debug ? color.acentoTexto : color.texto} />
+          <Text style={[styles.chipTexto, debug && { color: color.acentoTexto }]}>Debug</Text>
+        </Pressable>
+        <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+      </View>
     </View>
   );
 
@@ -184,11 +208,13 @@ export default function Escanear() {
     );
   }
 
-  const tonoMarco = detectado ? color.exito : color.acento;
+  const tono = detectado ? color.exito : color.acento;
   const cargando = !error && (!modeloListo || !camaraLista || puntaje === null);
+  // Fuera de debug, el polígono solo aparece cuando además se reconoce un capó abierto.
+  const mostrarVano = !!vano && !!foto && !!vista && (debug || detectado);
 
   return (
-    <View style={styles.raiz}>
+    <View style={styles.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
       <CameraView
         ref={camara}
         style={StyleSheet.absoluteFill}
@@ -199,17 +225,8 @@ export default function Escanear() {
         onCameraReady={alEstarLista}
         onMountError={(e) => setError(`No se pudo abrir la cámara. ${e.message}`)}
       />
+      {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
       {barraSuperior}
-
-      {/* Guía de encuadre: el modelo analiza el cuadrado central de la imagen. */}
-      <View style={styles.marcoCaja} pointerEvents="none">
-        <View style={styles.marco}>
-          <View style={[styles.esquina, styles.supIzq, { borderColor: tonoMarco }]} />
-          <View style={[styles.esquina, styles.supDer, { borderColor: tonoMarco }]} />
-          <View style={[styles.esquina, styles.infIzq, { borderColor: tonoMarco }]} />
-          <View style={[styles.esquina, styles.infDer, { borderColor: tonoMarco }]} />
-        </View>
-      </View>
 
       <View style={[styles.panel, { marginBottom: insets.bottom + espacio.l }]}>
         {error ? (
@@ -234,25 +251,36 @@ export default function Escanear() {
         ) : (
           <>
             <View style={styles.fila}>
-              <Icono nombre={detectado ? 'check-circle' : 'line-scan'} tam={26} tono={tonoMarco} />
-              <Text style={styles.panelTitulo}>{detectado ? 'Capó abierto detectado' : 'Buscando un capó abierto'}</Text>
+              <Icono nombre={detectado ? 'vector-polygon' : 'line-scan'} tam={26} tono={tono} />
+              <Text style={styles.panelTitulo}>
+                {detectado ? (vano ? 'Vano del motor detectado' : 'Capó abierto detectado') : 'Buscando un capó abierto'}
+              </Text>
             </View>
             <Text style={[tipo.nota, styles.panelDetalle]}>
-              {detectado
-                ? 'Siguiente paso (pronto): marcar puntos de referencia para ubicar las piezas.'
-                : 'Abre el capó y apunta al motor desde arriba, dentro del marco.'}
+              {!detectado
+                ? 'Abre el capó y apunta al motor desde arriba.'
+                : !vano
+                  ? 'No logro delimitar el vano. Prueba desde un poco más lejos.'
+                  : vano.cortado
+                    ? 'Parte del vano queda fuera de la imagen: aléjate un poco para verlo completo.'
+                    : 'El contorno marca todo lo que hay bajo el capó.'}
             </Text>
             <View style={styles.medidor}>
               <View style={styles.medidorFila}>
-                <Text style={styles.medidorEtiqueta}>Confianza</Text>
-                <Text style={[styles.medidorValor, { color: tonoMarco }]}>{Math.round((puntaje ?? 0) * 100)} %</Text>
+                <Text style={styles.medidorEtiqueta}>Capó abierto</Text>
+                <Text style={[styles.medidorValor, { color: tono }]}>{Math.round((puntaje ?? 0) * 100)} %</Text>
               </View>
               <View style={styles.pista}>
-                <View style={[styles.relleno, { width: `${Math.round((puntaje ?? 0) * 100)}%`, backgroundColor: tonoMarco }]} />
+                <View style={[styles.relleno, { width: `${Math.round((puntaje ?? 0) * 100)}%`, backgroundColor: tono }]} />
                 <View style={[styles.marcaUmbral, { left: `${UMBRAL_ENTRA * 100}%` }]} />
               </View>
             </View>
-            {ms !== null && <Text style={styles.tiempo}>Análisis en el teléfono · {ms} ms</Text>}
+            {debug && (
+              <Text style={styles.tiempo}>
+                Debug · vano {vano ? `${Math.round(vano.area * 100)} % del cuadro · ${vano.esquinas.length} esquinas` : 'sin región'}
+                {ms !== null ? ` · ${ms} ms` : ''}
+              </Text>
+            )}
           </>
         )}
       </View>
@@ -260,9 +288,56 @@ export default function Escanear() {
   );
 }
 
-const LADO_MARCO = '78%';
-const GROSOR = 4;
-const LARGO = 36;
+/**
+ * Dibuja el polígono del vano sobre la cámara. La vista previa llena la pantalla recortando los bordes («cover»),
+ * así que se proyecta la foto completa con la misma escala y se centra.
+ */
+function CapaVano({ vano, foto, vista, debug, tono }: { vano: Vano; foto: Tam; vista: Tam; debug: boolean; tono: string }) {
+  const puntos = useMemo(() => {
+    const s = Math.max(vista.ancho / foto.ancho, vista.alto / foto.alto);
+    const dx = (vista.ancho - foto.ancho * s) / 2;
+    const dy = (vista.alto - foto.alto * s) / 2;
+    return vano.esquinas.map((e) => ({ x: e.x * foto.ancho * s + dx, y: e.y * foto.alto * s + dy, borde: e.borde }));
+  }, [vano, foto, vista]);
+  const relleno = useMemo(() => (debug ? tramos(puntos, 64) : []), [debug, puntos]);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {relleno.map((t, i) => (
+        <View key={`r${i}`} style={{ position: 'absolute', top: t.y, height: t.alto, left: t.x0, width: t.x1 - t.x0, backgroundColor: ROJO_CLARO }} />
+      ))}
+      {puntos.map((a, i) => {
+        const b = puntos[(i + 1) % puntos.length];
+        const largo = Math.hypot(b.x - a.x, b.y - a.y);
+        const angulo = Math.atan2(b.y - a.y, b.x - a.x);
+        return (
+          <View
+            key={`l${i}`}
+            style={{
+              position: 'absolute',
+              left: (a.x + b.x) / 2 - largo / 2,
+              top: (a.y + b.y) / 2 - 1.5,
+              width: largo,
+              height: 3,
+              backgroundColor: tono,
+              transform: [{ rotate: `${angulo}rad` }],
+            }}
+          />
+        );
+      })}
+      {puntos.map((p, i) => (
+        <View
+          key={`p${i}`}
+          style={[
+            styles.esquina,
+            { left: p.x - 8, top: p.y - 8 },
+            p.borde ? styles.esquinaBorde : null, // toca el borde del cuadro: el vano sigue fuera de la imagen
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   raiz: { flex: 1, backgroundColor: '#000' },
@@ -296,13 +371,29 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowRadius: 6,
   },
-  marcoCaja: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  marco: { width: LADO_MARCO, aspectRatio: 1 },
-  esquina: { position: 'absolute', width: LARGO, height: LARGO },
-  supIzq: { top: 0, left: 0, borderTopWidth: GROSOR, borderLeftWidth: GROSOR, borderTopLeftRadius: radio.m },
-  supDer: { top: 0, right: 0, borderTopWidth: GROSOR, borderRightWidth: GROSOR, borderTopRightRadius: radio.m },
-  infIzq: { bottom: 0, left: 0, borderBottomWidth: GROSOR, borderLeftWidth: GROSOR, borderBottomLeftRadius: radio.m },
-  infDer: { bottom: 0, right: 0, borderBottomWidth: GROSOR, borderRightWidth: GROSOR, borderBottomRightRadius: radio.m },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(23, 27, 34, 0.85)',
+    borderWidth: 1,
+    borderColor: color.borde,
+  },
+  chipActivo: { backgroundColor: color.acento, borderColor: color.acento },
+  chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
+  esquina: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF3B3B',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  esquinaBorde: { backgroundColor: 'transparent', borderColor: '#FF3B3B', borderWidth: 3 },
   panel: {
     position: 'absolute',
     left: espacio.l,

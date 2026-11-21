@@ -10,3 +10,4 @@ app/assets/modelo/*.onnx
 
 # Python
 __pycache__/
+app/assets/modelo/*.fuente
