@@ -1,9 +1,8 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { File } from 'expo-file-system';
-import { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { AppState, findNodeHandle, StyleSheet, Text, View } from 'react-native';
 
-import { readPlateLines } from '../../modules/capo-ar';
+import { readPlatePreview } from '../../modules/capo-ar';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
 import { readCarPlate } from './lookup';
@@ -13,7 +12,7 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
-  const camera = useRef<CameraView>(null);
+  const preview = useRef<ComponentRef<typeof View>>(null);
   const capturing = useRef(false);
 
   useEffect(() => {
@@ -25,7 +24,7 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
   }, []);
 
   useEffect(() => {
-    const recognize = readPlateLines;
+    const recognize = readPlatePreview;
     if (!ready || !active || !recognize || error) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -33,14 +32,11 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
 
     async function scan() {
       if (cancelled) return;
-      if (!capturing.current && camera.current) {
+      const viewTag = findNodeHandle(preview.current);
+      if (!capturing.current && viewTag != null) {
         capturing.current = true;
-        let uri: string | undefined;
         try {
-          const picture = await camera.current.takePictureAsync({ quality: 0.8, shutterSound: false });
-          uri = picture?.uri;
-          if (cancelled) return;
-          const plate = uri ? readCarPlate(await recognize!(uri)) : undefined;
+          const plate = readCarPlate(await recognize!(viewTag));
           if (cancelled) return;
           // Two consecutive readings avoid looking up a transient OCR guess.
           if (plate && plate === previous) {
@@ -52,9 +48,6 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
           if (!cancelled) setError('No se pudo leer la cámara. Puedes escribir la patente.');
           return;
         } finally {
-          if (uri) {
-            try { new File(uri).delete(); } catch { /* The camera cache may already be cleared. */ }
-          }
           capturing.current = false;
         }
       }
@@ -65,7 +58,7 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [ready, active, onRead, error]);
 
-  if (!readPlateLines || error) return <Text style={tipo.nota}>{error || 'La lectura con cámara no está disponible en este dispositivo.'}</Text>;
+  if (!readPlatePreview || error) return <Text style={tipo.nota}>{error || 'La lectura con cámara no está disponible en este dispositivo.'}</Text>;
   if (!permission?.granted) return (
     <View style={styles.permission}>
       <Text style={tipo.cuerpo}>{permission?.canAskAgain === false
@@ -75,8 +68,8 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
     </View>
   );
   return (
-    <View style={styles.preview}>
-      {active && <CameraView ref={camera} style={StyleSheet.absoluteFill} facing="back"
+    <View ref={preview} collapsable={false} style={styles.preview}>
+      {active && <CameraView style={StyleSheet.absoluteFill} facing="back"
         onCameraReady={() => setReady(true)} onMountError={() => setError('No se pudo abrir la cámara. Puedes escribir la patente.')} />}
       <View pointerEvents="none" style={styles.guide} />
     </View>
