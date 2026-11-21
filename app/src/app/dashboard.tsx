@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -6,8 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { guide, manualUrl } from '../dashboard/guide';
 import { readDashboardPhoto } from '../dashboard/photo';
-import type { WarningLight } from '../dashboard/recognize';
-import { borrar, PantallaPermiso } from '../escaner/comun';
+import { borrar } from '../escaner/comun';
 import { color, espacio, tipo } from '../theme';
 import { Boton, BotonIcono } from '../ui';
 
@@ -17,11 +17,10 @@ export default function Dashboard() {
   const camera = useRef<CameraView>(null);
   const mounted = useRef(false);
   const scanning = useRef(false);
-  const [captured, setCaptured] = useState<string>();
-  useEffect(() => () => { if (captured) borrar(captured); }, [captured]);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<WarningLight | null>();
+  const [result, setResult] = useState<Awaited<ReturnType<typeof readDashboardPhoto>>>();
+  useEffect(() => () => { if (result) borrar(result.uri); }, [result]);
   const [error, setError] = useState('');
   useEffect(() => {
     mounted.current = true;
@@ -30,67 +29,84 @@ export default function Dashboard() {
     };
   }, []);
 
-  async function scan() {
-    if (!ready || !camera.current || scanning.current) return;
+  async function scan(source: 'camera' | 'file') {
+    if (scanning.current || (source === 'camera' && (!ready || !camera.current))) return;
     scanning.current = true;
     setBusy(true);
     setError('');
-    let uri: string | undefined;
+    let temporaryCapture: string | undefined;
     try {
-      const photo = await camera.current.takePictureAsync({ quality: 0.85, shutterSound: false });
-      uri = photo?.uri;
-      if (!uri) throw new Error('Missing capture');
-      const light = await readDashboardPhoto(uri);
-      if (mounted.current) {
-        setCaptured(uri);
-        uri = undefined;
-        setReady(false);
-        setResult(light);
+      let uri: string;
+      if (source === 'file') {
+        const picked = await File.pickFileAsync({ mimeTypes: ['image/*'] });
+        if (picked.canceled || !mounted.current) return;
+        uri = picked.result.uri;
+      } else {
+        const photo = await camera.current?.takePictureAsync({ quality: 0.95, shutterSound: false });
+        if (!photo?.uri) throw new Error('Missing capture');
+        temporaryCapture = photo.uri;
+        uri = photo.uri;
       }
+      const reading = await readDashboardPhoto(uri);
+      if (mounted.current) {
+        setReady(false);
+        setResult(reading);
+      } else borrar(reading.uri);
     } catch {
-      if (mounted.current) setError('Falló la captura. Vuelve a intentarlo.');
+      if (mounted.current) setError('No se pudo leer la foto. Vuelve a intentarlo.');
     } finally {
-      if (uri) borrar(uri);
+      if (temporaryCapture) borrar(temporaryCapture);
       scanning.current = false;
       if (mounted.current) setBusy(false);
     }
   }
 
   const supported = vehicleId === 'outback';
-  if (supported && permission && !permission.granted) {
-    return <PantallaPermiso puedePreguntar={permission.canAskAgain} pedir={requestPermission} />;
-  }
-  const entry = result ? guide[result] : null;
+  const lights = [...new Set(result?.detections.map(detection => detection.light))];
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
         <Text style={tipo.titulo}>Escanear tablero</Text>
         {!supported ? <Text style={tipo.cuerpo}>El escáner tiene referencias del Subaru Outback 2016. Todavía no hay un manual verificado para el vehículo seleccionado.</Text> : <>
-          {!captured && <Text style={tipo.cuerpo}>Con el auto estacionado, centra un solo testigo encendido dentro del recuadro. Acerca el teléfono hasta ver su forma con claridad.</Text>}
-          {permission?.granted && (
-            <View style={[styles.preview, captured && styles.capturedPreview]}>
-              {captured ? <Image source={{ uri: captured }} style={[StyleSheet.absoluteFill, styles.capturedImage]} resizeMode="cover" /> :
+          {!result && <Text style={tipo.cuerpo}>Con el auto estacionado, encuadra el tablero completo y comprueba que los símbolos encendidos se vean nítidos.</Text>}
+          {(result || permission?.granted) && (
+            <View style={[styles.preview, result && { aspectRatio: result.width / result.height }]}>
+              {result ? <Image source={{ uri: result.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> :
               <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back" ratio="4:3"
                 onCameraReady={() => setReady(true)}
                 onMountError={() => { setReady(false); setError('No se pudo abrir la cámara. Vuelve al menú y reintenta.'); }} />}
-              {!captured && <View pointerEvents="none" style={styles.target} />}
+              {result?.detections.map((box, index) => (
+                <View key={index} pointerEvents="none" style={[styles.marker, {
+                  left: `${100 * box.x / result.width}%`, top: `${100 * box.y / result.height}%`,
+                  width: `${100 * box.w / result.width}%`, height: `${100 * box.h / result.height}%`,
+                }]} />
+              ))}
             </View>
           )}
-          {ready && !busy && <Boton texto="Leer testigo" icono="camera" onPress={() => void scan()} />}
-          {busy && <Text style={tipo.cuerpo}>Leyendo el testigo…</Text>}
+          {ready && !busy && <Boton texto="Leer tablero" icono="camera" onPress={() => void scan('camera')} />}
+          {!result && !busy && <>
+            {!permission?.granted && <Boton texto={permission?.canAskAgain === false ? 'Abrir ajustes de cámara' : 'Permitir cámara'}
+              icono="camera" onPress={() => permission?.canAskAgain === false ? void Linking.openSettings() : void requestPermission()} />}
+            <Boton texto="Abrir foto del tablero" variante="secundario" icono="image-outline" onPress={() => void scan('file')} />
+          </>}
+          {busy && <Text style={tipo.cuerpo}>Leyendo el tablero…</Text>}
           {!!error && <Text accessibilityLiveRegion="polite" style={tipo.cuerpo}>{error}</Text>}
-          {!busy && !error && result === null && <Text accessibilityLiveRegion="polite" style={tipo.cuerpo}>No pude identificar el testigo. Evita reflejos y encuadra solo el símbolo completo.</Text>}
-          {!busy && entry && <View accessibilityLiveRegion="polite" style={styles.result}>
-            <Text style={tipo.subtitulo}>Posible coincidencia</Text>
-            <Text style={tipo.titulo}>{entry.title}</Text>
-            <Text style={tipo.cuerpo}>{entry.text}</Text>
-            <Text accessibilityRole="link" style={styles.link} onPress={() => {
-              Linking.openURL(manualUrl).catch(() => setError('No se pudo abrir el manual. Consulta la sección de testigos del manual del propietario.'));
-            }}>Manual Subaru Outback 2016 · Testigos e indicadores · pág. {entry.page}</Text>
-          </View>}
-          {result !== undefined && <Boton texto="Escanear otro testigo" icono="refresh" onPress={() => {
-            setCaptured(undefined);
+          {!busy && !error && result && lights.length === 0 && <Text accessibilityLiveRegion="polite" style={tipo.cuerpo}>No pude identificar un testigo compatible. Acerca el teléfono a las luces y evita los reflejos.</Text>}
+          {!busy && lights.map(light => {
+            const entry = guide[light];
+            return (
+              <View key={light} accessibilityLiveRegion="polite" style={styles.result}>
+                <Text style={tipo.subtitulo}>Posible coincidencia</Text>
+                <Text style={tipo.titulo}>{entry.title}</Text>
+                <Text style={tipo.cuerpo}>{entry.text}</Text>
+                <Text accessibilityRole="link" style={styles.link} onPress={() => {
+                  Linking.openURL(manualUrl).catch(() => setError('No se pudo abrir el manual. Consulta la sección de testigos del manual del propietario.'));
+                }}>Manual Subaru Outback 2016 · Testigos e indicadores · pág. {entry.page}</Text>
+              </View>
+            );
+          })}
+          {result !== undefined && <Boton texto="Volver a escanear" icono="refresh" onPress={() => {
             setResult(undefined);
             setError('');
           }} />}
@@ -105,9 +121,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.fondo },
   content: { padding: espacio.l, gap: espacio.m },
   preview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  capturedPreview: { width: 160, aspectRatio: 1, alignSelf: 'center' },
-  capturedImage: { transform: [{ scale: 2.5 }] },
-  target: { width: '40%', aspectRatio: 1, borderWidth: 2, borderColor: color.acento },
+  marker: { position: 'absolute', borderWidth: 1, borderColor: color.acento },
   result: { backgroundColor: color.superficie, padding: espacio.l, gap: espacio.s },
   link: { ...tipo.nota, color: color.acento, textDecorationLine: 'underline' },
 });

@@ -601,7 +601,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
-      <PartGuide ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      <PartGuide key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (

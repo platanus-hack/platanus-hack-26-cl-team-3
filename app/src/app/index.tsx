@@ -124,7 +124,7 @@ export default function Menu() {
         <Icono nombre="car-light-alert" tam={26} tono={color.acento} />
         <View style={styles.flex}>
           <Text style={styles.secundariaTitulo}>Escanear tablero</Text>
-          <Text style={tipo.nota}>Apunta a un testigo encendido para identificarlo.</Text>
+          <Text style={tipo.nota}>Identifica los testigos encendidos del tablero.</Text>
         </View>
         <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>
