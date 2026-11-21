@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { ServerResponse } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -16,20 +17,26 @@ export function handleVehicleLookup(res: ServerResponse, plateSegment: string, d
     return json(res, 400, { error: "Ingresa una patente de seis caracteres." });
   }
 
-  let db: DatabaseSync | undefined;
+  // Keep host-supplied records authoritative. The seed supplements them on a miss.
+  const seed = process.env.PRT_SEED_PATH;
+  const paths = seed && !existsSync(databasePath) ? [seed] : [databasePath];
+  if (seed && seed !== paths[0]) paths.push(seed);
   try {
-    // Opening the published snapshot per lookup also picks up atomic replacements.
-    db = new DatabaseSync(databasePath, { readOnly: true });
-    const vehicle = db.prepare(`
-      SELECT v.plate, d.make, d.model, d.year
-      FROM vehicles v JOIN vehicle_descriptions d ON d.id = v.description_id
-      WHERE v.plate = ?
-    `).get(plate);
-    if (!vehicle) return json(res, 404, { error: "No hay registros PRT para esta patente." });
-    json(res, 200, vehicle);
+    for (const path of paths) {
+      const db = new DatabaseSync(path, { readOnly: true });
+      try {
+        const vehicle = db.prepare(`
+          SELECT v.plate, d.make, d.model, d.year
+          FROM vehicles v JOIN vehicle_descriptions d ON d.id = v.description_id
+          WHERE v.plate = ?
+        `).get(plate);
+        if (vehicle) return json(res, 200, vehicle);
+      } finally {
+        db.close();
+      }
+    }
+    json(res, 404, { error: "No hay registros PRT para esta patente." });
   } catch {
     json(res, 503, { error: "La base de revisiones técnicas no está disponible." });
-  } finally {
-    db?.close();
   }
 }
