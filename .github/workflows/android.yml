@@ -51,7 +51,7 @@ jobs:
     needs: apk
     concurrency:
       group: publish-android-${{ github.ref }}-${{ github.ref_name == 'dev' && github.sha || 'latest' }}
-      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-24.04
     permissions:
       contents: write
