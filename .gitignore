@@ -4,3 +4,9 @@
 # APK generados (scripts/compilar-apk.sh)
 dist/
 *.apk
+
+# Modelo de reconocimiento (lo baja scripts/descargar-modelo.sh)
+app/assets/modelo/*.onnx
+
+# Python
+__pycache__/

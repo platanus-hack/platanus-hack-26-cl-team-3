@@ -8,10 +8,12 @@
 #
 # Antes de cada APK nuevo sube "version" y "android.versionCode" en app/app.json (Android no actualiza con un versionCode igual o menor).
 #
-# Basado en omni-shared/scripts/compilar-apk.sh: la máquina comparte memoria con otros servicios y ya hubo OOM, así que
-#  1. no se empieza sin 5,5 GB libres (espera hasta 15 min y si no, aborta);
-#  2. Gradle va con topes bajos de memoria, prioridad baja y pocos procesos;
-#  3. todo corre en un cgroup con límite duro de 5 GB: si se pasa, el kernel mata solo este build.
+# Basado en omni-shared/scripts/compilar-apk.sh. La máquina comparte memoria con otros servicios (Ollama, Docker…) y un
+# build de este proyecto YA provocó un OOM global que mató servicios del escritorio (keyring, gpg-agent, audio). Por eso:
+#  1. no se empieza sin 6 GB libres (espera hasta 15 min y si no, aborta);
+#  2. Gradle y el C++ nativo van con poca memoria, prioridad baja y casi sin paralelismo (1 worker, 2 compilaciones C++);
+#  3. todo corre en un cgroup con límite duro de 4 GB: si se pasa, el kernel mata solo este build;
+#  4. oom_score_adj=1000: si aun así la máquina entera se queda sin memoria, el kernel mata primero este build.
 set -euo pipefail
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RAIZ/app"
@@ -24,20 +26,21 @@ BT="$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | sort -V | tail -1)"
 
 memoria_libre() { awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo; }
 for _ in $(seq 1 90); do
-  [ "$(memoria_libre)" -ge 5500 ] && break
-  echo "esperando memoria libre ($(memoria_libre) MB de 5500)…"; sleep 10
+  [ "$(memoria_libre)" -ge 6000 ] && break
+  echo "esperando memoria libre ($(memoria_libre) MB de 6000)…"; sleep 10
 done
-if [ "$(memoria_libre)" -lt 5500 ]; then
-  echo "ABORTO: tras 15 min no hay 5,5 GB libres. No compilo para no arriesgar un OOM." >&2; exit 4
+if [ "$(memoria_libre)" -lt 6000 ]; then
+  echo "ABORTO: tras 15 min no hay 6 GB libres. No compilo para no arriesgar un OOM." >&2; exit 4
 fi
 CONTENER=()
-if systemd-run --user --scope -q -p MemoryMax=5G true 2>/dev/null; then
-  CONTENER=(systemd-run --user --scope -q -p MemoryMax=5G -p MemorySwapMax=1G)
+if systemd-run --user --scope -q -p MemoryMax=4G true 2>/dev/null; then
+  CONTENER=(systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=1G)
 else
   echo "AVISO: no hay cgroup de usuario con límite de memoria; se compila sin él (solo con los topes de Gradle)." >&2
 fi
-export CMAKE_BUILD_PARALLEL_LEVEL=3
+export CMAKE_BUILD_PARALLEL_LEVEL=2
 
+"$RAIZ/scripts/descargar-modelo.sh"
 [ -d node_modules ] || npm ci --no-audit --no-fund
 npx tsc --noEmit
 npx expo prebuild --platform android --no-install --clean
@@ -45,8 +48,8 @@ cd android
 # Kotlin dentro del proceso de Gradle (sin daemons aparte: Expo arrastra 3 versiones de Kotlin y cada una levantaba el
 # suyo, y junto con R8 superaban los 5 GB → OOM). R8 desactivado: el APK pesa algo más, pero compila con menos memoria.
 sed -i '/^org.gradle.jvmargs=/d; /^kotlin.daemon.jvmargs=/d; /^kotlin.compiler.execution.strategy=/d; /^android.enableMinifyInReleaseBuilds=/d' gradle.properties
-printf '\norg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m\nkotlin.compiler.execution.strategy=in-process\nandroid.enableMinifyInReleaseBuilds=false\norg.gradle.workers.max=2\n' >> gradle.properties
-"${CONTENER[@]}" nice -n 10 ./gradlew assembleRelease --max-workers=2 -PreactNativeArchitectures=arm64-v8a --no-daemon
+printf '\norg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=768m\nkotlin.compiler.execution.strategy=in-process\nandroid.enableMinifyInReleaseBuilds=false\norg.gradle.workers.max=1\n' >> gradle.properties
+choom -n 1000 -- "${CONTENER[@]}" nice -n 10 ./gradlew assembleRelease --max-workers=1 -PreactNativeArchitectures=arm64-v8a --no-daemon
 
 mkdir -p "$(dirname "$SALIDA")"
 cp app/build/outputs/apk/release/app-release.apk "$SALIDA"
