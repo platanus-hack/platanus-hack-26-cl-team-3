@@ -81,6 +81,7 @@ internal fun scanIntersections(points: List<EnginePoint>, rays: List<EnginePoint
 internal class EngineMesh private constructor(
   val origin: EnginePoint,
   val adjustedParts: List<Int>,
+  val registrationCorners: List<EnginePoint>,
   private val volumes: List<Volume>
 ) {
   private data class Volume(val part: Int, val base: List<EnginePoint>, val top: List<EnginePoint>)
@@ -187,7 +188,7 @@ internal class EngineMesh private constructor(
           base = volume.base.map { it + offset },
         )
       }
-      return EngineMesh(origin, adjustedParts, attached)
+      return EngineMesh(origin, adjustedParts, corners, attached)
     }
   }
 }

@@ -58,6 +58,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   private val gl = GLSurfaceView(context)
   internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
+  @Volatile internal var outbackParts: List<String> = emptyList()
+  private val outbackModel by lazy { OutbackModel.load(context.assets) }
+  private val modelRenderer = ModelRenderer()
   private val fondo = FondoCamara()
   private val principal = Handler(Looper.getMainLooper())
   private val trabajo = Executors.newSingleThreadExecutor()
@@ -83,13 +86,14 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val promise: Promise,
   )
   private val pendingFix = AtomicReference<FixRequest?>()
-  private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh)
+  private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh, val model: PlacedModel?)
   private var placedEngine: PlacedEngine? = null
   private data class OverlayFrame(
     val points: FloatArray?,
     val borders: BooleanArray?,
     val anchored: Boolean,
     val faces: List<EngineFace>,
+    val hitFrame: ModelHitFrame?,
   )
   private val overlayFrame = AtomicReference<OverlayFrame?>()
   @Volatile private var soltarPendiente = false
@@ -310,6 +314,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   override fun onSurfaceCreated(g: GL10?, config: EGLConfig?) {
     GLES20.glClearColor(0f, 0f, 0f, 1f)
+    modelRenderer.reset()
     fondo.crear()
     texturaAsignada = false
   }
@@ -394,7 +399,21 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         bordes = bordesPrevia
       }
     }
-    val faces = if (engine != null && projector != null) {
+    val hitFrame = if (engine?.model != null) {
+      val anchor = FloatArray(16)
+      val view = FloatArray(16)
+      val projection = FloatArray(16)
+      val modelView = FloatArray(16)
+      val mvp = FloatArray(16)
+      engine.anchor.pose.toMatrix(anchor, 0)
+      camara.getViewMatrix(view, 0)
+      camara.getProjectionMatrix(projection, 0, .05f, 100f)
+      Matrix.multiplyMM(modelView, 0, view, 0, anchor, 0)
+      Matrix.multiplyMM(mvp, 0, projection, 0, modelView, 0)
+      modelRenderer.draw(engine.model, mvp, guidePart)
+      ModelHitFrame(engine.model, mvp, anchoVista, altoVista)
+    } else null
+    val faces = if (hitFrame == null && engine != null && projector != null) {
       val pose = engine.anchor.pose
       engine.mesh.project { local ->
         val world = pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
@@ -403,9 +422,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     } else emptyList()
     if (engine != null) emitGuide(frame, engine)
     // Keep only the newest projection if the UI thread misses a camera frame.
-    if (overlayFrame.getAndSet(OverlayFrame(puntos, bordes, anclado, faces)) == null) {
+    if (overlayFrame.getAndSet(OverlayFrame(puntos, bordes, anclado, faces, hitFrame)) == null) {
       principal.post {
-        overlayFrame.getAndSet(null)?.let { capa.actualizar(it.points, it.borders, it.anchored, it.faces) }
+        overlayFrame.getAndSet(null)?.let { capa.actualizar(it.points, it.borders, it.anchored, it.faces, it.hitFrame) }
       }
     }
   }
@@ -705,7 +724,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }
       placement = mesh?.let {
         val origin = it.origin
-        PlacedEngine(s.createAnchor(Pose.makeTranslation(origin.x, origin.y, origin.z)), it)
+        val ids = outbackParts
+        val model = if (ids.isEmpty()) null else PlacedModel(outbackModel, it, ids)
+        PlacedEngine(s.createAnchor(Pose.makeTranslation(origin.x, origin.y, origin.z)), it, model)
       }
     } catch (e: Exception) {
       nuevas.forEach { it.detach() }
@@ -788,7 +809,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private fun emitGuide(frame: Frame, engine: PlacedEngine) {
     val part = guidePart
     if (part < 0 || frame.timestamp - lastGuideNs < GUIDE_INTERVAL_NS) return
-    val local = engine.mesh.center(part) ?: return
+    val local = engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
     val world = engine.anchor.pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
     val view = FloatArray(16)
     val projection = FloatArray(16)
