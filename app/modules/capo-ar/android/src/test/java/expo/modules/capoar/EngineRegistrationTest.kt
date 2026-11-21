@@ -15,6 +15,27 @@ class EngineRegistrationTest {
   private val corners = listOf(29f to 36f, 131f to 36f, 29f to 124f, 131f to 124f)
 
   @Test
+  fun attachmentFollowsObservedFaceEvenWhenListedBeforeIt() {
+    val corners = listOf(
+      EnginePoint(0f, 0f, -1f), EnginePoint(1f, 0f, -1f),
+      EnginePoint(0f, 1f, -1f), EnginePoint(1f, 1f, -1f),
+    )
+    val outline = listOf(.03, .2, .2, .5, .2, .5, .5, .2, .5)
+    val rows = listOf(outline + -2.0, outline, outline)
+    fun project(mesh: EngineMesh) = mesh.project { EngineScreenPoint(it.x, it.y, 1f) }
+      .filter { !it.side }.associate { it.part to it.points.first().x }
+    val original = project(checkNotNull(EngineMesh.create(corners, rows) { 1f }))
+    val shifted = project(checkNotNull(EngineMesh.create(corners, rows, { part, face ->
+      if (part == 1) face.map { it + EnginePoint(.12f, 0f, 0f) } else null
+    }) { 1f }))
+    for (part in rows.indices) {
+      val expected = if (part == 2) 0f else .12f
+      assertEquals(expected, shifted.getValue(part) - original.getValue(part), .0001f)
+    }
+    assertNull(EngineMesh.create(corners, listOf(outline + -3.0)) { 1f })
+  }
+
+  @Test
   fun expandedScanUsesTheMeasuredTiltBeyondTheImage() {
     val outline = listOf(EnginePoint(-1f, 0f, -1f), EnginePoint(1f, 0f, -2f), EnginePoint(1f, 1f, -2f))
     val result = checkNotNull(scanIntersections(outline, listOf(EnginePoint(-2f, 0f, -1f))))

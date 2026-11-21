@@ -7,7 +7,8 @@ const observationByPart: Partial<Record<PartId, string>> = {
   washer: 'washerCap',
   dipstick: 'oilDipstick',
   oil_cap: 'oilFiller',
-  brake_fluid: 'brakeCap',
+  brake_cap: 'brakeCap',
+  radiator_cap: 'radiatorCap',
   positive: 'batteryPositiveCover',
 };
 
