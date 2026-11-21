@@ -29,7 +29,7 @@ Response `200`, `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X
 | `tool` | `{ "name": "lookup_fuses" }` | Al empezar cada `tool_use` |
 | `text` | `{ "block": 0, "text": "Primero apaga…" }` | Cada `text_delta`. `block` cuenta los bloques de texto del turno y crece entre vueltas del bucle |
 | `citation` | `{ "block": 0, "title": "...", "source": "...", "cited_text": "..." }` | Cada `citations_delta`; pertenece a ese `block` |
-| `done` | `{ "messages": [ /* mensajes nuevos del turno, en orden */ ] }` | `end_turn`. Son los mensajes del asistente y los `tool_result`, **sin modificar**; el cliente los agrega a su historial |
+| `done` | `{ "messages": [ /* mensajes nuevos del turno, en orden */ ], "truncated"?: true }` | Fin del turno (`end_turn`, `stop_sequence` o `max_tokens` sin `tool_use`). Son los mensajes del asistente y los `tool_result`, **sin modificar**; el cliente los agrega a su historial. `truncated: true` si se cortó por `max_tokens` |
 | `error` | `{ "code": "refusal" \| "provider" \| "credit" \| "limit" \| "internal", "message": "..." }` | Termina el stream. `message` va en español: la app lo muestra tal cual |
 
 Códigos de `error`:
@@ -42,8 +42,12 @@ Códigos de `error`:
 
 Errores antes del stream:
 
-- `400 { "error": "..." }`: falta `messages`, el último no es `role: "user"`, hay más de 40 mensajes o `profile_id` no existe.
+- `400 { "error": "..." }`: URL inválida, falta `messages`, el último no es `role: "user"` o `profile_id` no existe. Con más de 200 mensajes el error es «La conversación está muy larga. Toca «Nueva conversación».».
+- `401 { "error": "..." }`: el servidor tiene `CHAT_TOKEN` y el header `x-chat-token` no coincide. Si `CHAT_TOKEN` no está definido, no se exige.
+- `413 { "error": "..." }`: cuerpo de más de 1 MB.
 - `500 { "error": "Falta OPENROUTER_API_KEY" }`.
+
+Durante el stream, el servidor manda un comentario `: ping` cada 15 s para que Cloudflare no corte la conexión; el cliente lo ignora.
 
 ### `GET /api/health`
 
@@ -128,6 +132,25 @@ Se corren con `cd api && npm test` (más `npm run typecheck`) y `cd app && npx t
 - **Servidor local:** `cd api && OPENROUTER_API_KEY=… npm start` y `curl -N -X POST localhost:8787/api/chat -H 'content-type: application/json' -d '{"messages":[{"role":"user","content":"se me quedó abajo la ventana del conductor"}]}'`. Llegan `tool`, `text`, `citation` y `done`. Si las citas no pasan por OpenRouter, avisar antes de seguir (estrategia de marcadores, `docs/diseno/chat.md` §9).
 - **APK:** compilar con `EXPO_PUBLIC_API_URL` apuntando al servidor por HTTPS. El texto llega de a poco, los chips abren la cita y el historial sigue después de cerrar la app.
 - **Imagen api:** `docker build ./api` y el healthcheck queda `healthy`.
+
+## Ajustes tras la review (Fable 5.2)
+
+- **Sin reintentos:** si el stream falla, el turno termina con `error`. El SDK ya reintenta 429/5xx antes de abrir el stream.
+- **Errores del proveedor:** el mensaje al usuario es fijo y en español («El proveedor del modelo falló. Inténtalo de nuevo.»). El detalle va a `console.error`; ningún `catch` traga el error sin log.
+- **Facturación:** HTTP 402 o `error.type === "billing_error"` se traducen a `credit`.
+- **Cancelación:** si el cliente se desconecta, se aborta la llamada al modelo (`AbortController` → `signal` del SDK).
+- **`lookup_fuses`:** la descripción explica que los circuitos usan la sigla del manual (`P/W` = alzavidrios / power window). El filtro numérico compara el número exacto. El `title` del resultado nombra la fuente (`source` de `fuses.json`).
+- **System prompt:** pide texto plano, sin markdown.
+- **App:**
+  - el placeholder dice «Escribe tu pregunta»;
+  - los textos de vueltas distintas se muestran como párrafos separados;
+  - una respuesta del asistente sin ninguna cita lleva la marca «Sin cita del manual»;
+  - `truncated` muestra «La respuesta se cortó.»;
+  - el envío usa un ref, así que no se mandan dos turnos con un doble toque;
+  - no se puede enviar hasta que cargue el historial;
+  - enviar desde el teclado funciona con el input multilínea (`submitBehavior="submit"`);
+  - manda `x-chat-token` si existe `EXPO_PUBLIC_CHAT_TOKEN`.
+- **CI:** corre los tests y el typecheck de `api/`, construye su imagen y revisa `/api/health`.
 
 ## Fuera de alcance en esta fase
 

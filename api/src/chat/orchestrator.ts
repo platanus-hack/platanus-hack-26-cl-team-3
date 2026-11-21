@@ -9,6 +9,7 @@ export interface AdapterArgs {
   system: string;
   tools: ToolUnion[];
   messages: MessageParam[];
+  signal?: AbortSignal;
 }
 
 export type Adapter = (args: AdapterArgs) => AsyncGenerator<ChatEvent, Message>;
@@ -19,10 +20,10 @@ export interface TurnArgs {
   adapter: Adapter;
   tools: ToolRegistry;
   system?: string;
+  signal?: AbortSignal;
 }
 
 const MAX_ROUNDS = 6;
-const MAX_RETRIES = 2;
 
 const error = (code: ErrorCode, message: string): ChatEvent => ({ event: "error", data: { code, message } });
 
@@ -38,7 +39,8 @@ async function runTool(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolResu
     const result: ToolResultBlockParam = { type: "tool_result", tool_use_id: use.id, content: r.content };
     if (r.is_error) result.is_error = true;
     return result;
-  } catch {
+  } catch (e) {
+    console.error(e);
     return errorResult(use.id, "Error al ejecutar la herramienta.");
   }
 }
@@ -48,28 +50,21 @@ async function* round(
   args: AdapterArgs,
   offset: number,
 ): AsyncGenerator<ChatEvent, { message: Message; blocks: number }> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const it = adapter(args)[Symbol.asyncIterator]();
-      let maxBlock = -1;
-      for (;;) {
-        const { value, done } = await it.next();
-        if (done) return { message: value, blocks: maxBlock + 1 };
-        if (value.event === "text" || value.event === "citation") {
-          maxBlock = Math.max(maxBlock, value.data.block);
-          yield { ...value, data: { ...value.data, block: value.data.block + offset } } as ChatEvent;
-        } else {
-          yield value;
-        }
-      }
-    } catch (e) {
-      if (e instanceof ProviderError) throw e;
-      if (attempt >= MAX_RETRIES) throw e;
+  const it = adapter(args)[Symbol.asyncIterator]();
+  let maxBlock = -1;
+  for (;;) {
+    const { value, done } = await it.next();
+    if (done) return { message: value, blocks: maxBlock + 1 };
+    if (value.event === "text" || value.event === "citation") {
+      maxBlock = Math.max(maxBlock, value.data.block);
+      yield { ...value, data: { ...value.data, block: value.data.block + offset } } as ChatEvent;
+    } else {
+      yield value;
     }
   }
 }
 
-export async function* runTurn({ messages, profile, adapter, tools, system = SYSTEM_PROMPT }: TurnArgs): AsyncGenerator<ChatEvent> {
+export async function* runTurn({ messages, profile, adapter, tools, system = SYSTEM_PROMPT, signal }: TurnArgs): AsyncGenerator<ChatEvent> {
   const history = [...messages];
   const fresh: MessageParam[] = [];
   const definitions = Object.values(tools).map((t) => t.definition);
@@ -77,7 +72,8 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
 
   try {
     for (let n = 0; n < MAX_ROUNDS; n++) {
-      const g = round(adapter, { profile, system, tools: definitions, messages: [...history] }, offset);
+      if (signal?.aborted) return;
+      const g = round(adapter, { profile, system, tools: definitions, messages: [...history], signal }, offset);
       let r: { message: Message; blocks: number };
       for (;;) {
         const { value, done } = await g.next();
@@ -107,7 +103,7 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
         return;
       }
       if (message.stop_reason !== "tool_use") {
-        yield { event: "done", data: { messages: fresh } };
+        yield { event: "done", data: message.stop_reason === "max_tokens" ? { messages: fresh, truncated: true } : { messages: fresh } };
         return;
       }
 
@@ -118,7 +114,11 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
     }
     yield error("limit", "Demasiadas vueltas de herramientas en un solo turno.");
   } catch (e) {
-    if (e instanceof ProviderError) yield error(e.code, e.message);
-    else yield error("internal", "Error interno.");
+    if (e instanceof ProviderError) {
+      yield error(e.code, e.message);
+    } else {
+      console.error(e);
+      yield error("internal", "Error interno.");
+    }
   }
 }

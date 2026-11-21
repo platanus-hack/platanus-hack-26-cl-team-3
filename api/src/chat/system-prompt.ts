@@ -10,5 +10,6 @@ Seguridad: antes de tocar fusibles o piezas eléctricas, pide apagar el contacto
 
 Si falta un dato para responder bien (qué ventana, desde cuándo), pregúntalo en una línea.
 
-Respuestas: pasos numerados, cortos, en español de Chile, tratando de tú. El aviso legal lo muestra
+Respuestas: pasos numerados, cortos, en español de Chile, tratando de tú. Escribe en texto plano, sin
+markdown (sin asteriscos, almohadillas ni viñetas con guiones). El aviso legal lo muestra
 la app; no lo repitas.`;

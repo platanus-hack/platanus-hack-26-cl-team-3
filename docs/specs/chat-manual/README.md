@@ -15,7 +15,7 @@ Diagrama: [`docs/arquitectura/chat-manual.html`](../../arquitectura/chat-manual.
 |---|---|---|
 | Dónde corre el bucle | Servicio `api` en el `docker-compose.yml` de `dev`. Traefik manda `Host(...) && PathPrefix(/api)` al contenedor | Todo en el APK: la key quedaba dentro de la app |
 | Proveedor | OpenRouter, «Anthropic Skin» (`https://openrouter.ai/api`), con el SDK `@anthropic-ai/sdk` en el servidor | Formato OpenAI de OpenRouter: obliga a reescribir el adaptador y las citas |
-| Servidor | `node:http` en JavaScript ESM, sin build. Única dependencia: el SDK. Tests con `node --test` | Express/Hono/Next: más piezas para 2 endpoints |
+| Servidor | `node:http` en TypeScript, corre con `tsx` (sin build). Dependencias: el SDK y `tsx`. Tests con `tsx --test`, typecheck con `tsc` | Express/Hono/Next: más piezas para 2 endpoints |
 | Herramientas | Registro declarativo `{nombre → {definicion, ejecutar}}` | `if (nombre === …)` dentro del bucle |
 | Modelos | `api/src/llm/profiles.ts`; el selector llega en la fase 3 | Almacén + pantalla de ajustes (después, si hace falta) |
 | App | Pantalla expo-router `ask.tsx` con el kit de `src/ui.tsx`. SSE con `expo/fetch` e historial en AsyncStorage | Librería SSE para RN: una dependencia más |
@@ -41,7 +41,7 @@ Chat: «se me quedó abajo la ventana»
   → respuesta con pasos + tarjeta «Abrir cámara: caja de fusibles del motor»
 Cámara (/escanear): arriba, la instrucción del paso; abajo, «Volver al chat»
   → el usuario saca el extractor y el repuesto
-Chat (/preguntar): mismo historial + respuestas rápidas «Listo, ¿qué sigue?» / «No lo encuentro»
+Chat (/ask): mismo historial + respuestas rápidas «Listo, ¿qué sigue?» / «No lo encuentro»
   → el modelo sigue con el paso siguiente
 ```
 
