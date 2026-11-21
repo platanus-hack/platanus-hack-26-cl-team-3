@@ -87,6 +87,12 @@ class CapoArModule : Module() {
         view.guidePart = index ?: -1
       }
 
+      Prop("hudParts") { view: CapoArView, rows: List<List<String>>? -> view.capa.setHudParts(rows.orEmpty()) }
+
+      Prop("hudArea") { view: CapoArView, area: List<Double>? ->
+        view.capa.setHudArea(area?.getOrNull(0)?.toFloat() ?: 0f, area?.getOrNull(1)?.toFloat() ?: 0f)
+      }
+
       AsyncFunction("capturar") { view: CapoArView, includeMeasurements: Boolean?, promise: Promise ->
         view.capturar(includeMeasurements ?: true, promise)
       }

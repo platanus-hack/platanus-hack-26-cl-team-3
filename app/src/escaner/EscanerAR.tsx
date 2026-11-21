@@ -13,12 +13,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
+import { hudPart } from '../engine-maps/hud';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, extendsPartialMap, encodeVolumes, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../engine-maps/registration';
@@ -41,6 +43,7 @@ const VISTAS_PARA_FIJAR = 5; // cuadros del escaneo antes de fijar solo
 const ACUERDO_MINIMO = 0.5; // coincidencia mínima entre el contorno del escaneo y lo que se ve en el cuadro actual
 const CAMBIO_ESTABLE = 0.08; // el contorno del escaneo «dejó de cambiar» si su área varía menos que esto
 const CALCE_BAJO = 0.5;
+const ALTO_BARRA = 60; // dp que ocupa la barra superior bajo la zona segura: las etiquetas del HUD van más abajo
 
 const plano = (v: Vano) => v.esquinas.flatMap((e) => [e.x, e.y]);
 const pares = (c: number[]) => Array.from({ length: c.length / 2 }, (_, k) => ({ x: c[2 * k], y: c[2 * k + 1] }));
@@ -61,6 +64,10 @@ function resumenAnclaje(a: ResultadoFijar): string {
 export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
+  const hudParts = useMemo(() => map ? map.volumes.map(({ part }) => hudPart(part)) : [], [map]);
+  const insets = useSafeAreaInsets();
+  const [panelTop, setPanelTop] = useState(0);
+  const hudArea = useMemo(() => [insets.top + ALTO_BARRA, panelTop] as const, [insets.top, panelTop]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
@@ -482,7 +489,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
               : corrido
                 ? 'El anclaje parece corrido respecto de lo que veo ahora. Ponte frente al auto, apunta al vano completo y toca Recalibrar.'
               : mapTracking
-                ? 'Toca una pieza del motor. Si el mapa se corre, ponte frente al auto y toca Recalibrar.'
+                ? 'Toca una pieza o su etiqueta. Si el mapa se corre, ponte frente al auto y toca Recalibrar.'
                 : map
                   ? 'Faltan medidas para colocar las piezas. Muévete despacio, apunta al vano completo y toca Recalibrar.'
                   : 'Recorre el motor. El contorno se mantiene sobre el vano.'}
@@ -597,6 +604,8 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         style={StyleSheet.absoluteFill}
         debug={debug}
         selectedPart={selectedIndex}
+        hudParts={hudParts}
+        hudArea={hudArea}
         onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
@@ -614,7 +623,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
       )}
       {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
       <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
-      <Panel>{panel}</Panel>
+      <Panel onLayout={(e) => setPanelTop(e.nativeEvent.layout.y)}>{panel}</Panel>
     </View>
   );
 }

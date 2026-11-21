@@ -19,7 +19,7 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | 4 | Encuentra el vano | Listo | En los videos del Outback real lo marca en todos los cuadros | — |
 | 5 | Lo ancla en 3D | Hecho, sin probar en el teléfono | El anclaje funcionó sobre el auto. El escaneo por varias vistas, que arma el vano cuando no cabe en el cuadro, solo se verificó compilando | A |
 | 6 | Ubica cada pieza | A medias | Plantilla del catálogo más un ajuste por apariencia que corre en el teléfono, solo para el Outback (PR #21). Sin error medido en cm sobre el auto (#17) | A, E |
-| 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. Una flecha lleva hasta la pieza y avisa al encontrarla (fase C, sin probar en el teléfono). No oscurece el resto ni sigue el contorno real | B, F, A |
+| 7 | Resalta solo esa pieza | A medias | HUD dibujado con Canvas: cada pieza va rellena con el color de su familia y tiene una etiqueta con ícono unida por una línea; la elegida queda en blanco con un aro que late. Chips en el panel. Una flecha lleva hasta la pieza y avisa al encontrarla (fase C). Todo sin probar en el teléfono. No oscurece el resto ni sigue el contorno real | B, F, A |
 | 8 | Guía el paso y vuelve al chat | A medias | La cámara muestra la instrucción y «Volver al chat», y el chat ofrece «Listo, ¿qué sigue?». Los procedimientos por pasos no existen | G |
 
 Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
@@ -39,6 +39,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Clave común:** `PartId` de `app/src/engine-maps/catalog.ts` (`fuses`, `washer`, `dipstick`, `coolant`, `air_filter`, `oil_cap`, `brake_fluid`, `battery`, `positive`).
 - **D → cámara:** evento SSE `ar { part, instruction }` → `/escanear?vehicleId=…&part=…`. Es aditivo sobre el contrato del chat.
 - **Cámara → B:** la prop nativa `selectedPart`, que ya existe. B cambia cómo se dibuja, no cómo se elige.
+- **Cámara → HUD:** las props nativas `hudParts` (una fila por volumen: nombre, color e ícono; salen de `app/src/engine-maps/hud.ts`) y `hudArea` (zona libre entre la barra superior y el panel, donde van las etiquetas).
 - **Nativo → C:** evento `onGuia { part, x, y, visible, distance }`, unas 10 veces por segundo, con la pieza elegida en pantalla y su distancia al teléfono. Aquí `part` es el índice del volumen, igual que en `selectedPart`. Detalle en [`specs/guiado-espacial/fase-1.md`](specs/guiado-espacial/fase-1.md).
 - **E → cámara:** `POST /api/locate { image, parts }` → `{ parts: { [part]: { point: [x, y], mask?: [[x, y], …] } | null } }`. `null` = se usa la ubicación de hoy.
 - **J → menú:** `POST /api/identify { image }` → `{ vehicleId: string | null, variant?: string }`, con `vehicleId` de `app/src/vehicles.ts`. `null` = no lo reconoce y se elige a mano.
@@ -53,6 +54,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 **B · Foco de luz** — parte hoy.
 - La pieza elegida queda a color; el resto se oscurece y pierde saturación, con borde suave y transición animada. Anillo y etiqueta sobre la pieza. Los prismas pasan al modo debug.
 - Se dibuja en el mismo pase de GL que la cámara, no en Canvas ni en JS, para que la marca no vaya un cuadro atrás.
+- **Ya está (HUD de piezas):** el anillo y la etiqueta sobre la pieza, en Canvas (`CapaPoligono.kt` y `HudPiezas.kt`), con un velo azul parejo sobre toda la cámara. A B le queda oscurecer solo el resto, en el pase de GL, y decidir si los prismas pasan a debug.
 - **Zona:** `FondoCamara.kt` (shader), `CapaPoligono.kt` y el paso de la máscara en `CapoArView.kt`.
 - **Listo cuando:** tocar un chip deja solo esa pieza iluminada y la marca no tiembla al mover el teléfono.
 - **No cubre:** la forma sigue siendo la del prisma del catálogo, no el contorno real (F).

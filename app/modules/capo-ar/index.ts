@@ -100,6 +100,10 @@ export type ResultadoEscaneo = {
 export type VistaARProps = ViewProps & {
   debug?: boolean;
   selectedPart?: number;
+  /** Una fila por pieza, en el orden de los volúmenes: [nombre, color #RRGGBB, ícono (trazado SVG de 24 × 24)]. */
+  hudParts?: readonly (readonly [string, string, string])[];
+  /** Zona libre para las etiquetas: [arriba, abajo] en dp desde el borde superior de la vista. */
+  hudArea?: readonly [number, number];
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;
   onGuia?: (e: NativeSyntheticEvent<GuiaAR>) => void;

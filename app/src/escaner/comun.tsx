@@ -2,7 +2,7 @@
 import { File } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CONFIANZA_MIN } from '../detector/vano';
@@ -103,9 +103,9 @@ export function PantallaPermiso({ puedePreguntar, pedir }: { puedePreguntar: boo
 }
 
 /** Panel inferior translúcido. */
-export function Panel({ children }: { children: ReactNode }) {
+export function Panel({ children, onLayout }: { children: ReactNode; onLayout?: (e: LayoutChangeEvent) => void }) {
   const insets = useSafeAreaInsets();
-  return <View style={[estilos.panel, { marginBottom: insets.bottom + espacio.l }]}>{children}</View>;
+  return <View onLayout={onLayout} style={[estilos.panel, { marginBottom: insets.bottom + espacio.l }]}>{children}</View>;
 }
 
 export function Encabezado({ icono, tono, titulo, cargando }: { icono?: NombreIcono; tono?: string; titulo: string; cargando?: boolean }) {
