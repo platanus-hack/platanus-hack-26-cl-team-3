@@ -2,6 +2,7 @@
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
 > Estado (21-11-2026): **MVP inicial** (hackathon). El resumen para el mentor está en [`docs/brief.md`](docs/brief.md).
+> **Qué falta y quién toma qué:** el plan por fases está en [`docs/plan.md`](docs/plan.md).
 > - **App** (`app/`, Expo + React Native + expo-router): menú principal, aviso obligatorio y selección de vehículo (8 modelos).
 > - **Escáner:** en el teléfono detecta el **contorno del vano del motor**, con sus esquinas y un modo debug (CLIPSeg con decodificador propio). Ver `herramientas/vano-motor/`. El contorno queda **anclado al auto con ARCore**: se reconoce una vez y queda fijo al mover el teléfono, con un botón Recalibrar.
 > - **Piezas en AR:** sobre el vano anclado se proyectan las **piezas del auto elegido** (`app/src/engine-maps/`). Falta calibrarlas en el auto real (#17).
