@@ -156,7 +156,7 @@ Es la parte más incierta. Evidencia disponible:
 
 El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por OpenRouter. La key vive solo en el servidor.
 
-1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `OPENROUTER_API_KEY` en el entorno del host. En local: `cd api && npm ci && OPENROUTER_API_KEY=… node server.js` (puerto 8787). Tests: `cd api && npm test`.
+1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `OPENROUTER_API_KEY` en el entorno del host. En local: `cd api && npm ci && OPENROUTER_API_KEY=… npm start` (puerto 8787). Tests: `cd api && npm test`.
 2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
 
 ## 10. Futuro (fuera del MVP)
