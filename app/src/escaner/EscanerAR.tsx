@@ -4,9 +4,7 @@
  *
  * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado). Si el vano se ve chico
  *    (auto lejos, o una foto del auto completo en una pantalla) el análisis hace zoom solo (detector/encuadre.ts).
- * 2. Cuando la detección es estable (contorno válido, completo en la imagen, ARCore siguiendo el movimiento y con
- *    medidas de profundidad, 3 análisis seguidos) —o el usuario toca «Fijar ahora»— se ancla. El módulo nativo usa
- *    el mapa de profundidad completo (miles de puntos): plano si la superficie es plana, relieve si no.
+ * 2. Vehicle maps use the first usable tracked detection, with measured or estimated depth.
  * 3. Anclado: el contorno o el mapa de piezas se dibuja en nativo en cada cuadro con la pose actual del teléfono.
  *    - Cada pocos segundos se compara el contorno anclado con una detección nueva («calce», 0-100 %): mide cuánto se
  *      corrió. Si baja mucho, se sugiere recalibrar.
@@ -132,8 +130,6 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
-    let stableCorners: number[] = [];
-    let previousCenters: PartCenter[] = [];
     let validos = 0;
     let total = 0;
     const puntajeCapo = new PuntajeCapo();
@@ -150,63 +146,58 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
           captureUri = cap.uri;
           const r = await analizarFoto(cap.uri, recorte);
           if (!vivo) break;
-          const freshBay = volumes.length ? completeBay(poligonoVano(frameMask.agregar(r.vano)), recorte) : null;
+          const detection = volumes.length ? poligonoVano(frameMask.agregar(r.vano)) : null;
           const e = encuadre.procesar(poligonoVano(suavizador.agregar(r.vano)));
           if (e.cambio) suavizador.reiniciar(); // el próximo análisis mira otro recorte: no se mezclan
           const v = e.vano; // en coordenadas del cuadro completo
           const valido = e.valido && !!v;
-          await ar.current?.mostrarVista(valido && v ? plano(v) : [], valido && v ? v.esquinas.map((q) => q.borde) : [], cap.grados);
-          const corners = freshBay ? registrationCorners(freshBay) : [];
-          const candidateBay = volumes.length
-            ? (corners.length === 8 && cap.registrationMeasurements ? freshBay : null)
-            : (valido ? v : null);
+          let candidateBay = vanoValido(detection) ? aCuadroCompleto(detection, recorte) : (valido ? v : null);
+          if (candidateBay && detection?.cortado && recorte.lado < 1) {
+            // The same JPEG may contain the missing portion outside the search crop.
+            try {
+              const wide = await analizarFoto(cap.uri, COMPLETO);
+              const full = poligonoVano(frameMask.agregar(wide.vano));
+              if (vanoValido(full) && full.area > candidateBay.area
+                && iouPoligonos(candidateBay.esquinas, full.esquinas) >= .6 * candidateBay.area / full.area) {
+                candidateBay = full;
+              }
+            } catch {
+              // The original detection remains usable.
+            }
+            if (!vivo) break;
+          }
+          await ar.current?.mostrarVista(candidateBay ? plano(candidateBay) : [], candidateBay?.esquinas.map(q => q.borde) ?? [], cap.grados);
           const candidate = candidateBay && cap.rastreando
             ? { capture: cap, bay: candidateBay, centers: [] as PartCenter[] }
             : null;
-          const autoReady = candidate && !candidate.bay.cortado
-            && (volumes.length > 0 || !cap.profundidad || cap.puntos >= CONTOUR_AUTO_DEPTH_POINTS);
-          if (!autoReady) {
-            seguidos = 0;
-            stableCorners = [];
-          } else if (volumes.length && !sameRegistrationView(stableCorners, corners)) {
-            stableCorners = corners;
-            seguidos = 1;
-          } else {
-            seguidos += 1;
-          }
-          if (candidate && seguidos >= ESTABLES_PARA_FIJAR - 1) {
-            const observed = await lookForPartCenters(cap, candidate.bay);
+          const contourReady = candidate && !candidate.bay.cortado
+            && (!cap.profundidad || cap.puntos >= CONTOUR_AUTO_DEPTH_POINTS);
+          seguidos = contourReady ? seguidos + 1 : 0;
+          if (candidate && volumes.length) {
+            candidate.centers = await lookForPartCenters(cap, candidate.bay);
             if (!vivo) break;
-            candidate.centers = confirmedPartCenters(previousCenters, observed, candidate.bay, cap.alto / cap.ancho);
-            previousCenters = observed;
-          } else {
-            previousCenters = [];
           }
           total += 1;
           if (valido) validos += 1;
           fallos = 0;
           setCapo(puntajeCapo.agregar(r.puntaje).media);
-          setVano(v);
-          setValido(valido);
+          setVano(candidateBay ?? v);
+          setValido(!!candidateBay);
           setZoom(1 / recorte.lado);
           setTasa({ validos, total });
           setUltima(cap);
           setRegistrationCandidate(candidate);
           setEstables(seguidos);
           setMs(Date.now() - t0);
-          if (candidate && seguidos >= ESTABLES_PARA_FIJAR) {
+          if (candidate && (volumes.length || seguidos >= ESTABLES_PARA_FIJAR)) {
             if (await fijar(candidate.capture, candidate.bay, candidate.centers)) break;
             seguidos = 0;
-            stableCorners = [];
-            previousCenters = [];
             setRegistrationCandidate(null);
             await esperar(500);
           }
         } catch (e) {
           if (!vivo) break;
           seguidos = 0;
-          stableCorners = [];
-          previousCenters = [];
           setRegistrationCandidate(null);
           setEstables(0);
           fallos += 1;
@@ -274,7 +265,6 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     ocupado.current = true;
     setRecalibrando(true);
     setAviso(null);
-    const preserveRefinement = Boolean(anclaje?.adjustedParts?.length);
     try {
       let previousCenters: PartCenter[] = [];
       let previousCorners: number[] = [];
@@ -291,21 +281,15 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
             previousCorners = [];
             continue;
           }
-          const v = volumes.length ? completeBay(detection, recorte) : aCuadroCompleto(detection, recorte);
-          const corners = v && volumes.length ? registrationCorners(v) : [];
-          if (!v || (volumes.length && (!cap.registrationMeasurements || corners.length !== 8))
-            || detection.esquinas.some((corner, index) => corner.borde && !v.esquinas[index].borde)) {
-            previousCenters = [];
-            previousCorners = [];
-            continue;
-          }
+          const v = aCuadroCompleto(detection, recorte);
+          const corners = volumes.length ? registrationCorners(v) : [];
           const observed = await lookForPartCenters(cap, v);
           const centers = sameRegistrationView(previousCorners, corners)
             ? confirmedPartCenters(previousCenters, observed, v, cap.alto / cap.ancho)
             : [];
           previousCenters = observed;
           previousCorners = corners;
-          if (!centers.length && (preserveRefinement || (observed.length && i < INTENTOS_RECALIBRAR - 1))) continue;
+          if (!centers.length && observed.length && i < INTENTOS_RECALIBRAR - 1) continue;
           try {
             setAnclaje(await ar.current.fijar(cap.id, plano(v), corners, volumes, centers));
             setCalce(null);
@@ -472,10 +456,10 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
             ? 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno.'
             : !detectado
               ? 'Párate frente al parachoques y apunta hacia abajo para que se vea el vano completo.'
+              : map ? 'Alineando el mapa con la parte visible del vano…'
               : vano?.cortado
                 ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
-                : (map && !ultima?.registrationMeasurements)
-                  || (!map && ultima?.profundidad && ultima.puntos < CONTOUR_AUTO_DEPTH_POINTS)
+                : ultima?.profundidad && ultima.puntos < CONTOUR_AUTO_DEPTH_POINTS
                   ? 'Párate frente al auto y muévete despacio para que la cámara mida el vano.'
                   : `Desde el frente, mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>

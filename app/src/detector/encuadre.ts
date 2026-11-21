@@ -42,7 +42,9 @@ export function recorteAlrededor(puntos: { x: number; y: number }[], factor = 1.
 }
 
 // La pantalla muestra la franja central de la captura y el panel tapa la parte de abajo: el usuario encuadra arriba del centro.
-const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4)];
+const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4),
+  ...[.3, .7].flatMap(y => [.3, .7].map(x => recorteCentrado(x, y, .6))),
+];
 
 /** Pasa un vano detectado dentro de `r` a coordenadas del cuadro completo. */
 export function aCuadroCompleto(v: Vano, r: Recorte): Vano {

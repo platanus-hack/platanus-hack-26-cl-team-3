@@ -86,7 +86,7 @@ internal class AnclajeDenso(
   private val pts: List<FloatArray>,
   private val plano: PlanoAjustado?,
   private val plana: Boolean,
-  private val insideBay: Boolean,
+  val insideBay: Boolean,
   val mediana: Float, // m: distancia mediana
   private val radio: Float
 ) {

@@ -15,6 +15,16 @@ class EngineRegistrationTest {
   private val corners = listOf(29f to 36f, 131f to 36f, 29f to 124f, 131f to 124f)
 
   @Test
+  fun estimatedPlaneSupportsSmallTargetsOnVerticalScreens() {
+    val corners = listOf(
+      EnginePoint(-.04f, .03f, -1f), EnginePoint(.04f, .03f, -1f),
+      EnginePoint(-.04f, -.03f, -1f), EnginePoint(.04f, -.03f, -1f),
+    )
+    val rows = listOf(listOf(.05, .1, .1, .9, .1, .9, .9, .1, .9))
+    assertNotNull(EngineMesh.create(corners, rows, estimatedPlane = true) { -it.z })
+  }
+
+  @Test
   fun measuredPointsFollowReferenceThroughWorldCorrections() {
     val reference = Pose.makeTranslation(1f, .6f, 1f)
     val camera = Pose.makeTranslation(1.5f, 1.9f, 2.1f)
@@ -78,14 +88,14 @@ class EngineRegistrationTest {
   }
 
   @Test
-  fun meshAcceptsShallowReliefAndRejectsVerticalOrWarpedBays() {
+  fun meshAcceptsVerticalAndShallowSurfacesAndRejectsWarpedBays() {
     val parts = listOf(listOf(.06, .15, .2, .42, .2, .42, .48, .15, .48))
     val worldCorners = listOf(
       EnginePoint(-.7f, .14f, -.48f), EnginePoint(.7f, .12f, -.48f),
       EnginePoint(-.66f, .02f, .46f), EnginePoint(.66f, .04f, .46f),
     )
     assertNotNull(EngineMesh.create(worldCorners, parts) { 1f })
-    assertNull(EngineMesh.create(worldCorners.map { EnginePoint(it.x, it.z + .8f, 0f) }, parts) { 1f })
+    assertNotNull(EngineMesh.create(worldCorners.map { EnginePoint(it.x, it.z + .8f, 0f) }, parts) { 1f })
     val warped = listOf(
       EnginePoint(-.6f, 0f, 0f), EnginePoint(.6f, 0f, 0f),
       EnginePoint(-.6f, -1.1f, 1f), EnginePoint(.6f, 0f, .5f),

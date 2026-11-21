@@ -189,3 +189,18 @@ assert.ok(faceOverlap(face, shiftFace(25)) < .60);
 assert.equal(faceOverlap(tiny(face), tiny(shiftFace(18))), faceOverlap(face, shiftFace(18)));
 assert.equal(faceOverlap([{ x: 1, y: 2 }], [{ x: 1, y: 5 }]), 0);
 console.log('23 ok: nearby battery outlines must occupy the same surface at any image scale');
+
+// A clipped bay and a distant target can still supply an image-plane footprint.
+assert.equal(registrationCorners(clippedByCrop).length, 8);
+assert.equal(registrationCorners(aCuadroCompleto(vRec, { x: .8, y: .2, lado: .1 })).length, 8);
+const search = new Encuadre();
+const searched = Array.from({ length: 7 }, () => {
+  const crop = search.recorte();
+  search.procesar(null);
+  return crop;
+});
+for (const x of [.05, .95]) for (const y of [.05, .95]) {
+  assert.ok(searched.some(c => c.lado < 1 && x >= c.x && x <= c.x + c.lado && y >= c.y && y <= c.y + c.lado));
+}
+assert.equal(search.recorte(), COMPLETO);
+console.log('24 ok: partial registration and off-center search');

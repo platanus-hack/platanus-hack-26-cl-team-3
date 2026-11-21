@@ -21,7 +21,6 @@ const bank = Object.fromEntries(Object.entries(referenceData.descriptors).map(([
 export function solveOutbackParts(
   features: Float32Array, width: number, height: number, bay: Vano, volumes: readonly Volume[],
 ): PartCenter[] {
-  if (bay.cortado) return [];
   const xs = bay.esquinas.map((q) => q.x);
   const ys = bay.esquinas.map((q) => q.y);
   const bounds: [Point, Point] = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];

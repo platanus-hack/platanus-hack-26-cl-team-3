@@ -1,6 +1,5 @@
 package expo.modules.capoar
 
-import kotlin.math.abs
 import kotlin.math.sqrt
 
 internal data class EnginePoint(val x: Float, val y: Float, val z: Float) {
@@ -102,23 +101,24 @@ internal class EngineMesh private constructor(
       corners: List<EnginePoint>,
       rows: List<List<Double>>,
       refineFace: ((Int, List<EnginePoint>) -> List<EnginePoint>?)? = null,
+      estimatedPlane: Boolean = false,
       captureDepth: (EnginePoint) -> Float,
     ): EngineMesh? {
       if (corners.size != 4 || rows.isEmpty()) return null
       val (backLeft, backRight, frontLeft, frontRight) = corners
       val width = ((backRight - backLeft).length() + (frontRight - frontLeft).length()) / 2
       val depth = ((frontLeft - backLeft).length() + (frontRight - backRight).length()) / 2
-      if (width !in .35f..2.8f || depth !in .15f..2.4f) return null
+      if (!estimatedPlane && (width !in .35f..2.8f || depth !in .15f..2.4f)) return null
       val first = (backRight - backLeft).cross(frontLeft - backLeft)
       val second = (frontLeft - frontRight).cross(backRight - frontRight)
       val firstArea = first.length()
       val secondArea = second.length()
-      // Check both halves so one misplaced corner cannot hide behind their average slope.
-      // World Y follows gravity. The two triangles must have consistent slopes and winding.
-      if (firstArea < .01f || secondArea < .01f || first.y * second.y <= 0f ||
-        abs(first.y) / firstArea < .55f || abs(second.y) / secondArea < .55f ||
-        first.dot(second) / (firstArea * secondArea) < .65f
-      ) return null
+      if (firstArea <= 0f || secondArea <= 0f) return null
+      val agreement = first.dot(second) / (firstArea * secondArea)
+      if (!agreement.isFinite() || agreement < .65f) return null
+      if (!estimatedPlane && (firstArea < .01f || secondArea < .01f)) return null
+      val normal = first + second
+      val outward = normal * (-1f / normal.length())
       val origin = (backLeft + backRight + frontLeft + frontRight) * .25f
       val opticalDepths = corners.map(captureDepth)
       if (opticalDepths.any { !it.isFinite() || it < .05f }) return null
@@ -143,7 +143,7 @@ internal class EngineMesh private constructor(
           correctedFace.map { it - origin }
         } else initialTop
         // Height extends below the traced face and is a fraction of the measured bay width.
-        val rise = EnginePoint(0f, width * row.first().toFloat(), 0f)
+        val rise = outward * (width * row.first().toFloat())
         Volume(part, top.map { it - rise }, top)
       }
       return EngineMesh(origin, adjustedParts, volumes)

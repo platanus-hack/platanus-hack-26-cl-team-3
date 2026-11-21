@@ -44,7 +44,6 @@ export function releaseOutbackEncoder(): void {
 export async function locateOutbackParts(
   capture: CapturaAR, bay: Vano, volumes: readonly Volume[],
 ): Promise<PartCenter[]> {
-  if (bay.cortado) return [];
   activeReads += 1;
   try {
     const bytes = await new File(capture.uri).bytes();

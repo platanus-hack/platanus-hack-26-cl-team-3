@@ -526,13 +526,21 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         }
       } else null
 
+    val targetDepth = densa?.takeIf { it.insideBay }?.mediana ?: dentro.map { hit ->
+      hit[2] / intrinsics.ray(EngineImagePoint(hit[0], hit[1])).length()
+    }.sorted().let { it.getOrNull(it.size / 2) } ?: DISTANCIA_POR_DEFECTO
+    fun estimatedPoint(u: Float, v: Float): EnginePoint {
+      val point = intrinsics.ray(EngineImagePoint(u, v)) * targetDepth
+      return cameraToWorld(floatArrayOf(point.x, point.y, point.z))
+    }
+
     var registrationMethod: String? = null
     val mesh = if (registration.size == 8 && volumes.isNotEmpty()) {
       val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
       val denseMesh = if (densa != null) {
         val depthCorners = frameCorners.map { (u, v) -> prof.aPixel(u, v) }
         densa.registrationPoints(depthCorners)?.let { fit ->
-          EngineMesh.create(fit.points.map(::cameraToWorld), volumes, refinePartFace, ::captureDepth)?.also {
+          EngineMesh.create(fit.points.map(::cameraToWorld), volumes, refinePartFace, captureDepth = ::captureDepth)?.also {
             registrationMethod = fit.method
           }
         }
@@ -540,25 +548,29 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
         EngineMesh.create(
           frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
-          volumes, refinePartFace, ::captureDepth,
+          volumes, refinePartFace, captureDepth = ::captureDepth,
         )?.also { registrationMethod = "hit-test" }
-      }
+      } ?: EngineMesh.create(frameCorners.map { (u, v) ->
+        estimatedPoint(u, v)
+      }, volumes, refinePartFace, estimatedPlane = true, captureDepth = ::captureDepth)?.also { registrationMethod = "estimado" }
     } else null
     if (volumes.isNotEmpty() && mesh == null) {
       promise.reject("ERR_REGISTRATION", "Faltan medidas del vano completo.", null)
       return
     }
-    if (placedEngine?.mesh?.adjustedParts?.isNotEmpty() == true && mesh?.adjustedParts.isNullOrEmpty()) {
-      promise.reject("ERR_REGISTRATION", "Faltan medidas de las piezas para recalibrar el mapa.", null)
-      return
-    }
-
     val usedHitTests = registrationMethod == "hit-test"
-    val localMedian = if (usedHitTests) localHits.map { it[2] }.sorted()[localHits.size / 2] else mediana
+    val estimated = registrationMethod == "estimado"
+    val localMedian = when {
+      estimated -> targetDepth
+      usedHitTests -> localHits.map { it[2] }.sorted()[localHits.size / 2]
+      else -> mediana
+    }
     val placement: PlacedEngine?
     try {
       for (k in 0 until n) {
-        val corner = if (usedHitTests) {
+        val corner = if (estimated) {
+          estimatedPoint(us[k], vs[k])
+        } else if (usedHitTests) {
           fromHitTests(us[k], vs[k], localHits, localMedian)
         } else if (densa != null) {
           val (x, y) = prof.aPixel(us[k], vs[k])
@@ -595,7 +607,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       "distancia" to localMedian.toDouble(), "mapPlaced" to (placement != null),
       "adjustedParts" to (mesh?.adjustedParts ?: emptyList<Int>()),
     )
-    if (densa != null && !usedHitTests) {
+    if (densa != null && !usedHitTests && !estimated) {
       datos["puntos"] = densa.puntos
       datos["plano"] = densa.fraccionPlano.toDouble()
       datos["rms"] = densa.rms.toDouble()

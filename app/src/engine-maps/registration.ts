@@ -26,11 +26,11 @@ export function sameRegistrationView(reference: number[], current: number[]): bo
  * corners and the background. Coordinates refer to the original capture.
  */
 export function registrationCorners(bay: Vano): number[] {
-  if (bay.cortado || bay.esquinas.length < 3) return [];
+  if (bay.esquinas.length < 3) return [];
   const vertices = bay.esquinas;
   const top = Math.min(...vertices.map(({ y }) => y));
   const bottom = Math.max(...vertices.map(({ y }) => y));
-  if (bottom - top < .08) return [];
+  if (bottom <= top) return [];
 
   const corners: number[] = [];
   for (const row of [.12, .88]) {
@@ -44,7 +44,7 @@ export function registrationCorners(bay: Vano): number[] {
     const left = Math.min(...intersections);
     const right = Math.max(...intersections);
     const inset = (right - left) * .04;
-    if (right - left < .08) return [];
+    if (right <= left) return [];
     corners.push(left + inset, y, right - inset, y);
   }
   return corners;
