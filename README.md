@@ -18,7 +18,20 @@ and zero point both shift by 128 to use the unsigned WASM kernel while
 preserving each centered weight. The score indicates an open hood. Individual
 part identification and AR anchoring are future features.
 
-Build and preview the production image locally:
+### Start with Compose
+
+From a checkout containing the root `docker-compose.yml`, start the PWA on the
+existing home proxy network with one command:
+
+```sh
+docker compose up
+```
+
+Compose builds the image on first use. The build installs its own dependencies
+and packages the model and the web runtime. Traefik routes requests for
+`ph26.berguecio.cl` to port 8080 in the container.
+
+For a local preview without Traefik:
 
 ```sh
 docker build -t capo-ar .
@@ -35,7 +48,7 @@ also serves the map viewer if its files are present in the checkout.
 This project uses the same hackathon repository for the PWA and its Compose
 configuration. Pull requests and pushes to `main` verify the image on
 GitHub-hosted runners. Compose carries this repository's numeric ID and uses
-`CAPO_AR_DOMAIN` for the hostname. The default is an inactive placeholder.
+`CAPO_AR_DOMAIN` for the hostname. The default is `ph26.berguecio.cl`.
 The starter's private-runner release jobs stay disabled in this public
 repository. Production runner eligibility and the initial installation are
 deferred to issue #2.
