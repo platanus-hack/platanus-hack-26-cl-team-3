@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,6 +21,7 @@ export default function Menu() {
   const insets = useSafeAreaInsets();
   const [vehicle, setVehicle] = useState<Vehicle>(vehicles[0]);
   const [vehicleOptionsOpen, setVehicleOptionsOpen] = useState(false);
+  const vehiclePicker = useRef<ComponentRef<typeof Pressable>>(null);
   const version = Constants.expoConfig?.version ?? '';
 
   return (
@@ -42,7 +43,8 @@ export default function Menu() {
       </View>
 
       <Pressable
-        onPress={() => setVehicleOptionsOpen(!vehicleOptionsOpen)}
+        ref={vehiclePicker}
+        onPress={() => setVehicleOptionsOpen((open) => !open)}
         accessibilityRole="button"
         accessibilityLabel={`Elegir auto. Actual: ${vehicle.name} ${vehicle.year}, ${vehicle.engine}`}
         aria-expanded={vehicleOptionsOpen}
@@ -58,7 +60,7 @@ export default function Menu() {
       </Pressable>
 
       {vehicleOptionsOpen && (
-        <View accessibilityRole="radiogroup" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
+        <View accessibilityRole="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
           {vehicles.map((option) => {
             const checked = option.id === vehicle.id;
             return (
@@ -67,10 +69,11 @@ export default function Menu() {
                 onPress={() => {
                   setVehicle(option);
                   setVehicleOptionsOpen(false);
+                  vehiclePicker.current?.focus();
                 }}
-                accessibilityRole="radio"
+                accessibilityRole="button"
                 accessibilityLabel={`${option.name} ${option.year}, ${option.engine}`}
-                aria-checked={checked}
+                aria-pressed={checked}
                 style={[styles.vehicleOption, checked && styles.selectedOption]}
               >
                 <View style={styles.flex}>
