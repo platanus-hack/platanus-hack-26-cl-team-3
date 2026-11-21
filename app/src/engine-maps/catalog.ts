@@ -23,19 +23,9 @@ export type Volume = {
 
 export type EngineMap = {
   referenceVariant: string;
-  aspectRatio?: number;
   volumes: readonly Volume[];
-  manualUrl: string;
   fuseUrl?: string;
-  cabinFuseUrl?: string;
-  engineDiagramUrl?: string;
   partDetails?: Partial<Record<PartId, string>>;
-  photo?: {
-    url: string;
-    aspectRatio: number;
-    credit: string;
-    volumes: readonly Volume[];
-  };
 };
 
 // Footprints use coordinates from 0 to 1 in each image axis.
@@ -43,10 +33,7 @@ export type EngineMap = {
 export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   outback: {
     referenceVariant: "3.6R Limited · EZ36 · Norteamérica",
-    manualUrl: "https://www.subaru.ca/WebPage.aspx?WebPageID=16400&WebSiteID=282&documentID=0118822001437148001",
     fuseUrl: "https://viewer.joomag.com/subaru-outback-manuals-2016-outback-owners-manual/0118822001437148001/p532",
-    cabinFuseUrl: "https://viewer.joomag.com/subaru-outback-manuals-2016-outback-owners-manual/0118822001437148001/p530",
-    engineDiagramUrl: "https://viewer.joomag.com/subaru-outback-manuals-2016-outback-owners-manual/0118822001437148001/p478",
     partDetails: {
       fuses: "Caja negra detrás de la batería, hacia el parabrisas. El plano del motor muestra el fusible 17 (O2 HTR) de 25 A para el 3.6 L. Coteja posición y amperaje con la etiqueta de la tapa. Manual, págs. 11-38 y 12-12 a 12-13.",
       washer: "Boca de llenado junto a la batería, hacia el costado del conductor en la versión con volante a la izquierda. Agrega líquido limpiaparabrisas hasta la marca FULL. En la foto se reconoce por la tapa amarilla en el borde del vano. Manual, págs. 11-10 y 11-32.",
@@ -57,22 +44,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
       brake_fluid: "Depósito pequeño y translúcido cerca del parabrisas. En el 3.6 L, lee MIN y MAX desde la cara exterior, hacia el guardabarros. Manual, págs. 11-19 y 11-20.",
       battery: "Batería de 12 V delante de la caja de fusibles y junto a la boca del limpiaparabrisas. Manual, págs. 11-10 y 11-37.",
       positive: "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
-    },
-    photo: {
-      url: "https://images.guideautoweb.com/content/photos/22/75/227579_2016_Subaru_Outback.jpg?640x400=",
-      aspectRatio: 1.6,
-      credit: "Foto de Michel Deslauriers / The Car Guide. Outback 3.6R Limited 2016 de Canadá.",
-      volumes: [
-        { part: 'fuses', outline: [[0.78646,0.39583],[0.79948,0.38417],[0.90677,0.3925],[0.92083,0.405],[0.94531,0.49333],[0.94271,0.51417],[0.92031,0.5225],[0.88385,0.50667],[0.82708,0.48167],[0.79063,0.455],[0.77969,0.42583]], height: 0.036 },
-        { part: 'washer', outline: [[0.94531,0.5525],[0.95365,0.54417],[0.96667,0.54333],[0.98125,0.55083],[0.98698,0.5625],[0.98698,0.57333],[0.97969,0.58333],[0.9651,0.58667],[0.95312,0.58167],[0.94375,0.57167],[0.94219,0.56167]], height: 0.015 },
-        { part: 'dipstick', outline: [[0.70417,0.71583],[0.71146,0.71583],[0.71823,0.72],[0.7224,0.73333],[0.72292,0.74167],[0.71771,0.75],[0.71042,0.7475],[0.70625,0.73833]], height: 0.011 },
-        { part: 'coolant', outline: [[0.71042,0.7925],[0.71823,0.77917],[0.73646,0.77083],[0.75677,0.77083],[0.77917,0.7775],[0.79167,0.78583],[0.79271,0.805],[0.79948,0.82833],[0.79375,0.84],[0.76302,0.8425],[0.7375,0.84083],[0.73958,0.82583],[0.73073,0.81333],[0.70937,0.80917]], height: 0.025 },
-        { part: 'air_filter', outline: [[0.05677,0.5625],[0.06719,0.53417],[0.07812,0.49917],[0.1,0.4975],[0.16042,0.50083],[0.18646,0.50833],[0.19115,0.5275],[0.18594,0.54917],[0.20052,0.55417],[0.21094,0.56917],[0.2125,0.61],[0.17448,0.61],[0.14219,0.60583],[0.08125,0.6075],[0.05729,0.59833]], height: 0.039 },
-        { part: 'oil_cap', outline: [[0.73802,0.73167],[0.74531,0.7225],[0.75573,0.71583],[0.76667,0.7175],[0.77812,0.7275],[0.78281,0.74],[0.78125,0.75583],[0.77292,0.76583],[0.76094,0.7725],[0.74687,0.76917],[0.73906,0.76083],[0.73646,0.74833]], height: 0.012 },
-        { part: 'brake_fluid', outline: [[0.69635,0.3125],[0.70365,0.29917],[0.7224,0.2975],[0.73542,0.30083],[0.74531,0.30667],[0.74896,0.3225],[0.74792,0.34667],[0.74271,0.36417],[0.73698,0.37583],[0.71198,0.375],[0.70156,0.36417],[0.69896,0.34917]], height: 0.024 },
-        { part: 'battery', outline: [[0.82708,0.56667],[0.86406,0.5625],[0.92292,0.57167],[0.93594,0.6],[0.92604,0.61833],[0.9375,0.6325],[0.9651,0.70417],[0.97031,0.72333],[0.92865,0.73],[0.85052,0.7],[0.81615,0.66667],[0.8125,0.63583],[0.81615,0.5975]], height: 0.034 },
-        { part: 'positive', outline: [[0.82292,0.5125],[0.8375,0.50667],[0.85156,0.50833],[0.85938,0.53167],[0.86406,0.55667],[0.8625,0.57667],[0.85313,0.5825],[0.83594,0.57667],[0.8224,0.56417],[0.82031,0.5375]], height: 0.024 },
-      ],
     },
     volumes: [
       { part: 'fuses', outline: [[0.797,0.255],[0.928,0.245],[0.963,0.345],[0.933,0.398],[0.791,0.338]], height: 0.066 },
@@ -88,8 +59,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   onix: {
     referenceVariant: "LTZ · 1.0 turbo · Brasil",
-    aspectRatio: 1.8285714285714285,
-    manualUrl: "https://www.chevrolet.cl/content/dam/chevrolet/south-america/chile/espanol/index/fichas-tecnicas/manuales/pdf/manual-onix.pdf",
     fuseUrl: "https://www.chevrolet.cl/content/dam/chevrolet/south-america/chile/espanol/index/fichas-tecnicas/manuales/pdf/manual-onix.pdf#page=192",
     volumes: [
       { part: 'washer', outline: [[0.0176,0.5036],[0.0234,0.4893],[0.0381,0.4821],[0.0508,0.4911],[0.0498,0.5071],[0.042,0.5286],[0.0273,0.5375],[0.0176,0.5268]], height: 0.0127 },
@@ -105,7 +74,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   tracker: {
     referenceVariant: "1.2 turbo · Chile",
-    manualUrl: "https://www.chevrolet.cl/content/dam/chevrolet/south-america/chile/espanol/index/fichas-tecnicas/manuales/pdf/manual-tracker.pdf#page=168",
     fuseUrl: "https://www.chevrolet.cl/content/dam/chevrolet/south-america/chile/espanol/index/fichas-tecnicas/manuales/pdf/manual-tracker.pdf#page=189",
     volumes: [
       { part: 'fuses', outline: [[0.8277,0.3091],[0.903,0.303],[0.9129,0.3364],[0.9139,0.5394],[0.904,0.5788],[0.8238,0.5788],[0.8238,0.3818]], height: 0.046 },
@@ -121,8 +89,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   rio: {
     referenceVariant: "1.4 MPI · Manual Kia en español",
-    aspectRatio: 2.3767605633802815,
-    manualUrl: "https://ownersmanual.kia.com/full_webhelp/SC/2023/es_ES/topics/chapter8_1.html",
     fuseUrl: "https://ownersmanual.kia.com/full_webhelp/SC/2023/es_ES/topics/chapter8_16_3.html",
     volumes: [
       { part: 'fuses', outline: [[0.7793,0.3204],[0.7926,0.3028],[0.8593,0.3099],[0.8859,0.3697],[0.8948,0.4437],[0.8815,0.5],[0.8133,0.5],[0.7941,0.4507]], height: 0.026 },
@@ -138,7 +104,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   tucson: {
     referenceVariant: "Smartstream G2.0 MPi · Volante a la izquierda",
-    manualUrl: "https://ownersmanual.hyundai.com/full_webhelp/NX4/2025/en_GN/id52795f605dc.html",
     fuseUrl: "https://ownersmanual.hyundai.com/full_webhelp/NX4/2025/en_GN/id1d31e734941.html",
     volumes: [
       { part: 'fuses', outline: [[0.823,0.272],[0.943,0.287],[0.966,0.343],[0.979,0.46],[0.853,0.498],[0.819,0.404]], height: 0.035 },
@@ -154,8 +119,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   ranger: {
     referenceVariant: "2.2 Duratorq TDCi · Chile",
-    aspectRatio: 1.95,
-    manualUrl: "https://www.fordservicecontent.com/Ford_Content/Catalog/owner_information/Manual_de_Propietario_Ranger_MY2022.pdf#page=237",
     fuseUrl: "https://www.fordservicecontent.com/Ford_Content/Catalog/owner_information/Manual_de_Propietario_Ranger_MY2022.pdf#page=218",
     volumes: [
       { part: 'fuses', outline: [[0.76,0.27],[0.9,0.26],[0.91,0.43],[0.88,0.46],[0.76,0.46]], height: 0.043 },
@@ -170,7 +133,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   corolla: {
     referenceVariant: "XSE · 2.0 M20A-FKS · EE. UU.",
-    manualUrl: "https://carmanuals2.com/toyota/corolla-2020-owner-s-manual-113141/page-437/",
     fuseUrl: "https://www.startmycar.com/ca/toyota/corolla/info/fusebox/2020/12th-gen-pre-facelift",
     volumes: [
       { part: 'fuses', outline: [[0.81,0.31],[0.9,0.31],[0.93,0.46],[0.84,0.5]], height: 0.025 },
@@ -186,7 +148,6 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   cx5: {
     referenceVariant: "Touring · SKYACTIV-G 2.5 atmosférico · EE. UU.",
-    manualUrl: "https://www.mazdausa.com/static/manuals/2021/cx-5/contents/07030300.html",
     fuseUrl: "https://www.mazdausa.com/static/manuals/2021/cx-5/contents/07031602.html",
     volumes: [
       { part: 'fuses', outline: [[0.7977,0.2409],[0.8336,0.2153],[0.8972,0.2372],[0.9152,0.2847],[0.9233,0.3759],[0.9184,0.4781],[0.8907,0.4635],[0.8548,0.4343],[0.8287,0.4197],[0.8189,0.354]], height: 0.035 },

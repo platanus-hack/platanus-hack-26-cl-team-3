@@ -1,33 +1,31 @@
-/**
- * Escáner con ARCore: reconoce el vano UNA vez y lo «engancha» al espacio real.
- *
- * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado).
- * 2. Cuando la detección es estable (contorno válido, completo en la imagen y ARCore siguiendo el movimiento, 3
- *    análisis seguidos) —o el usuario toca «Fijar ahora»— cada esquina pasa a ser un ancla de ARCore.
- * 3. Anclado: el modelo se detiene; el polígono (verde) se dibuja en nativo en cada cuadro con la pose actual del
- *    teléfono y queda fijo sobre el auto mientras el usuario se mueve.
- *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas (para cuando el contorno
- *      quedó corrido tras alejarse y volver). El contorno anterior se mantiene hasta que hay uno nuevo.
- *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
- */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+/** Recognize the bay, then keep the selected vehicle mesh attached to its ARCore anchor. */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { VistaAR, type CapturaAR, type EstadoAR, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { poligonoVano, Suavizador, type Vano } from '../detector/vano';
-import { color, espacio } from '../theme';
+import { engineMaps, parts } from '../engine-maps/catalog';
+import { encodeVolumes, registrationCorners } from '../engine-maps/registration';
+import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
+import type { Vehicle } from '../vehicles';
 import {
   BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO, vanoValido,
 } from './comun';
 
 const ESTABLES_PARA_FIJAR = 3;
 const INTENTOS_RECALIBRAR = 3;
+const REGISTRATION_PENDING = 'ERR_REGISTRATION';
+const isRegistrationPending = (error: unknown) => (error as { code?: string } | null)?.code === REGISTRATION_PENDING;
 
 const plano = (v: Vano) => v.esquinas.flatMap((e) => [e.x, e.y]);
 
-export default function EscanerAR() {
+export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
+  const map = vehicle ? engineMaps[vehicle.id] : undefined;
+  const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const selected = map?.volumes[selectedIndex]?.part;
   const ar = useRef<VistaARRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
   const [modeloListo, setModeloListo] = useState(false);
@@ -52,7 +50,6 @@ export default function EscanerAR() {
   }, []);
 
   useEffect(() => {
-    setError(null);
     cargarDetector()
       .then(() => setModeloListo(true))
       .catch((e) => setError(`No se pudo cargar el modelo de reconocimiento. ${String(e?.message ?? e)}`));
@@ -63,15 +60,21 @@ export default function EscanerAR() {
     ocupado.current = true;
     setFijando(true);
     try {
-      setAnclaje(await ar.current.fijar(captura.id, plano(v)));
+      setAnclaje(await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes));
       setAviso(null);
+      return true;
     } catch (e) {
-      setError(`No se pudo fijar el contorno. ${String((e as Error)?.message ?? e)}`);
+      if (isRegistrationPending(e)) {
+        setAviso('Aún faltan medidas del vano. Muévete un poco y vuelve a apuntar desde el frente.');
+        return false;
+      }
+      setError(`No se pudo fijar el vano. ${String((e as Error)?.message ?? e)}`);
+      return true;
     } finally {
       ocupado.current = false;
       setFijando(false);
     }
-  }, []);
+  }, [volumes]);
 
   const sesionActiva = estadoAR?.estado === 'rastreando' || estadoAR?.estado === 'sin-rastreo';
 
@@ -81,6 +84,7 @@ export default function EscanerAR() {
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
+    let previousCorners: number[] = [];
     const puntajeCapo = new PuntajeCapo();
     const suavizador = new Suavizador(SUAVIZADO);
     (async () => {
@@ -98,7 +102,11 @@ export default function EscanerAR() {
           const v = poligonoVano(suavizador.agregar(r.vano));
           const valido = vanoValido(v);
           await ar.current?.mostrarVista(valido ? plano(v) : [], valido ? v.esquinas.map((e) => e.borde) : [], cap.grados);
-          seguidos = valido && !v.cortado && cap.rastreando ? seguidos + 1 : 0;
+          const corners = volumes.length && valido ? registrationCorners(v) : [];
+          const ready = !volumes.length || (corners.length === 8 && cap.muestras >= 4);
+          const moved = previousCorners.length === 8 && corners.some((point, index) => Math.abs(point - previousCorners[index]) > .05);
+          seguidos = valido && !v.cortado && cap.rastreando && ready ? (moved ? 1 : seguidos + 1) : 0;
+          previousCorners = corners;
           fallos = 0;
           setCapo(puntajeCapo.agregar(r.puntaje).media);
           setVano(v);
@@ -106,8 +114,9 @@ export default function EscanerAR() {
           setEstables(seguidos);
           setMs(Date.now() - t0);
           if (valido && seguidos >= ESTABLES_PARA_FIJAR) {
-            await fijar(cap, v);
-            break;
+            if (await fijar(cap, v)) break;
+            seguidos = 0;
+            await esperar(500);
           }
         } catch (e) {
           if (!vivo) break;
@@ -124,7 +133,7 @@ export default function EscanerAR() {
     return () => {
       vivo = false;
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, volumes.length]);
 
   /** Reconoce de nuevo desde la posición actual y reemplaza las anclas. Si no reconoce, deja el contorno como estaba. */
   const recalibrar = async () => {
@@ -142,14 +151,19 @@ export default function EscanerAR() {
           borrar(cap.uri);
         }
         const v = poligonoVano(new Suavizador().agregar(r.vano));
-        if (vanoValido(v) && cap.rastreando) {
-          setAnclaje(await ar.current.fijar(cap.id, plano(v)));
+        if (vanoValido(v) && (!volumes.length || !v.cortado) && cap.rastreando) {
+          try {
+            setAnclaje(await ar.current.fijar(cap.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes));
+          } catch (e) {
+            if (isRegistrationPending(e)) continue;
+            throw e;
+          }
           setVano(v);
           setUltima(cap);
           return;
         }
       }
-      setAviso('No reconocí el vano desde aquí, así que dejé el contorno como estaba. Apunta al motor completo y vuelve a intentarlo.');
+      setAviso('Se conservó el anclaje anterior. Ponte frente al auto, apunta al vano completo y vuelve a intentarlo.');
     } catch (e) {
       setAviso(`No se pudo recalibrar. ${String((e as Error)?.message ?? e)}`);
     } finally {
@@ -159,7 +173,9 @@ export default function EscanerAR() {
   };
 
   const empezarDeNuevo = async () => {
+    if (ocupado.current) return;
     await ar.current?.soltar();
+    setSelectedIndex(-1);
     setAnclaje(null);
     setVano(null);
     setEstables(0);
@@ -167,6 +183,7 @@ export default function EscanerAR() {
   };
 
   const reintentar = () => {
+    setError(null);
     setVano(null);
     setIntento((i) => i + 1);
   };
@@ -176,7 +193,9 @@ export default function EscanerAR() {
   const rastreando = estadoAR?.estado === 'rastreando';
   const detectado = vanoValido(vano);
   const tono = anclaje || detectado ? color.exito : color.acento;
-  const puedeFijar = !anclaje && !fijando && detectado && !!ultima?.rastreando;
+  const puedeFijar = !anclaje && !fijando && detectado && (!map || (!vano.cortado && (ultima?.muestras ?? 0) >= 4)) && !!ultima?.rastreando;
+  const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
+  const fuseLink = selected === 'fuses' ? map?.fuseUrl : undefined;
 
   let panel;
   if (error || errorAR) {
@@ -208,15 +227,50 @@ export default function EscanerAR() {
           icono="vector-polygon"
           tono={color.exito}
           cargando={recalibrando}
-          titulo={recalibrando ? 'Recalibrando…' : 'Contorno fijado'}
+          titulo={recalibrando ? 'Recalibrando…' : anclaje.mapPlaced ? 'Mapa del motor fijado' : 'Contorno fijado'}
         />
         <Detalle>
           {recalibrando
             ? 'Mantén el teléfono quieto apuntando al motor.'
-            : rastreando
-              ? 'Recorre el motor: el contorno se queda sobre el vano. Si se corre, apunta al motor completo y toca Recalibrar.'
-              : 'La realidad aumentada perdió el seguimiento: vuelve a apuntar al motor y muévete despacio.'}
+            : !rastreando || (anclaje.mapPlaced && !mapTracking)
+              ? 'Vuelve a apuntar al motor y muévete despacio para recuperar el seguimiento.'
+              : mapTracking
+                ? 'Toca una pieza del motor. Si el mapa se corre, ponte frente al auto y toca Recalibrar.'
+                : map
+                  ? 'Faltan medidas para colocar las piezas. Muévete despacio, apunta al vano completo y toca Recalibrar.'
+                  : 'Recorre el motor. El contorno se mantiene sobre el vano.'}
         </Detalle>
+        {mapTracking && map && (
+          <>
+            <Text style={tipo.nota}>{map.referenceVariant} · Ubicación aproximada</Text>
+            <ScrollView horizontal keyboardShouldPersistTaps="handled" style={styles.parts} showsHorizontalScrollIndicator={false}>
+              {map.volumes.map(({ part }, index) => (
+                <Pressable
+                  key={part}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedIndex === index }}
+                  onPress={() => setSelectedIndex(index)}
+                  style={[styles.part, selectedIndex === index && styles.selected]}
+                >
+                  <Text style={tipo.nota}>{parts[part][0]}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {selected && (
+              <Text style={tipo.nota} accessibilityLiveRegion="polite">
+                {map.partDetails?.[selected] ?? parts[selected][1]}
+              </Text>
+            )}
+            {fuseLink && (
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => { void Linking.openURL(fuseLink).catch(() => setAviso('No se pudo abrir el diagrama.')); }}
+              >
+                <Text style={styles.link}>Diagrama de fusibles del motor</Text>
+              </Pressable>
+            )}
+          </>
+        )}
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <View style={estilos.botones}>
           <Boton
@@ -246,11 +300,14 @@ export default function EscanerAR() {
           {!rastreando
             ? 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno.'
             : !detectado
-              ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
+              ? 'Párate frente al parachoques y apunta hacia abajo para que se vea el vano completo.'
               : vano.cortado
                 ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
-                : `Mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
+                : map && (ultima?.muestras ?? 0) < 4
+                  ? 'Párate frente al auto y muévete despacio para que la cámara mida el vano.'
+                  : `Desde el frente, mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>
+        {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
         <View style={estilos.botones}>
           <Boton
@@ -275,7 +332,14 @@ export default function EscanerAR() {
   return (
     <View style={estilos.raiz}>
       {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
-      <VistaAR ref={ar} style={StyleSheet.absoluteFill} debug={debug} onEstado={(e) => setEstadoAR(e.nativeEvent)} />
+      <VistaAR
+        ref={ar}
+        style={StyleSheet.absoluteFill}
+        debug={debug}
+        selectedPart={selectedIndex}
+        onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
+        onEstado={(e) => setEstadoAR(e.nativeEvent)}
+      />
       <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
       <Panel>{panel}</Panel>
     </View>
@@ -285,5 +349,9 @@ export default function EscanerAR() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   apagado: { opacity: 0.5 },
+  parts: { marginTop: espacio.s, marginBottom: espacio.xs },
+  part: { minHeight: 44, justifyContent: 'center', backgroundColor: color.superficieAlta, borderRadius: radio.m, paddingHorizontal: espacio.m, marginRight: espacio.s },
+  selected: { borderColor: color.acento, borderWidth: 1 },
+  link: { ...tipo.cuerpo, color: color.acento, paddingVertical: espacio.s },
   aviso: { color: color.acento, fontSize: 13, lineHeight: 19, marginTop: espacio.s },
 });

@@ -31,6 +31,7 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
@@ -48,9 +49,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   override val shouldUseAndroidLayout = true
 
   private val onEstado by EventDispatcher<Map<String, Any?>>()
+  private val onPart by EventDispatcher<Map<String, Int>>()
 
   private val gl = GLSurfaceView(context)
-  internal val capa = CapaPoligono(context)
+  internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
   private val fondo = FondoCamara()
   private val principal = Handler(Looper.getMainLooper())
   private val trabajo = Executors.newSingleThreadExecutor()
@@ -66,8 +68,23 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   // Pedidos desde JS, atendidos en el hilo de OpenGL (donde vive el Frame de ARCore).
   private val capturasPendientes = ArrayList<Promise>()
-  private var fijarPendiente: Pair<FloatArray, Promise>? = null
-  private var fijarCaptura = 0
+  private data class FixRequest(
+    val captureId: Int,
+    val outline: FloatArray,
+    val registration: List<Double>,
+    val volumes: List<List<Double>>,
+    val promise: Promise,
+  )
+  private val pendingFix = AtomicReference<FixRequest?>()
+  private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh)
+  private var placedEngine: PlacedEngine? = null
+  private data class OverlayFrame(
+    val points: FloatArray?,
+    val borders: BooleanArray?,
+    val anchored: Boolean,
+    val faces: List<EngineFace>,
+  )
+  private val overlayFrame = AtomicReference<OverlayFrame?>()
   @Volatile private var soltarPendiente = false
 
   // Datos de cada captura, para anclar después con la pose de ESE momento (el modelo tarda; el teléfono se mueve).
@@ -137,6 +154,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         geometriaPendiente = true
       }
       sesion?.resume()
+      ultimoEstado = ""
       gl.onResume()
       emitir("iniciando", null)
     } catch (e: Exception) {
@@ -156,8 +174,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       capturasPendientes.forEach { it.reject("ERR_AR", "La vista AR se cerró", null) }
       capturasPendientes.clear()
     }
-    fijarPendiente?.second?.reject("ERR_AR", "La vista AR se cerró", null)
-    fijarPendiente = null
+    pendingFix.getAndSet(null)?.promise?.reject("ERR_AR", "La vista AR se cerró", null)
     sesion?.close()
     sesion = null
     trabajo.shutdown()
@@ -182,10 +199,13 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     vistaPrevia = p
   }
 
-  fun fijar(id: Int, esquinas: List<Double>, promise: Promise) {
-    if (esquinas.size < 6) { promise.reject("ERR_AR", "Se necesitan al menos 3 esquinas", null); return }
-    fijarCaptura = id
-    fijarPendiente = Pair(FloatArray(esquinas.size) { esquinas[it].toFloat() }, promise)
+  fun fijar(id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>, promise: Promise) {
+    if (esquinas.size < 6 || esquinas.size % 2 != 0) {
+      promise.reject("ERR_AR", "Se necesitan al menos 3 esquinas", null)
+      return
+    }
+    val request = FixRequest(id, FloatArray(esquinas.size) { esquinas[it].toFloat() }, registration, volumes, promise)
+    if (!pendingFix.compareAndSet(null, request)) promise.reject("ERR_AR", "Ya se está fijando el vano", null)
   }
 
   fun soltar() {
@@ -219,22 +239,36 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     if (soltarPendiente) {
       anclas.forEach { it.detach() }
       anclas.clear()
+      placedEngine?.anchor?.detach()
+      placedEngine = null
       vistaPrevia = null
       soltarPendiente = false
     }
     atenderCapturas(frame)
-    fijarPendiente?.let { (esquinas, promise) -> fijarPendiente = null; anclar(s, esquinas, promise) }
+    pendingFix.getAndSet(null)?.let { request ->
+      if (camara.trackingState == TrackingState.TRACKING) {
+        anclar(s, request)
+      } else {
+        val code = if (request.volumes.isEmpty()) "ERR_AR" else "ERR_REGISTRATION"
+        request.promise.reject(code, "ARCore perdió el seguimiento del vano", null)
+      }
+    }
 
     val rastreando = camara.trackingState == TrackingState.TRACKING
-    val estado = if (rastreando) "rastreando" else "sin-rastreo:${camara.trackingFailureReason.name}"
-    if (estado != ultimoEstado) { ultimoEstado = estado; emitir(if (rastreando) "rastreando" else "sin-rastreo", camara.trackingFailureReason.name) }
+    val engine = placedEngine?.takeIf { rastreando && it.anchor.trackingState == TrackingState.TRACKING }
+    val estado = "${camara.trackingState}:${camara.trackingFailureReason}:${engine != null}"
+    if (estado != ultimoEstado) {
+      ultimoEstado = estado
+      emitir(if (rastreando) "rastreando" else "sin-rastreo", camara.trackingFailureReason.name, engine != null)
+    }
 
     // Puntos a dibujar: anclas proyectadas con la pose ACTUAL, o la vista previa mapeada a la pantalla.
     var puntos: FloatArray? = null
     var bordes: BooleanArray? = null
     val anclado = anclas.isNotEmpty()
+    val projector = if (rastreando && anclado) screenProjector(frame) else null
     if (anclado) {
-      if (rastreando) puntos = proyectarAnclas(frame)
+      if (projector != null && placedEngine == null) puntos = proyectarAnclas(projector)
     } else {
       vistaPrevia?.let { p ->
         val salida = FloatArray(p.size)
@@ -243,9 +277,19 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         bordes = bordesPrevia
       }
     }
-    val p = puntos
-    val b = bordes
-    principal.post { capa.actualizar(p, b, anclado) }
+    val faces = if (engine != null && projector != null) {
+      val pose = engine.anchor.pose
+      engine.mesh.project { local ->
+        val world = pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
+        projector(world[0], world[1], world[2])
+      }
+    } else emptyList()
+    // Keep only the newest projection if the UI thread misses a camera frame.
+    if (overlayFrame.getAndSet(OverlayFrame(puntos, bordes, anclado, faces)) == null) {
+      principal.post {
+        overlayFrame.getAndSet(null)?.let { capa.actualizar(it.points, it.borders, it.anchored, it.faces) }
+      }
+    }
   }
 
   private fun atenderCapturas(frame: Frame) {
@@ -324,8 +368,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     return salida
   }
 
-  private fun anclar(s: Session, esquinasGiradas: FloatArray, promise: Promise) {
-    val c = capturas[fijarCaptura]
+  private fun anclar(s: Session, request: FixRequest) {
+    val (captureId, esquinasGiradas, registration, volumes, promise) = request
+    val c = capturas[captureId]
     if (c == null) { promise.reject("ERR_AR", "La captura ya no está disponible; vuelve a intentarlo", null); return }
     if (!c.rastreando) { promise.reject("ERR_AR", "Cuando se tomó ese cuadro ARCore aún no seguía el movimiento", null); return }
     // Esquinas en coordenadas de la imagen del sensor (las muestras de distancia están en ese sistema).
@@ -344,34 +389,64 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val mediana = if (todas.isNotEmpty()) todas[todas.size / 2] else DISTANCIA_POR_DEFECTO
     val nuevas = ArrayList<Anchor>()
     var conMedida = 0
-    for (k in 0 until n) {
-      val u = us[k]
-      val v = vs[k]
-      // Distancia: promedio ponderado (1/d²) de las muestras cercanas en la imagen; si no hay, la mediana del vano.
-      var suma = 0f
-      var peso = 0f
-      for (m in muestras) {
-        val d2 = (m[0] - u) * (m[0] - u) + (m[1] - v) * (m[1] - v)
-        if (d2 > RADIO_MUESTRAS * RADIO_MUESTRAS) continue
-        val w = 1f / (d2 + 1e-4f)
-        suma += w * m[2]
-        peso += w
+    fun world(u: Float, v: Float, samples: List<FloatArray>, onMeasurement: () -> Unit = {}): EnginePoint {
+      var sum = 0f
+      var weight = 0f
+      for (sample in samples) {
+        val dx = sample[0] - u
+        val dy = sample[1] - v
+        val radiusSquared = dx * dx + dy * dy
+        if (radiusSquared > RADIO_MUESTRAS * RADIO_MUESTRAS) continue
+        val contribution = 1f / (radiusSquared + 1e-4f)
+        sum += contribution * sample[2]
+        weight += contribution
       }
-      val distancia = if (peso > 0f) { conMedida++; suma / peso } else mediana
-      // Rayo desde la cámara de ESA captura: +X derecha, +Y arriba, -Z hacia adelante (según la lectura de la imagen).
-      val px = u * c.anchoImg
-      val py = v * c.altoImg
-      var dx = (px - c.cx) / c.fx
-      var dy = -(py - c.cy) / c.fy
-      var dz = -1f
-      val norma = sqrt(dx * dx + dy * dy + dz * dz)
-      dx /= norma; dy /= norma; dz /= norma
-      val enMundo = c.pose.transformPoint(floatArrayOf(dx * distancia, dy * distancia, dz * distancia))
-      nuevas.add(s.createAnchor(Pose.makeTranslation(enMundo)))
+      val distance = if (weight > 0f) {
+        onMeasurement()
+        sum / weight
+      } else mediana
+      val dx = (u * c.anchoImg - c.cx) / c.fx
+      val dy = -(v * c.altoImg - c.cy) / c.fy
+      val dz = -1f
+      val scale = distance / sqrt(dx * dx + dy * dy + dz * dz)
+      val result = c.pose.transformPoint(floatArrayOf(dx * scale, dy * scale, dz * scale))
+      return EnginePoint(result[0], result[1], result[2])
+    }
+
+    val mesh = if (registration.size == 8 && dentro.size >= 4 && volumes.isNotEmpty()) {
+      val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
+      registrationSamples(frameCorners, dentro, RADIO_MUESTRAS)?.let { nearbySamples ->
+        EngineMesh.create(
+          frameCorners.mapIndexed { index, (u, v) -> world(u, v, nearbySamples[index]) },
+          volumes,
+        )
+      }
+    } else null
+    if (volumes.isNotEmpty() && mesh == null) {
+      promise.reject("ERR_REGISTRATION", "Faltan medidas del vano completo.", null)
+      return
+    }
+
+    val placement: PlacedEngine?
+    try {
+      for (k in 0 until n) {
+        val corner = world(us[k], vs[k], muestras) { conMedida++ }
+        nuevas.add(s.createAnchor(Pose.makeTranslation(corner.x, corner.y, corner.z)))
+      }
+      placement = mesh?.let {
+        val origin = it.origin
+        PlacedEngine(s.createAnchor(Pose.makeTranslation(origin.x, origin.y, origin.z)), it)
+      }
+    } catch (e: Exception) {
+      nuevas.forEach { it.detach() }
+      promise.reject("ERR_AR", "No se pudieron crear las anclas del vano", e)
+      return
     }
     anclas.forEach { it.detach() }
     anclas.clear()
     anclas.addAll(nuevas)
+    placedEngine?.anchor?.detach()
+    placedEngine = placement
     vistaPrevia = null
     val metodo = when {
       conMedida == nuevas.size && profundidad -> "profundidad"
@@ -379,7 +454,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       todas.isNotEmpty() -> "distancia-media"
       else -> "estimado"
     }
-    promise.resolve(mapOf("esquinas" to nuevas.size, "metodo" to metodo, "muestras" to muestras.size, "distancia" to mediana))
+    promise.resolve(mapOf("esquinas" to nuevas.size, "metodo" to metodo, "muestras" to muestras.size, "distancia" to mediana, "mapPlaced" to (placement != null)))
   }
 
   /** ¿El punto (x, y) cae dentro del polígono? (regla par-impar) */
@@ -393,24 +468,35 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     return dentro
   }
 
-  private fun proyectarAnclas(frame: Frame): FloatArray? {
-    val vista = FloatArray(16)
-    val proy = FloatArray(16)
-    val vp = FloatArray(16)
-    frame.camera.getViewMatrix(vista, 0)
-    frame.camera.getProjectionMatrix(proy, 0, 0.05f, 100f)
-    Matrix.multiplyMM(vp, 0, proy, 0, vista, 0)
+  private fun screenProjector(frame: Frame): (Float, Float, Float) -> EngineScreenPoint? {
+    val view = FloatArray(16)
+    val projection = FloatArray(16)
+    val combined = FloatArray(16)
+    val point = floatArrayOf(0f, 0f, 0f, 1f)
+    val clip = FloatArray(4)
+    frame.camera.getViewMatrix(view, 0)
+    frame.camera.getProjectionMatrix(projection, 0, 0.05f, 100f)
+    Matrix.multiplyMM(combined, 0, projection, 0, view, 0)
+    return { x, y, z ->
+      point[0] = x; point[1] = y; point[2] = z
+      Matrix.multiplyMV(clip, 0, combined, 0, point, 0)
+      val w = clip[3]
+      if (w < .05f || !w.isFinite()) null else EngineScreenPoint(
+        (clip[0] / w + 1f) / 2f * anchoVista,
+        (1f - clip[1] / w) / 2f * altoVista,
+        w,
+      )
+    }
+  }
+
+  private fun proyectarAnclas(project: (Float, Float, Float) -> EngineScreenPoint?): FloatArray? {
     val salida = FloatArray(anclas.size * 2)
-    val p = FloatArray(4)
-    val q = FloatArray(4)
-    for ((k, a) in anclas.withIndex()) {
-      if (a.trackingState == TrackingState.STOPPED) return null
-      val pose = a.pose
-      p[0] = pose.tx(); p[1] = pose.ty(); p[2] = pose.tz(); p[3] = 1f
-      Matrix.multiplyMV(q, 0, vp, 0, p, 0)
-      if (q[3] <= 0f) return null // detrás de la cámara
-      salida[2 * k] = (q[0] / q[3] + 1f) / 2f * anchoVista
-      salida[2 * k + 1] = (1f - q[1] / q[3]) / 2f * altoVista
+    for ((k, anchor) in anclas.withIndex()) {
+      if (anchor.trackingState != TrackingState.TRACKING) return null
+      val pose = anchor.pose
+      val point = project(pose.tx(), pose.ty(), pose.tz()) ?: return null
+      salida[2 * k] = point.x
+      salida[2 * k + 1] = point.y
     }
     return salida
   }
@@ -419,9 +505,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private fun rotacionPantalla(): Int =
     (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay?.rotation ?: Surface.ROTATION_0
 
-  private fun emitir(estado: String, detalle: String?) {
+  private fun emitir(estado: String, detalle: String?, mapTracking: Boolean = false) {
     principal.post {
-      onEstado(mapOf("estado" to estado, "detalle" to detalle, "anclado" to anclas.isNotEmpty(), "profundidad" to profundidad))
+      onEstado(mapOf("estado" to estado, "detalle" to detalle, "anclado" to anclas.isNotEmpty(), "mapTracking" to mapTracking, "profundidad" to profundidad))
     }
   }
 

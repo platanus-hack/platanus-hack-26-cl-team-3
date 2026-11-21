@@ -31,9 +31,11 @@ class CapoArModule : Module() {
     OnActivityEntersBackground { vistas.toList().forEach { it.pausar() } }
 
     View(CapoArView::class) {
-      Events("onEstado")
+      Events("onEstado", "onPart")
 
       Prop("debug") { vista: CapoArView, debug: Boolean? -> vista.capa.debug = debug ?: true }
+
+      Prop("selectedPart") { view: CapoArView, index: Int? -> view.capa.selectedPart = index ?: -1 }
 
       AsyncFunction("capturar") { vista: CapoArView, promise: Promise -> vista.capturar(promise) }
 
@@ -41,8 +43,8 @@ class CapoArModule : Module() {
         vista.mostrarVista(esquinas, bordes, grados)
       }
 
-      AsyncFunction("fijar") { vista: CapoArView, id: Int, esquinas: List<Double>, promise: Promise ->
-        vista.fijar(id, esquinas, promise)
+      AsyncFunction("fijar") { vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>, promise: Promise ->
+        vista.fijar(id, esquinas, registration, volumes, promise)
       }
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }
