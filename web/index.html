@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101211">
+  <title>Capo AR</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Capo AR</h1>
+      <button type="button" id="show-notice" class="quiet">Ver aviso</button>
+    </header>
+    <section class="viewer" aria-label="Visor del capó">
+      <video id="camera" playsinline muted hidden></video>
+      <div class="guide" aria-hidden="true"></div>
+      <p id="camera-status" role="status">Apunta la cámara al capó abierto.</p>
+    </section>
+    <footer>
+      <button type="button" id="toggle-camera" class="primary">Activar cámara</button>
+      <a id="maps" href="/maps/" hidden>Ver mapas de motor</a>
+    </footer>
+  </main>
+  <dialog id="notice" aria-labelledby="notice-title">
+    <h2 id="notice-title">Antes de empezar</h2>
+    <p>Esta app es una guía informativa. No reemplaza el manual del propietario ni a un mecánico. Confirma siempre con el manual de tu vehículo antes de actuar.</p>
+    <form method="dialog">
+      <button class="primary" value="confirmed">Entendido</button>
+    </form>
+  </dialog>
+</body>
+</html>

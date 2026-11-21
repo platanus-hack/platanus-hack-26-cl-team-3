@@ -7,6 +7,39 @@
 
 ---
 
+## Web app and release
+
+The installable web app lives in `web/`. It prefers the rear camera after the user
+accepts the notice and requests access. The app shell works offline after its
+first successful load. AR anchoring and recognition are pending. The Expo
+Android app remains available in `app/`.
+
+For a local preview, run `python3 -m http.server 8080 --bind 127.0.0.1 --directory web`
+and open `http://localhost:8080`. On a phone, camera access requires HTTPS.
+The Docker build serves the vehicle-map viewer at `/maps/` when
+`prototype/vehicle-maps/` is present in the checked-out revision.
+
+### CI and production
+
+- The public hackathon repository verifies the PWA image on GitHub-hosted
+  runners for pull requests and pushes to `main`.
+- `docker-compose.yml` follows the Home Server Starter service, Traefik, TLS
+  and health-check conventions. The placeholder repository ID and hostname
+  keep deployment unconfigured until the release repository is selected.
+- For production, use a trusted private release repository accessible to the
+  home runner manager. In that checkout, run
+  `python3 scripts/configure.py --domain <approved-hostname>`. This links
+  Compose to that repository's numeric ID. Confirm the hostname has proxied
+  DNS and TLS coverage and that the GHCR package remains private.
+- The first installation requires an authorized operator to start the Compose
+  service with the external `proxy` network. After that setup, a push to the
+  private release repository's `main` builds and verifies the image,
+  publishes its commit-tagged digest to GHCR, and calls `deploy-release`
+  for the current revision. The public repository never schedules home
+  runners and has no credential that can release to the home server.
+- Use a feature branch and a pull request to `dev` for implementation.
+  Release promotion to `main` uses the full `dev` branch.
+
 ## 1. Qué es, en una frase
 
 Una app Android que, al apuntar la cámara al capó (o al tablero) de tu auto, **muestra en Realidad Aumentada dónde están y cómo se revisan las cosas básicas** (caja de fusibles, depósito del limpiaparabrisas, varilla del aceite, refrigerante, filtro de aire, ampolletas) y responde en lenguaje natural «¿cómo cambio este fusible?», **siempre citando el manual del auto**.
