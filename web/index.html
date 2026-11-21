@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101211">
+  <title>Capo AR</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Capo AR</h1>
+      <button type="button" id="show-notice" class="quiet">Aviso y fuentes</button>
+    </header>
+    <section id="menu" aria-label="Menú principal">
+      <p class="subtitle">Tu guía bajo el capó</p>
+      <article class="vehicle"><small>Tu auto</small><h2>Subaru Outback 2016</h2><p>Motor 3.6R (EZ36)</p></article>
+      <button id="scan" class="primary scan" type="button">Escanear capó</button>
+      <p>Abre el capó y apunta la cámara al motor.</p>
+      <a id="maps" href="/maps/" hidden>Ver mapas de motor</a>
+      <h2>Próximamente</h2>
+      <ul class="features"><li>Preguntar al manual</li><li>Luces del tablero</li><li>Ampolletas</li><li>Fusibles</li></ul>
+    </section>
+    <section hidden class="viewer" aria-label="Visor del capó">
+      <div class="guide"><video id="camera" playsinline muted hidden></video></div>
+      <p id="camera-status"><span id="status-text" role="status">Apunta la cámara al capó abierto.</span><span id="metrics"></span></p>
+    </section>
+    <footer hidden>
+      <button type="button" id="back" class="quiet">Volver al menú</button>
+      <button type="button" id="toggle-camera" class="primary">Activar cámara</button>
+    </footer>
+  </main>
+  <dialog id="notice" aria-labelledby="notice-title">
+    <h2 id="notice-title">Antes de empezar</h2>
+    <p>Esta app es una guía informativa. No reemplaza el manual del propietario ni a un mecánico. Confirma siempre con el manual de tu vehículo antes de actuar.</p>
+    <p>Las imágenes se analizan en tu teléfono. Las futuras respuestas citarán documento, sección y página del manual del propietario.</p>
+    <p>Reconocimiento de capó abierto con CLIP ViT-B/32 de OpenAI, versión ONNX de Xenova.</p>
+    <form method="dialog">
+      <button class="primary" value="confirmed">Entendido</button>
+    </form>
+  </dialog>
+</body>
+</html>

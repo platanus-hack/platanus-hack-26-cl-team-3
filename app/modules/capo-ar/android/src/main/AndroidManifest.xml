@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.CAMERA" />
+  <application>
+    <!-- «optional»: la app se instala aunque el teléfono no tenga ARCore; entonces usa el escáner sin AR. -->
+    <meta-data android:name="com.google.ar.core" android:value="optional" />
+  </application>
+</manifest>

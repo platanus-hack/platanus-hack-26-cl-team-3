@@ -4,3 +4,13 @@
 # APK generados (scripts/compilar-apk.sh)
 dist/
 *.apk
+
+# Modelo de reconocimiento (lo baja scripts/descargar-modelo.sh)
+app/assets/modelo/*.onnx
+
+# Python
+__pycache__/
+app/assets/modelo/*.fuente
+
+# Salida de Gradle de los módulos nativos propios
+app/modules/*/android/build/
