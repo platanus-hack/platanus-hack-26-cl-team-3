@@ -5,6 +5,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class EngineRegistrationTest {
@@ -82,13 +83,52 @@ class EngineRegistrationTest {
       EnginePoint(-.7f, .14f, -.48f), EnginePoint(.7f, .12f, -.48f),
       EnginePoint(-.66f, .02f, .46f), EnginePoint(.66f, .04f, .46f),
     )
-    assertNotNull(EngineMesh.create(worldCorners, parts))
-    assertNull(EngineMesh.create(worldCorners.map { EnginePoint(it.x, it.z + .8f, 0f) }, parts))
+    assertNotNull(EngineMesh.create(worldCorners, parts) { 1f })
+    assertNull(EngineMesh.create(worldCorners.map { EnginePoint(it.x, it.z + .8f, 0f) }, parts) { 1f })
     val warped = listOf(
       EnginePoint(-.6f, 0f, 0f), EnginePoint(.6f, 0f, 0f),
       EnginePoint(-.6f, -1.1f, 1f), EnginePoint(.6f, 0f, .5f),
     )
-    assertNull(EngineMesh.create(warped, parts))
+    assertNull(EngineMesh.create(warped, parts) { 1f })
+    assertNull(EngineMesh.create(worldCorners, parts) { -.5f })
+    assertNull(EngineMesh.create(worldCorners, parts) { Float.NaN })
+  }
+
+  @Test
+  fun tracedTopMatchesCaptureRaysAndCanBeSelectedFromAnotherView() {
+    val corners = listOf(
+      EnginePoint(-.67f, .06f, -.40f), EnginePoint(.68f, .04f, -.38f),
+      EnginePoint(-.64f, .10f, .56f), EnginePoint(.61f, .03f, .55f),
+    )
+    val outline = listOf(.80, .25, .92, .25, .93, .40, .79, .39)
+    val camera = Pose.makeTranslation(.43f, 1.54f, 1.8f)
+      .compose(Pose.makeRotation(-.30f, 0f, 0f, .9539392f))
+    val inverse = camera.inverse()
+    fun cameraPoint(point: EnginePoint, pose: Pose) =
+      pose.transformPoint(floatArrayOf(point.x, point.y, point.z))
+    fun project(point: EnginePoint, pose: Pose): EngineScreenPoint {
+      val (x, y, z) = cameraPoint(point, pose)
+      return EngineScreenPoint(520f + 700f * x / -z, 350f - 700f * y / -z, -z)
+    }
+
+    val mesh = checkNotNull(EngineMesh.create(corners, listOf(listOf(.066) + outline)) { -cameraPoint(it, inverse)[2] })
+    val top = mesh.project { project(it + mesh.origin, inverse) }.single { !it.side }
+    val cornerPixels = corners.map { project(it, inverse) }
+    for ((index, coordinates) in outline.chunked(2).withIndex()) {
+      val (u, v) = coordinates
+      val weights = listOf((1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v)
+      val x = cornerPixels.indices.sumOf { cornerPixels[it].x * weights[it] }.toFloat()
+      val y = cornerPixels.indices.sumOf { cornerPixels[it].y * weights[it] }.toFloat()
+      assertEquals(x, top.points[index].x, .001f)
+      assertEquals(y, top.points[index].y, .001f)
+    }
+
+    val movedCamera = Pose.makeTranslation(.25f, .06f, .08f).compose(camera).inverse()
+    val moved = mesh.project { project(it + mesh.origin, movedCamera) }.single { !it.side }
+    assertTrue(moved.points.first() != top.points.first())
+    val centerX = moved.points.map { it.x }.average().toFloat()
+    val centerY = moved.points.map { it.y }.average().toFloat()
+    assertTrue(moved.contains(centerX, centerY))
   }
 
   private fun insideBay(x: Int, y: Int) = x in 20 until 140 && y in 25 until 135

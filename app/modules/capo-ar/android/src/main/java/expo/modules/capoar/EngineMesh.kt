@@ -96,8 +96,12 @@ internal class EngineMesh private constructor(
   }
 
   companion object {
-    /** Corners are back-left, back-right, front-left, front-right. Heights are fractions of the bay width. */
-    fun create(corners: List<EnginePoint>, rows: List<List<Double>>): EngineMesh? {
+    /** Corners are back-left, back-right, front-left, front-right. Depth is optical Z in the capture camera. */
+    fun create(
+      corners: List<EnginePoint>,
+      rows: List<List<Double>>,
+      captureDepth: (EnginePoint) -> Float,
+    ): EngineMesh? {
       if (corners.size != 4 || rows.isEmpty()) return null
       val (backLeft, backRight, frontLeft, frontRight) = corners
       val width = ((backRight - backLeft).length() + (frontRight - frontLeft).length()) / 2
@@ -114,15 +118,25 @@ internal class EngineMesh private constructor(
         first.dot(second) / (firstArea * secondArea) < .65f
       ) return null
       val origin = (backLeft + backRight + frontLeft + frontRight) * .25f
+      val opticalDepths = corners.map(captureDepth)
+      if (opticalDepths.any { !it.isFinite() || it < .05f }) return null
+      val inverseDepths = opticalDepths.map { 1f / it }
+      val rayOffsets = corners.mapIndexed { i, corner -> (corner - origin) * inverseDepths[i] }
       val volumes = rows.mapIndexed { part, row ->
         if (row.size < 7 || row.size % 2 != 1 || row.any { !it.isFinite() || it !in 0.0..1.0 }) return null
-        val base = row.drop(1).chunked(2).map { (u, v) ->
-          val back = backLeft + (backRight - backLeft) * u.toFloat()
-          val front = frontLeft + (frontRight - frontLeft) * u.toFloat()
-          back + (front - back) * v.toFloat() - origin
+        val top = row.drop(1).chunked(2).map { (x, y) ->
+          val u = x.toFloat()
+          val v = y.toFloat()
+          val weights = floatArrayOf((1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v)
+          // The outline was traced in the photo. Blend its unit-depth rays and restore depth
+          // so the visible face projects to those image coordinates in the capture.
+          val inverseDepth = weights.indices.sumOf { (weights[it] * inverseDepths[it]).toDouble() }
+          val offset = weights.indices.fold(EnginePoint(0f, 0f, 0f)) { point, i -> point + rayOffsets[i] * weights[i] }
+          offset * (1.0 / inverseDepth).toFloat()
         }
+        // Height extends below the traced face and is a fraction of the measured bay width.
         val rise = EnginePoint(0f, width * row.first().toFloat(), 0f)
-        Volume(part, base, base.map { it + rise })
+        Volume(part, top.map { it - rise }, top)
       }
       return EngineMesh(origin, volumes)
     }

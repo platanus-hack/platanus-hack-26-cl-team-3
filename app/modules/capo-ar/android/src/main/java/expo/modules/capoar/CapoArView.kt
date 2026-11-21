@@ -445,6 +445,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       return
     }
     val cameraInCurrentWorld = c.pose.inCurrentWorld(reference.pose)
+    val worldInCaptureCamera = cameraInCurrentWorld.inverse()
+    fun captureDepth(point: EnginePoint): Float =
+      -worldInCaptureCamera.transformPoint(floatArrayOf(point.x, point.y, point.z))[2]
     // Esquinas en coordenadas de la imagen del sensor (las muestras de distancia están en ese sistema).
     val n = esquinasGiradas.size / 2
     val us = FloatArray(n)
@@ -510,7 +513,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val denseMesh = if (densa != null) {
         val depthCorners = frameCorners.map { (u, v) -> prof.aPixel(u, v) }
         densa.registrationPoints(depthCorners)?.let { fit ->
-          EngineMesh.create(fit.points.map(::cameraToWorld), volumes)?.also {
+          EngineMesh.create(fit.points.map(::cameraToWorld), volumes, ::captureDepth)?.also {
             registrationMethod = fit.method
           }
         }
@@ -518,7 +521,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
         EngineMesh.create(
           frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
-          volumes,
+          volumes, ::captureDepth,
         )?.also { registrationMethod = "hit-test" }
       }
     } else null
