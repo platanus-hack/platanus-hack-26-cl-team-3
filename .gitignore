@@ -14,3 +14,6 @@ app/assets/modelo/*.fuente
 
 # Salida de Gradle de los módulos nativos propios
 app/modules/*/android/build/
+
+# Locally built PRT lookup snapshots and source archives
+/api/data/

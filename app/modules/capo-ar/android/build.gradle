@@ -17,5 +17,6 @@ android {
 dependencies {
   // ARCore: seguimiento del movimiento del teléfono (SLAM), anclas y profundidad.
   implementation "com.google.ar:core:1.57.0"
+  implementation "com.google.mlkit:text-recognition:16.0.1"
   testImplementation "junit:junit:4.13.2"
 }

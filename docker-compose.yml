@@ -23,6 +23,8 @@ services:
     restart: unless-stopped
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    volumes:
+      - ${PRT_DATA_DIR:-./api/data}:/app/data:ro
     networks: [proxy]
     labels:
       - "traefik.enable=true"
