@@ -7,6 +7,13 @@ internal data class EnginePoint(val x: Float, val y: Float, val z: Float) {
   operator fun minus(other: EnginePoint) = EnginePoint(x - other.x, y - other.y, z - other.z)
   operator fun times(scale: Float) = EnginePoint(x * scale, y * scale, z * scale)
   fun length() = sqrt(x * x + y * y + z * z)
+  fun dot(other: EnginePoint) = x * other.x + y * other.y + z * other.z
+
+  fun cross(other: EnginePoint) = EnginePoint(
+    y * other.z - z * other.y,
+    z * other.x - x * other.z,
+    x * other.y - y * other.x,
+  )
 }
 
 internal data class EngineScreenPoint(val x: Float, val y: Float, val depth: Float)
@@ -24,6 +31,19 @@ internal data class EngineFace(val part: Int, val points: List<EngineScreenPoint
   }
 }
 
+/** Keep neighboring measurement regions disjoint. */
+internal fun cornerSupportRadiiSquared(
+  corners: List<Pair<Float, Float>>,
+  maxRadius: Float,
+): List<Float> = corners.mapIndexed { index, corner ->
+  val nearest = corners.indices.filter { it != index }.minOf { other ->
+    val dx = corner.first - corners[other].first
+    val dy = corner.second - corners[other].second
+    dx * dx + dy * dy
+  }
+  minOf(maxRadius * maxRadius, nearest * 0.45f * 0.45f)
+}
+
 /** Assign distinct depth samples to each corner so a cluster cannot register the whole bay. */
 internal fun registrationSamples(
   corners: List<Pair<Float, Float>>,
@@ -37,15 +57,30 @@ internal fun registrationSamples(
     val dy = sample[1] - corner.second
     return dx * dx + dy * dy
   }
+  val radiiSquared = cornerSupportRadiiSquared(corners, maxRadius)
   for (sample in samples) {
     val nearest = corners.indices.minBy { distanceSquared(sample, corners[it]) }
-    if (distanceSquared(sample, corners[nearest]) <= maxRadius * maxRadius) groups[nearest].add(sample)
+    if (distanceSquared(sample, corners[nearest]) <= radiiSquared[nearest]) groups[nearest].add(sample)
   }
   return groups.takeIf { it.all { group -> group.isNotEmpty() } }
 }
 
+/** Intersect camera rays with the measured multiview plane, even outside the current image. */
+internal fun scanIntersections(points: List<EnginePoint>, rays: List<EnginePoint>): List<EnginePoint>? {
+  if (points.size < 3) return null
+  val origin = points.first()
+  var normal = EnginePoint(0f, 0f, 0f)
+  for (i in 1 until points.lastIndex) normal += (points[i] - origin).cross(points[i + 1] - origin)
+  return rays.map { ray ->
+    val depth = normal.dot(origin) / normal.dot(ray)
+    if (!depth.isFinite() || depth < .05f) return null
+    ray * depth
+  }
+}
+
 internal class EngineMesh private constructor(
   val origin: EnginePoint,
+  val adjustedParts: List<Int>,
   private val volumes: List<Volume>
 ) {
   private data class Volume(val part: Int, val base: List<EnginePoint>, val top: List<EnginePoint>)
@@ -74,25 +109,57 @@ internal class EngineMesh private constructor(
   }
 
   companion object {
-    /** Corners are back-left, back-right, front-left, front-right. Heights are fractions of the bay width. */
-    fun create(corners: List<EnginePoint>, rows: List<List<Double>>): EngineMesh? {
+    /** Corners are back-left, back-right, front-left, front-right. Depth is optical Z in the capture camera. */
+    fun create(
+      corners: List<EnginePoint>,
+      rows: List<List<Double>>,
+      refineFace: ((Int, List<EnginePoint>) -> List<EnginePoint>?)? = null,
+      estimatedPlane: Boolean = false,
+      captureDepth: (EnginePoint) -> Float,
+    ): EngineMesh? {
       if (corners.size != 4 || rows.isEmpty()) return null
       val (backLeft, backRight, frontLeft, frontRight) = corners
       val width = ((backRight - backLeft).length() + (frontRight - frontLeft).length()) / 2
       val depth = ((frontLeft - backLeft).length() + (frontRight - backRight).length()) / 2
-      if (width !in .35f..2.8f || depth !in .15f..2.4f) return null
+      if (!estimatedPlane && (width !in .35f..2.8f || depth !in .15f..2.4f)) return null
+      val first = (backRight - backLeft).cross(frontLeft - backLeft)
+      val second = (frontLeft - frontRight).cross(backRight - frontRight)
+      val firstArea = first.length()
+      val secondArea = second.length()
+      if (firstArea <= 0f || secondArea <= 0f) return null
+      val agreement = first.dot(second) / (firstArea * secondArea)
+      if (!agreement.isFinite() || agreement < .65f) return null
+      if (!estimatedPlane && (firstArea < .01f || secondArea < .01f)) return null
+      val normal = first + second
+      val outward = normal * (-1f / normal.length())
       val origin = (backLeft + backRight + frontLeft + frontRight) * .25f
+      val opticalDepths = corners.map(captureDepth)
+      if (opticalDepths.any { !it.isFinite() || it < .05f }) return null
+      val inverseDepths = opticalDepths.map { 1f / it }
+      val rayOffsets = corners.mapIndexed { i, corner -> (corner - origin) * inverseDepths[i] }
+      val adjustedParts = ArrayList<Int>()
       val volumes = rows.mapIndexed { part, row ->
         if (row.size < 7 || row.size % 2 != 1 || row.any { !it.isFinite() || it !in 0.0..1.0 }) return null
-        val base = row.drop(1).chunked(2).map { (u, v) ->
-          val back = backLeft + (backRight - backLeft) * u.toFloat()
-          val front = frontLeft + (frontRight - frontLeft) * u.toFloat()
-          back + (front - back) * v.toFloat() - origin
+        val initialTop = row.drop(1).chunked(2).map { (x, y) ->
+          val u = x.toFloat()
+          val v = y.toFloat()
+          val weights = floatArrayOf((1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v)
+          // The outline was traced in the photo. Blend its unit-depth rays and restore depth
+          // so the visible face projects to those image coordinates in the capture.
+          val inverseDepth = weights.indices.sumOf { (weights[it] * inverseDepths[it]).toDouble() }
+          val offset = weights.indices.fold(EnginePoint(0f, 0f, 0f)) { point, i -> point + rayOffsets[i] * weights[i] }
+          offset * (1.0 / inverseDepth).toFloat()
         }
-        val rise = EnginePoint(0f, width * row.first().toFloat(), 0f)
-        Volume(part, base, base.map { it + rise })
+        val correctedFace = refineFace?.invoke(part, initialTop.map { it + origin })
+        val top = if (correctedFace != null) {
+          adjustedParts.add(part)
+          correctedFace.map { it - origin }
+        } else initialTop
+        // Height extends below the traced face and is a fraction of the measured bay width.
+        val rise = outward * (width * row.first().toFloat())
+        Volume(part, top.map { it - rise }, top)
       }
-      return EngineMesh(origin, volumes)
+      return EngineMesh(origin, adjustedParts, volumes)
     }
   }
 }

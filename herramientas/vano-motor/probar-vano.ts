@@ -2,6 +2,13 @@
 import assert from 'node:assert/strict';
 import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
+import { completeBay, extendsPartialMap, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
+import { engineMaps } from '../../app/src/engine-maps/catalog.ts';
+import { normalizeFeatureGrid, sampleDescriptor } from '../../app/src/engine-maps/landmarks/appearance.ts';
+import { locate, type Candidates, type Point } from '../../app/src/engine-maps/landmarks/consensus.ts';
+import { faceDescriptorSampler } from '../../app/src/engine-maps/landmarks/face-descriptors.ts';
+import { faceOverlap } from '../../app/src/engine-maps/landmarks/local-faces.ts';
+import { confirmedPartCenters, partCenters } from '../../app/src/engine-maps/landmarks/part-centers.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
 
@@ -85,13 +92,16 @@ console.log('13 ok', `recorte lado ${r04.lado} en (${r04.x.toFixed(2)}, ${r04.y.
 res = enc.procesar(poligonoVano(mapa((x, y) => x >= 40 && y >= 20 && y < 70))!);
 assert.ok(!res.valido && res.cambio && enc.recorte().lado > 0.4 * 1.4, 'se aleja'); console.log('14 ok', `lado ${enc.recorte().lado.toFixed(2)}`);
 
-// 15) con el cuadro completo: un vano grande mantiene el cuadro completo; uno chico acerca el zoom sobre él
+// 15) con el cuadro completo: una detección válida NO cambia el recorte (estabilidad); algo demasiado chico para ser
+//     válido sí acerca el zoom sobre eso
 const enc2 = new Encuadre();
 res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 10 && x < 78 && y >= 20 && y < 75))!);
-assert.ok(res.valido && enc2.recorte() === COMPLETO);
-res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 50 && x < 70 && y >= 20 && y < 34))!); // 3,6 % del cuadro, arriba a la derecha
+assert.ok(res.valido && !res.cambio && enc2.recorte() === COMPLETO);
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 30 && x < 80 && y >= 40 && y < 50))!); // franja ancha y baja, 6,5 %: válida
+assert.ok(res.valido && !res.cambio && enc2.recorte() === COMPLETO, 'una franja válida no dispara el zoom');
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 50 && x < 66 && y >= 20 && y < 32))!); // 2,5 % del cuadro: no alcanza
 const rz = enc2.recorte();
-assert.ok(res.cambio && rz.lado < 0.5 && rz.x < 50 / n && rz.x + rz.lado > 70 / n && rz.y < 20 / n && rz.y + rz.lado > 34 / n, 'el recorte contiene al vano');
+assert.ok(!res.valido && res.cambio && rz.lado < 0.5 && rz.x < 50 / n && rz.x + rz.lado > 66 / n && rz.y < 20 / n && rz.y + rz.lado > 32 / n, 'el recorte contiene a lo detectado');
 console.log('15 ok', `lado ${rz.lado.toFixed(2)}`);
 
 // 16) un análisis vacío no hace perder el recorte si venía viendo un vano; dos sí
@@ -102,3 +112,121 @@ assert.ok(!enc3.procesar(null).cambio && enc3.recorte() === fijo); assert.ok(enc
 const ra = recorteAlrededor([{ x: 0.4, y: 0.3 }, { x: 0.6, y: 0.3 }, { x: 0.6, y: 0.42 }, { x: 0.4, y: 0.42 }]);
 assert.ok(Math.abs(ra.lado - 0.34) < 1e-9 && Math.abs(ra.x + ra.lado / 2 - 0.5) < 1e-9 && Math.abs(ra.y + ra.lado / 2 - 0.36) < 1e-9);
 assert.equal(aCuadroCompleto(vRec, COMPLETO).area, vRec.area); console.log('17 ok');
+
+const clippedByCrop = poligonoVano(mapa((x, y) => x >= 40 && y >= 20 && y < 70))!;
+assert.equal(completeBay(clippedByCrop, r04), null);
+assert.equal(completeBay(clippedByCrop, COMPLETO), null);
+assert.ok(completeBay(vRec, r04));
+console.log('18 ok: registration requires a complete bay in the crop and sensor image');
+
+const smallBay = completeBay(vRec, r04)!;
+const referenceCorners = registrationCorners(smallBay);
+const shiftedCorners = (offset: number) => referenceCorners.map((value, index) => value + (index % 2 === 0 ? offset : 0));
+assert.ok(sameRegistrationView(referenceCorners, shiftedCorners(.01)));
+assert.ok(sameRegistrationView(shiftedCorners(.01), shiftedCorners(.02)));
+assert.ok(!sameRegistrationView(referenceCorners, shiftedCorners(.02)));
+console.log('19 ok: consecutive frames cannot accumulate movement across the placement window');
+
+const measuredBay = poligonoVano(mapa((x, y) => x >= 10 && x < 78 && y >= 12 && y < 75))!;
+const aspect = .75;
+const identified = partCenters(engineMaps.outback.volumes, {
+  fuseLidRearLeft: [720, 200], fuseLidFrontRight: [800, 250],
+  oilDipstick: [700, 540], washerCap: [1060, 200],
+}, measuredBay, aspect);
+assert.deepEqual(identified.map(([index]) => engineMaps.outback.volumes[index].part), ['fuses', 'dipstick']);
+assert.deepEqual(confirmedPartCenters([[0, .70, .28], [2, .42, .64]], identified, measuredBay, aspect), [identified[0]]);
+assert.deepEqual(confirmedPartCenters([], identified, measuredBay, aspect), []);
+assert.ok(!partCenters(engineMaps.outback.volumes, { fuseLidRearLeft: [720, 200], fuseLidFrontRight: [721, 199] },
+  measuredBay, aspect).length);
+console.log('20 ok: reject partial or conflicting observations without changing catalog part indices');
+
+const consensusPoints: Record<string, Point> = {
+  a: [120,100], b: [430,115], c: [780,140], d: [145,345], e: [480,325],
+  f: [740,305], g: [170,550], h: [470,515], i: [800,510], outlier: [530,440],
+};
+const hypotheses: Candidates['hypotheses'] = {};
+for (const [name, [x, y]] of Object.entries(consensusPoints)) {
+  const u = x / 1080;
+  const v = (y + (name === 'outlier' ? 23 : 0)) / 660;
+  hypotheses[name] = [[u, v], [u - .1, v + .11], [u + .1, v - .11]];
+}
+const appearance = Object.fromEntries(Object.entries(hypotheses).map(([name, peaks]) => [name, peaks[0]]));
+const fit = locate([{ file: 'test view', width: 1080, points: consensusPoints }], {
+  width: 1080, height: 660, detector_bounds: [[.09, .1], [.8, .9]],
+}, { appearance, hypotheses });
+assert.ok(fit);
+assert.ok(fit.landmarks.i);
+assert.equal(fit.landmarks.outlier, undefined);
+console.log('21 ok: an appearance match rejected by projective consensus cannot adjust a part');
+
+const tokens = new Float32Array(4 * 384);
+tokens[0] = 1;
+tokens[385] = 1;
+tokens[768] = -1;
+tokens[1152] = .5;
+tokens[1153] = -.5;
+const grid = normalizeFeatureGrid(tokens, 2, 2, 384);
+const sampler = faceDescriptorSampler(grid, 800, 600);
+const reference = new Array<number>(384).fill(0);
+reference[0] = .6;
+reference[1] = -.8;
+const field = sampler.field(reference);
+for (const [x, y] of [[0, 0], [.34, .52], [.47, .56], [.97, .62], [1, 1]] as Point[]) {
+  const vector = sampleDescriptor(grid, [x, y]);
+  const direct = vector.reduce((sum, value, channel) => sum + value * reference[channel], 0);
+  assert.ok(Math.abs(sampler.score(x * 800, y * 600, field) - direct) < 1e-6);
+}
+const oppositeTokens = new Float32Array(2 * 384);
+oppositeTokens[0] = 1;
+oppositeTokens[384] = -1;
+oppositeTokens[385] = .0001;
+const opposing = faceDescriptorSampler(normalizeFeatureGrid(oppositeTokens, 2, 1), 800, 600);
+assert.equal(opposing.score(400, 300, opposing.field(reference)), 0);
+console.log('22 ok: cached descriptor scores match direct normalized patch interpolation');
+
+const face = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 40 }, { x: 0, y: 40 }];
+const shiftFace = (dx: number) => face.map(({ x, y }) => ({ x: x + dx, y }));
+const tiny = (points: typeof face) => points.map(({ x, y }) => ({ x: 112 + x / 500, y: 270 + y / 500 }));
+assert.ok(faceOverlap(face, shiftFace(18)) >= .60);
+assert.ok(faceOverlap(face, shiftFace(25)) < .60);
+assert.equal(faceOverlap(tiny(face), tiny(shiftFace(18))), faceOverlap(face, shiftFace(18)));
+assert.equal(faceOverlap([{ x: 1, y: 2 }], [{ x: 1, y: 5 }]), 0);
+console.log('23 ok: nearby battery outlines must occupy the same surface at any image scale');
+
+// A clipped bay and a distant target can still supply an image-plane footprint.
+assert.equal(registrationCorners(clippedByCrop).length, 8);
+assert.equal(registrationCorners(aCuadroCompleto(vRec, { x: .8, y: .2, lado: .1 })).length, 8);
+const search = new Encuadre();
+const searched = Array.from({ length: 7 }, () => {
+  const crop = search.recorte();
+  search.procesar(null);
+  return crop;
+});
+for (const x of [.05, .95]) for (const y of [.05, .95]) {
+  assert.ok(searched.some(c => c.lado < 1 && x >= c.x && x <= c.x + c.lado && y >= c.y && y <= c.y + c.lado));
+}
+assert.equal(search.recorte(), COMPLETO);
+console.log('24 ok: partial registration and off-center search');
+// 18) punto marcado por el usuario: con dos zonas candidatas se elige la que lo contiene, no la más grande
+const dos = mapa((x, y) => (x >= 5 && x < 50 && y >= 5 && y < 50) || (x >= 60 && x < 84 && y >= 60 && y < 84));
+assert.ok(poligonoVano(dos)!.esquinas.every(e => e.x <= 50 / n + 1e-9), 'sin punto: la más grande');
+const conPunto = poligonoVano(dos, 0.5, { x: 72 / n, y: 72 / n })!;
+assert.ok(conPunto.esquinas.every(e => e.x >= 60 / n - 1e-9) && Math.abs(conPunto.area - (24 * 24) / (n * n)) < 1e-9, 'con punto: la que lo contiene');
+assert.ok(poligonoVano(dos, 0.5, { x: 0.99, y: 0.01 })!.esquinas.every(e => e.x <= 50 / n + 1e-9), 'punto lejos de todo: se ignora'); console.log('18 ok');
+
+// 19) al marcar un punto, la ronda de búsqueda del zoom se centra en él
+const enc4 = new Encuadre(); enc4.apuntar({ x: 0.7, y: 0.3 }); enc4.procesar(null);
+const r4 = enc4.recorte(); assert.ok(Math.abs(r4.x + r4.lado / 2 - 0.65) < 1e-9 && Math.abs(r4.lado - 0.7) < 1e-9, 'centrado en el punto (ajustado al borde)'); console.log('19 ok');
+
+for (let index = 0; index < 14; index++) {
+  enc4.procesar(null);
+  assert.ok(enc4.recorte().lado > 0);
+}
+
+const prior = clippedByCrop.esquinas;
+const expanded = { ...clippedByCrop, esquinas: prior.map(v => ({ ...v, x: v.x + (v.borde ? .25 : 0) })) };
+assert.ok(extendsPartialMap(prior, expanded));
+assert.ok(!extendsPartialMap(prior, clippedByCrop));
+assert.ok(!extendsPartialMap(prior, { ...expanded, esquinas: expanded.esquinas.map(v => ({ ...v, x: v.x + 2 })) }));
+
+assert.ok(!overlapsPlacedBay(cuad(.1, .1, .5, .5), { ...expanded, esquinas: cuad(.49, .1, .89, .5).map(p => ({ ...p, borde: false })) }));

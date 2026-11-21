@@ -8,8 +8,8 @@
  *
  * Por eso se analiza un RECORTE cuadrado (en coordenadas normalizadas, mismo aspecto que la imagen):
  *  - Sin detección: ronda de búsqueda (cuadro completo → recorte central → recorte central más cerrado).
- *  - Con detección: el recorte sigue al vano para que ocupe ~30 % de lo que ve el modelo; se aleja si el vano toca
- *    el borde del recorte.
+ *  - Con algo detectado pero chico o poco claro: se acerca sobre eso, sin cortar su dimensión mayor.
+ *  - Con una detección válida: el recorte NO se toca (estabilidad); solo se abre si el vano toca su borde.
  * El resultado siempre se entrega en coordenadas del cuadro COMPLETO. Código puro (probado en Node).
  */
 import { vanoValido, type Vano } from './vano';
@@ -20,9 +20,11 @@ export type Recorte = { x: number; y: number; lado: number };
 export const COMPLETO: Recorte = { x: 0, y: 0, lado: 1 };
 const LADO_MIN = 0.3;
 const OCUPACION = 0.3; // fracción del recorte que debería ocupar el vano
+const HOLGURA = 1.3; // el recorte mide al menos esto por la dimensión mayor del vano
 const MARGEN_BORDE = 0.025; // igual que en vano.ts: a esta distancia del borde, una esquina «toca» el borde
 
 const limitar = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const igual = (a: Recorte, b: Recorte) => a.x === b.x && a.y === b.y && a.lado === b.lado;
 
 export function recorteCentrado(cx: number, cy: number, lado: number): Recorte {
   const l = limitar(lado, LADO_MIN, 1);
@@ -42,7 +44,9 @@ export function recorteAlrededor(puntos: { x: number; y: number }[], factor = 1.
 }
 
 // La pantalla muestra la franja central de la captura y el panel tapa la parte de abajo: el usuario encuadra arriba del centro.
-const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4)];
+const BUSQUEDA: Recorte[] = [COMPLETO, recorteCentrado(0.5, 0.4, 0.6), recorteCentrado(0.5, 0.38, 0.4),
+  ...[.3, .7].flatMap(y => [.3, .7].map(x => recorteCentrado(x, y, .6))),
+];
 
 /** Pasa un vano detectado dentro de `r` a coordenadas del cuadro completo. */
 export function aCuadroCompleto(v: Vano, r: Recorte): Vano {
@@ -65,10 +69,26 @@ export class Encuadre {
   private paso = 0; // posición en la ronda de búsqueda
   private vacios = 0;
   private conVano = false; // el último análisis con resultado encontró un vano
+  private centro: { x: number; y: number } | null = null; // punto marcado por el usuario (mantener presionado)
 
   /** Recorte que hay que analizar ahora. */
   recorte(): Recorte {
     return this.actual;
+  }
+
+  /**
+   * El usuario marcó dónde está el motor: la ronda de búsqueda pasa a centrarse en ese punto (en coordenadas del
+   * cuadro completo de la captura actual; hay que llamarlo en cada captura, porque el punto se mueve con el teléfono).
+   */
+  apuntar(punto: { x: number; y: number } | null) {
+    this.centro = punto;
+    // Mientras busca (sin vano), el recorte en curso se recentra de inmediato sobre el punto.
+    if (punto && !this.conVano && this.actual.lado < 1) this.actual = recorteCentrado(punto.x, punto.y, this.actual.lado);
+  }
+
+  private ronda(): Recorte[] {
+    const c = this.centro;
+    return c ? [COMPLETO, recorteCentrado(c.x, c.y, 0.7), recorteCentrado(c.x, c.y, 0.45)] : BUSQUEDA;
   }
 
   /** `v`: lo que detectó el modelo en `recorte()`, en coordenadas de ESE recorte (o null). */
@@ -79,28 +99,39 @@ export class Encuadre {
       // Si venía viendo un vano se tolera un análisis vacío; si no, continúa la ronda de búsqueda.
       if (!(this.conVano && this.vacios < 2)) {
         this.conVano = false;
-        this.paso = (this.paso + 1) % BUSQUEDA.length;
-        this.actual = BUSQUEDA[this.paso];
+        const crops = this.ronda();
+        this.paso = (this.paso + 1) % crops.length;
+        this.actual = crops[this.paso];
       }
-      return { vano: null, valido: false, cambio: this.actual !== r };
+      return { vano: null, valido: false, cambio: !igual(this.actual, r) };
     }
     this.vacios = 0;
     this.conVano = true;
     const completo = aCuadroCompleto(v, r);
     // ¿El vano toca el borde del recorte sin que ese borde sea el del cuadro? Entonces quedó cortado por el zoom.
     const cortadoPorZoom = v.esquinas.some((e, i) => e.borde && !completo.esquinas[i].borde);
-    let lado = Math.sqrt(completo.area / OCUPACION);
-    if (cortadoPorZoom) lado = Math.max(lado, r.lado * 1.5);
-    const cx = completo.esquinas.reduce((s, e) => s + e.x, 0) / completo.esquinas.length;
-    const cy = completo.esquinas.reduce((s, e) => s + e.y, 0) / completo.esquinas.length;
-    const objetivo = recorteCentrado(cx, cy, lado);
-    // Histéresis: se cambia de recorte solo si el actual quedó claramente chico, grande o descentrado.
-    const razon = objetivo.lado / r.lado;
-    const corrido =
-      Math.abs(objetivo.x + objetivo.lado / 2 - (r.x + r.lado / 2)) > 0.2 * r.lado ||
-      Math.abs(objetivo.y + objetivo.lado / 2 - (r.y + r.lado / 2)) > 0.2 * r.lado;
-    if (cortadoPorZoom || razon > 1.3 || razon < 0.7 || corrido) this.actual = objetivo;
-    return { vano: completo, valido: vanoValido(v) && !cortadoPorZoom, cambio: this.actual !== r };
+    const xs = completo.esquinas.map((e) => e.x);
+    const ys = completo.esquinas.map((e) => e.y);
+    const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+    const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    const mayor = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    const valido = vanoValido(v) && !cortadoPorZoom;
+    // Regla de estabilidad (medida con videos del Outback real): si el recorte actual ya da una detección válida, NO
+    // se toca. Reajustarlo en cada análisis hacía oscilar el zoom («Buscando» con 94 % de confianza).
+    if (cortadoPorZoom) {
+      // El vano no cabe en el recorte: se abre, como mínimo hasta contenerlo con holgura.
+      this.actual = recorteCentrado(cx, cy, Math.max(r.lado * 1.5, HOLGURA * mayor));
+    } else if (!valido) {
+      // Hay algo, pero chico o poco claro: se acerca sobre eso, sin cortar su dimensión mayor.
+      const objetivo = recorteCentrado(cx, cy, Math.max(Math.sqrt(completo.area / OCUPACION), HOLGURA * mayor));
+      if (objetivo.lado < r.lado * 0.8) this.actual = objetivo;
+      else {
+        const crops = this.ronda();
+        this.paso = (this.paso + 1) % crops.length;
+        this.actual = crops[this.paso];
+      }
+    }
+    return { vano: completo, valido, cambio: !igual(this.actual, r) };
   }
 
   reiniciar() {
@@ -108,5 +139,6 @@ export class Encuadre {
     this.paso = 0;
     this.vacios = 0;
     this.conVano = false;
+    this.centro = null;
   }
 }

@@ -17,20 +17,24 @@ export type CapturaAR = {
   alto: number;
   grados: number; // giro aplicado a la imagen del sensor (hay que devolverlo en mostrarVista)
   rastreando: boolean; // ARCore seguía el movimiento cuando se tomó (requisito para anclar)
-  muestras: number; // respaldo: distancias de la grilla de 49 hit tests (0 si hubo mapa de profundidad)
+  muestras: number; // Available hit-test distances, including frames that also have a depth image
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
+  registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];
+  /** Punto que el usuario marcó manteniendo presionado, visto en esta captura: [x, y] normalizado. */
+  semilla?: number[];
 };
 
 export type ResultadoFijar = {
+  adjustedParts?: number[];
   esquinas: number;
   /**
-   * Con mapa de profundidad: 'plano' (superficie plana: esquinas sobre el plano ajustado) o 'relieve' (cada esquina
-   * con su profundidad local). Respaldo con 49 hit tests: 'profundidad' | 'parcial' | 'distancia-media' | 'estimado'.
+   * Dense placement uses a fitted plane or local relief. The part map can also use distributed hit tests.
+   * Generic contours retain their existing distance fallbacks.
    */
-  metodo: 'plano' | 'relieve' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
+  metodo: 'escaneo' | 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
   muestras: number; // puntos de profundidad usados
   mapPlaced: boolean; // el mapa de piezas del vehículo quedó ubicado
   distancia: number; // m, mediana de las distancias medidas
@@ -42,6 +46,9 @@ export type ResultadoFijar = {
   anguloVista?: number; // grados: 0 = se mira de frente
 };
 
+/** Catalog volume index and center in the normalized upright capture. */
+export type PartCenter = [number, number, number];
+
 export type EstadoAR = {
   estado: 'iniciando' | 'instalando' | 'rastreando' | 'sin-rastreo' | 'error';
   detalle: string | null;
@@ -51,12 +58,32 @@ export type EstadoAR = {
 };
 
 export type VistaARRef = {
-  capturar(): Promise<CapturaAR>;
+  capturar(includeMeasurements?: boolean): Promise<CapturaAR>;
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
-  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][]): Promise<ResultadoFijar>;
+  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
+  /**
+   * Escaneo: suma lo que el modelo vio en la captura `id`. `mascara`: 88×88 caracteres '0'/'1' sobre el recorte
+   * (rx, ry, lado). Devuelve el mapa acumulado del vano (88×88, 0-100) sobre el plano del vano en el mundo.
+   */
+  acumular(id: number, mascara: string, rx: number, ry: number, lado: number): Promise<ResultadoEscaneo>;
+  /**
+   * Deja como vista previa (pegada al mundo) el contorno del escaneo, dado en coordenadas de su mapa, y lo devuelve
+   * proyectado a la captura `id` (x0, y0, x1, y1…; puede salirse de 0..1). Lista vacía si no se pudo.
+   */
+  contornoEscaneo(id: number, esquinas: number[]): Promise<number[]>;
+  reiniciarEscaneo(): Promise<void>;
+  /** «Mantener presionado»: guarda el punto del mundo que hay en (x, y) de la vista, en píxeles. false si no se pudo medir. */
+  sembrar(x: number, y: number): Promise<boolean>;
+};
+
+export type ResultadoEscaneo = {
+  ok: boolean; // el cuadro sirvió (había profundidad y vano)
+  vistas: number; // cuadros acumulados
+  mapa?: number[]; // 88×88, fila por fila
+  semilla?: number[]; // el punto marcado por el usuario, en coordenadas del mapa (0..1)
 };
 
 export type VistaARProps = ViewProps & {

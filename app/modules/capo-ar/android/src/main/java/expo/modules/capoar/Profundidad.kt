@@ -30,6 +30,18 @@ internal class Profundidad(
     return Pair(tu * w, tv * h)
   }
 
+  /** De un píxel de este mapa a coordenadas normalizadas de la imagen del sensor (inversa de [aPixel]). */
+  fun aImagen(x: Float, y: Float): Pair<Float, Float> {
+    val a11 = aTextura[2] - aTextura[0]
+    val a12 = aTextura[4] - aTextura[0]
+    val a21 = aTextura[3] - aTextura[1]
+    val a22 = aTextura[5] - aTextura[1]
+    val det = a11 * a22 - a12 * a21
+    val du = x / w - aTextura[0]
+    val dv = y / h - aTextura[1]
+    return Pair((a22 * du - a12 * dv) / det, (-a21 * du + a11 * dv) / det)
+  }
+
   /**
    * Rayo de la cámara por el píxel (x, y), con z = -1 (la cámara mira hacia -Z, +X derecha, +Y arriba).
    * Multiplicado por la profundidad (que ARCore entrega a lo largo del eje óptico) da el punto 3D.
@@ -75,6 +87,8 @@ internal class Profundidad(
 /** Plano n·P = d en el sistema de la cámara, con la normal apuntando hacia la cámara. */
 internal class PlanoAjustado(val n: FloatArray, val d: Float, val fraccion: Float, val rms: Float)
 
+internal data class DepthRegistration(val points: List<FloatArray>, val method: String)
+
 /**
  * Superficie medida con el mapa de profundidad dentro del contorno. Entrega el punto 3D (sistema de la cámara) que
  * corresponde a cualquier píxel del mapa: sirve para las esquinas del contorno y para registrar el mapa de piezas.
@@ -84,6 +98,7 @@ internal class AnclajeDenso(
   private val pts: List<FloatArray>,
   private val plano: PlanoAjustado?,
   private val plana: Boolean,
+  val insideBay: Boolean,
   val mediana: Float, // m: distancia mediana
   private val radio: Float
 ) {
@@ -96,31 +111,55 @@ internal class AnclajeDenso(
 
   fun punto(x: Float, y: Float): FloatArray {
     val dir = p.rayo(x, y)
-    // Profundidad si el punto está sobre el plano: corte del rayo con el plano n·P = d.
-    val enPlano = plano?.let {
-      val den = it.n[0] * dir[0] + it.n[1] * dir[1] + it.n[2] * dir[2]
-      if (abs(den) > 1e-6f) it.d / den else null
-    }?.takeIf { it > 0.4f * mediana && it < 2.5f * mediana }
-    val t = if (plana) (enPlano ?: medianaLocal(x, y) ?: mediana) else (medianaLocal(x, y) ?: enPlano ?: mediana)
+    val enPlano = planeDepth(dir)
+    val t = enPlano.takeIf { plana } ?: medianaLocal(x, y, radio * radio) ?: enPlano ?: mediana
     return floatArrayOf(dir[0] * t, dir[1] * t, dir[2] * t)
   }
 
-  /** Profundidad mediana de los puntos a menos de `radio` píxeles de (x, y); null si hay muy pocos. */
-  private fun medianaLocal(x: Float, y: Float): Float? {
+  private fun planeDepth(ray: FloatArray): Float? =
+    plano?.let {
+      val den = it.n[0] * ray[0] + it.n[1] * ray[1] + it.n[2] * ray[2]
+      if (abs(den) > 1e-6f) it.d / den else null
+    }?.takeIf { it > 0.4f * mediana && it < 2.5f * mediana }
+
+  /** The engine mesh needs measured depth near every corner, without floor or background fallbacks. */
+  fun registrationPoints(corners: List<Pair<Float, Float>>): DepthRegistration? {
+    if (!insideBay || corners.size != 4) return null
+    val radiiSquared = cornerSupportRadiiSquared(corners, 0.065f * max(p.w, p.h))
+    val localDepths = corners.mapIndexed { index, (x, y) ->
+      medianaLocal(x, y, radiiSquared[index]) ?: return null
+    }
+    val rays = corners.map { (x, y) -> p.rayo(x, y) }
+    val planeDepths = if (plana) {
+      rays.mapIndexedNotNull { index, ray ->
+        val measured = localDepths[index]
+        planeDepth(ray)?.takeIf { abs(it - measured) <= max(0.03f, 0.035f * measured) }
+      }.takeIf { it.size == corners.size }
+    } else null
+    val distances = planeDepths ?: localDepths
+    val points = rays.mapIndexed { index, ray ->
+      val distance = distances[index]
+      floatArrayOf(ray[0] * distance, ray[1] * distance, ray[2] * distance)
+    }
+    return DepthRegistration(points, if (planeDepths != null) "plano" else "relieve")
+  }
+
+  /** Median optical depth within the given squared pixel radius, or null with too few samples. */
+  private fun medianaLocal(x: Float, y: Float, radiusSquared: Float): Float? {
     val cerca = ArrayList<Float>()
-    val r2 = radio * radio
     for (q in pts) {
       val dx = q[3] - x
       val dy = q[4] - y
-      if (dx * dx + dy * dy <= r2) cerca.add(-q[2])
+      if (dx * dx + dy * dy <= radiusSquared) cerca.add(-q[2])
     }
     if (cerca.size < MIN_LOCALES) return null
     cerca.sort()
     return cerca[cerca.size / 2]
   }
 
-  private companion object {
-    const val MIN_LOCALES = 8
+  companion object {
+    private const val MIN_LOCALES = 8
+    const val MIN_REGISTRATION_POINTS = 4 * MIN_LOCALES
   }
 }
 
@@ -135,14 +174,15 @@ internal object AnclajePorProfundidad {
     val paso = max(1, ceil(sqrt(p.w * p.h / MAX_PUNTOS.toFloat())).toInt())
     // Solo lo que cae DENTRO del polígono: fuera está el piso o el fondo, mucho más lejos.
     var pts = recolectar(p, paso) { x, y -> enPoligono(x, y, xs, ys) }
-    if (pts.size < MIN_PUNTOS) pts = recolectar(p, paso) { _, _ -> true }
+    val insideBay = pts.size >= MIN_PUNTOS
+    if (!insideBay) pts = recolectar(p, paso) { _, _ -> true }
     if (pts.size < MIN_PUNTOS) return null
 
     val zs = FloatArray(pts.size) { -pts[it][2] }.also { it.sort() }
     val mediana = zs[zs.size / 2]
     val plano = ajustarPlano(pts, max(0.012f, 0.025f * mediana))
     val plana = plano != null && plano.fraccion >= FRACCION_PLANA
-    return AnclajeDenso(p, pts, plano, plana, mediana, 0.15f * max(p.w, p.h))
+    return AnclajeDenso(p, pts, plano, plana, insideBay, mediana, 0.15f * max(p.w, p.h))
   }
 
   /** Puntos 3D (x, y, z de cámara) + su píxel (px, py), de los píxeles con profundidad válida que cumplen `filtro`. */
@@ -168,7 +208,7 @@ internal object AnclajePorProfundidad {
   }
 
   /** Plano dominante por RANSAC y reajuste por mínimos cuadrados sobre los puntos que lo apoyan. */
-  private fun ajustarPlano(pts: List<FloatArray>, umbral: Float): PlanoAjustado? {
+  fun ajustarPlano(pts: List<FloatArray>, umbral: Float): PlanoAjustado? {
     val azar = Random(7)
     var mejor: FloatArray? = null
     var mejorD = 0f

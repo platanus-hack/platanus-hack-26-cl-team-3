@@ -28,8 +28,8 @@ export type EngineMap = {
   partDetails?: Partial<Record<PartId, string>>;
 };
 
-// Footprints use coordinates from 0 to 1 in each image axis.
-// Extrusion heights are relative to the image width and require on-vehicle measurements.
+// Visible faces use coordinates from 0 to 1 in each reference image axis.
+// Android scales approximate extrusion heights by the measured bay width.
 export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   outback: {
     referenceVariant: "3.6R Limited · EZ36 · Norteamérica",

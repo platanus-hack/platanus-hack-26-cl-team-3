@@ -1,5 +1,47 @@
-import type { Vano } from '../detector/vano';
+import { aCuadroCompleto, type Recorte } from '../detector/encuadre';
+import { iouPoligonos, vanoValido, type Vano } from '../detector/vano';
 import type { Volume } from './catalog';
+
+/** A registration or alignment check needs the entire bay in both the crop and the sensor image. */
+export function completeBay(detection: Vano | null, crop: Recorte): Vano | null {
+  if (!vanoValido(detection) || detection.cortado) return null;
+  const bay = aCuadroCompleto(detection, crop);
+  return bay.cortado ? null : bay;
+}
+
+const imageBounds = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+
+/** For an existing anchor, compare only the portion both outlines could show in this capture. */
+export function overlapsPlacedBay(previous: { x: number; y: number }[], candidate: Vano): boolean {
+  const iou = iouPoligonos(previous, candidate.esquinas);
+  if (iou === 0) return false;
+  const priorArea = iouPoligonos(previous, imageBounds);
+  const nextArea = iouPoligonos(candidate.esquinas, imageBounds);
+  const intersection = iou * (priorArea + nextArea) / (1 + iou);
+  return intersection >= .5 * Math.min(priorArea, nextArea);
+}
+
+/** Compare both outlines in the current capture, including coverage beyond its edges. */
+export function extendsPartialMap(previous: { x: number; y: number }[], candidate: Vano): boolean {
+  const area = (points: typeof previous) => Math.abs(points.reduce((sum, a, index) => {
+    const b = points[(index + 1) % points.length];
+    return sum + a.x * b.y - a.y * b.x;
+  }, 0)) / 2;
+  const before = area(previous);
+  const after = area(candidate.esquinas);
+  return before > 0 && after > 1.15 * before && overlapsPlacedBay(previous, candidate);
+}
+
+/** Limit displacement relative to the original bay size, including on small or distant targets. */
+export function sameRegistrationView(reference: number[], current: number[]): boolean {
+  if (reference.length !== 8 || current.length !== 8) return false;
+  const width = Math.min(reference[2] - reference[0], reference[6] - reference[4]);
+  const height = reference[5] - reference[1];
+  return width > 0 && height > 0 && current.every((value, index) => {
+    const size = index % 2 === 0 ? width : height;
+    return Math.abs(value - reference[index]) <= .08 * size;
+  });
+}
 
 /**
  * Match the rear and front edges of the reference to a complete bay seen from
@@ -7,11 +49,11 @@ import type { Volume } from './catalog';
  * corners and the background. Coordinates refer to the original capture.
  */
 export function registrationCorners(bay: Vano): number[] {
-  if (bay.cortado || bay.esquinas.length < 3) return [];
+  if (bay.esquinas.length < 3) return [];
   const vertices = bay.esquinas;
   const top = Math.min(...vertices.map(({ y }) => y));
   const bottom = Math.max(...vertices.map(({ y }) => y));
-  if (bottom - top < .08) return [];
+  if (bottom <= top) return [];
 
   const corners: number[] = [];
   for (const row of [.12, .88]) {
@@ -25,7 +67,7 @@ export function registrationCorners(bay: Vano): number[] {
     const left = Math.min(...intersections);
     const right = Math.max(...intersections);
     const inset = (right - left) * .04;
-    if (right - left < .08) return [];
+    if (right <= left) return [];
     corners.push(left + inset, y, right - inset, y);
   }
   return corners;
