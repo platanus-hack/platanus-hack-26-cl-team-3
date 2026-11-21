@@ -8,6 +8,7 @@ import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.hypot
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -134,6 +135,26 @@ internal class VisualModelRegistration(bytes: ByteArray) {
     val translation = DoubleArray(3).also { t.get(0,0,it) }
     if (!rotation.all(Double::isFinite) || !translation.all(Double::isFinite) ||
       indices.any { val p = objectPoints[it]; rotation[6]*p.x+rotation[7]*p.y+rotation[8]*p.z+translation[2] <= .05 }) return null
+    try {
+      val color = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_COLOR))
+      val candidate = translation.copyOf()
+      if (!color.empty()) refineOutbackTranslation(color,degrees,intrinsics,rotation,candidate)
+      if (!candidate.contentEquals(translation)) {
+        val scale = intrinsics.width.toDouble() / (if (degrees.mod(180) == 90) image.rows() else image.cols())
+        fun medianResidual(t: DoubleArray): Double {
+          val pose = VisualModelPose(rotation,t)
+          return indices.map { index ->
+            val p = objectPoints[index]
+            val uv = intrinsics.project(pose.cameraPoint(EnginePoint(p.x.toFloat(),p.y.toFloat(),p.z.toFloat())))
+            if (uv == null) Double.POSITIVE_INFINITY else hypot(
+              uv.x * intrinsics.width - sensor[index].x, uv.y * intrinsics.height - sensor[index].y)
+          }.sorted()[indices.size/2]
+        }
+        if (medianResidual(candidate) <= medianResidual(translation) + 3 * scale) candidate.copyInto(translation)
+      }
+    } catch (_: CvException) {
+      // The geometric pose remains available if optional color processing fails.
+    }
     val ratios = HashMap<Int, Float>()
     if (depth != null) for (index in indices) {
       val pixel = sensor[index]
