@@ -74,6 +74,7 @@ export default function Menu() {
                 accessibilityRole="button"
                 accessibilityLabel={`${option.name} ${option.year}, ${option.engine}`}
                 aria-pressed={checked}
+                accessibilityState={{ selected: checked }}
                 style={[styles.vehicleOption, checked && styles.selectedOption]}
               >
                 <View style={styles.flex}>
