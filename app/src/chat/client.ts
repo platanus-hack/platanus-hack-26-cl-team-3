@@ -5,6 +5,8 @@ import { splitEvents } from './sse';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
+
 const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error', code, message });
 
 export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): AsyncGenerator<ChatEvent> {
@@ -16,7 +18,11 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
   try {
     res = await fetch(`${API_URL}/api/chat`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+      headers: {
+        'content-type': 'application/json',
+        accept: 'text/event-stream',
+        ...(CHAT_TOKEN ? { 'x-chat-token': CHAT_TOKEN } : {}),
+      },
       body: JSON.stringify({ messages }),
     });
   } catch {

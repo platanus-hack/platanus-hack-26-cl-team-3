@@ -3,7 +3,7 @@ import type { AnthropicMessage } from './contract';
 const KEY = 'capo-ar:chat-v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
-export type ViewPart = { text: string; citations: ViewCitation[] };
+export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
 export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[] };
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
@@ -53,7 +53,10 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
     }
     if (parts.length === 0) continue;
     const last = out[out.length - 1];
-    if (last?.role === 'assistant') last.parts.push(...parts);
+    if (last?.role === 'assistant') {
+      parts[0] = { ...parts[0], breakBefore: true };
+      last.parts.push(...parts);
+    }
     else out.push({ role: 'assistant', parts });
   }
   return out;

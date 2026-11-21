@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { runTurn } from '../chat/client';
@@ -20,14 +20,18 @@ export default function Ask() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const busyRef = useRef(false);
   const [citation, setCitation] = useState<ViewCitation | null>(null);
 
   useEffect(() => {
-    load().then((loaded) => {
+    load().then((stored) => {
       if (messages.current.length === 0) {
-        messages.current = loaded;
+        messages.current = stored;
         setVersion((v) => v + 1);
       }
+      setLoaded(true);
     });
   }, []);
 
@@ -40,12 +44,15 @@ export default function Ask() {
 
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || busy) return;
+    if (!text || busyRef.current || !loaded) return;
+    busyRef.current = true;
     const userMessage: AnthropicMessage = { role: 'user', content: text };
     const previous = messages.current;
     const parts: ViewPart[] = [];
+    let breakNext = false;
 
     setInput('');
+    setNote(null);
     setError(null);
     setQuestion(text);
     setLive([]);
@@ -56,9 +63,14 @@ export default function Ask() {
       for await (const ev of runTurn({ messages: [...previous, userMessage] })) {
         if (ev.type === 'tool') {
           setStatus('Revisando la tabla de fusibles…');
+          breakNext = true;
         } else if (ev.type === 'text') {
           setStatus(null);
-          parts[ev.block] ??= { text: '', citations: [] };
+          if (!parts[ev.block]) {
+            const first = parts.some(Boolean);
+            parts[ev.block] = { text: '', citations: [], ...(breakNext && first ? { breakBefore: true } : {}) };
+            breakNext = false;
+          }
           parts[ev.block] = { ...parts[ev.block], text: parts[ev.block].text + ev.text };
           setLive(parts.filter(Boolean));
         } else if (ev.type === 'citation') {
@@ -69,6 +81,7 @@ export default function Ask() {
         } else if (ev.type === 'done') {
           messages.current = [...previous, userMessage, ...ev.messages];
           void save(messages.current);
+          if (ev.truncated) setNote('La respuesta se cortó.');
           setVersion((v) => v + 1);
           setQuestion(null);
           setLive([]);
@@ -86,14 +99,16 @@ export default function Ask() {
       setLive([]);
     } finally {
       setStatus(null);
+      busyRef.current = false;
       setBusy(false);
     }
-  }, [input, busy]);
+  }, [input, loaded]);
 
   const reset = useCallback(() => {
     messages.current = [];
     void clear();
     setError(null);
+    setNote(null);
     setVersion((v) => v + 1);
   }, []);
 
@@ -128,30 +143,33 @@ export default function Ask() {
           </Tarjeta>
         )}
         {bubbles.map((b, i) => (
-          <BubbleView key={i} bubble={b} onCitation={setCitation} />
+          <BubbleView key={i} bubble={b} streaming={live.length > 0 && i === bubbles.length - 1} onCitation={setCitation} />
         ))}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + espacio.s }]}>
         {error && <Text style={styles.error}>{error}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
+        {note && !status && <Text style={styles.status}>{note}</Text>}
         <View style={styles.row}>
           <TextInput
-            style={[styles.input, busy && { opacity: 0.5 }]}
+            style={[styles.input, (busy || !loaded) && { opacity: 0.5 }]}
             value={input}
             onChangeText={setInput}
-            editable={!busy}
-            placeholder="Escribe tu question"
+            editable={!busy && loaded}
+            placeholder="Escribe tu pregunta"
             placeholderTextColor={color.textoTenue}
             multiline
+            submitBehavior="submit"
+            returnKeyType="send"
             onSubmitEditing={() => void send()}
           />
           <Pressable
             onPress={() => void send()}
-            disabled={busy || !input.trim()}
+            disabled={busy || !loaded || !input.trim()}
             accessibilityRole="button"
             accessibilityLabel="Enviar"
-            style={[styles.send, (busy || !input.trim()) && { opacity: 0.4 }]}
+            style={[styles.send, (busy || !loaded || !input.trim()) && { opacity: 0.4 }]}
           >
             <Icono nombre="send" tam={22} tono={color.acentoTexto} />
           </Pressable>
@@ -171,15 +189,17 @@ export default function Ask() {
   );
 }
 
-function BubbleView({ bubble, onCitation }: { bubble: Bubble; onCitation: (c: ViewCitation) => void }) {
+function BubbleView({ bubble, streaming, onCitation }: { bubble: Bubble; streaming: boolean; onCitation: (c: ViewCitation) => void }) {
   const mine = bubble.role === 'user';
+  const uncited =
+    !mine && !streaming && bubble.parts.some((p) => p.text.trim()) && bubble.parts.every((p) => p.citations.length === 0);
   let n = 0;
   return (
     <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant]}>
       <Text style={[tipo.cuerpo, mine && { color: color.acentoTexto }]}>
         {bubble.parts.map((p, i) => (
           <Text key={i}>
-            {p.text}
+            {p.breakBefore && i > 0 ? `\n\n${p.text}` : p.text}
             {p.citations.map((c, j) => (
               <Text key={j} style={styles.chip} onPress={() => onCitation(c)} accessibilityRole="button">
                 {` [${++n}]`}
@@ -188,6 +208,7 @@ function BubbleView({ bubble, onCitation }: { bubble: Bubble; onCitation: (c: Vi
           </Text>
         ))}
       </Text>
+      {uncited && <Text style={styles.uncited}>Sin cita del manual</Text>}
     </View>
   );
 }
@@ -212,6 +233,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '88%', borderRadius: radio.l, paddingVertical: espacio.m, paddingHorizontal: espacio.l },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: color.acento },
   bubbleAssistant: { alignSelf: 'flex-start', backgroundColor: color.superficie, borderWidth: 1, borderColor: color.borde },
+  uncited: { fontSize: 12, color: color.textoTenue, marginTop: espacio.xs },
   chip: { color: color.acento, fontWeight: '800' },
   footer: { paddingHorizontal: espacio.l, paddingTop: espacio.s, borderTopWidth: 1, borderTopColor: color.borde, backgroundColor: color.fondo },
   status: { fontSize: 13, color: color.textoSuave, marginBottom: espacio.s },

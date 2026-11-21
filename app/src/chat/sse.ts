@@ -9,7 +9,7 @@ export function toEvent(name: string, data: any): ChatEvent | null {
     case 'citation':
       return { type: 'citation', block: data.block, title: data.title, source: data.source, cited_text: data.cited_text };
     case 'done':
-      return { type: 'done', messages: data.messages };
+      return data.truncated === true ? { type: 'done', messages: data.messages, truncated: true } : { type: 'done', messages: data.messages };
     case 'error':
       return { type: 'error', code: data.code, message: data.message };
     default:
@@ -25,6 +25,7 @@ export function splitEvents(buffer: string): { events: ChatEvent[]; rest: string
     let name = '';
     let data = '';
     for (const line of chunk.split('\n')) {
+      if (line.startsWith(':')) continue;
       if (line.startsWith('event:')) name = line.slice(6).trim();
       else if (line.startsWith('data:')) data += line.slice(5).trim();
     }

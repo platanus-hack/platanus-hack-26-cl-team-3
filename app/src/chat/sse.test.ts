@@ -31,3 +31,26 @@ test('maps done and error, and ignores unknown events or broken JSON', () => {
   ]);
   assert.equal(rest, '');
 });
+
+test('maps truncated on done only when true', () => {
+  const buffer =
+    'event: done\ndata: {"messages":[],"truncated":true}\n\n' +
+    'event: done\ndata: {"messages":[]}\n\n';
+  assert.deepEqual(splitEvents(buffer).events, [
+    { type: 'done', messages: [], truncated: true },
+    { type: 'done', messages: [] },
+  ]);
+});
+
+test('ignores SSE comment lines such as ping', () => {
+  const buffer =
+    'event: tool\ndata: {"name":"lookup_fuses"}\n\n' +
+    ': ping\n\n' +
+    'event: text\ndata: {"block":0,"text":"hola"}\n\n';
+  const { events, rest } = splitEvents(buffer);
+  assert.deepEqual(events, [
+    { type: 'tool', name: 'lookup_fuses' },
+    { type: 'text', block: 0, text: 'hola' },
+  ]);
+  assert.equal(rest, '');
+});

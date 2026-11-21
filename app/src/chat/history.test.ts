@@ -32,3 +32,13 @@ test('toView merges consecutive assistant messages', () => {
   assert.equal(v.length, 2);
   assert.deepEqual(v[1].parts.map((p) => p.text), ['a', 'b']);
 });
+
+test('toView marks the first part of each later assistant message with breakBefore', () => {
+  const v = toView([
+    { role: 'user', content: 'hola' },
+    { role: 'assistant', content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: [] }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'c' }, { type: 'text', text: 'd' }] },
+  ]);
+  assert.deepEqual(v[1].parts.map((p) => p.breakBefore === true), [false, false, true, false]);
+});
