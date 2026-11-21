@@ -16,6 +16,23 @@ services:
       - "traefik.http.routers.app-1466158396.service=app-1466158396"
       - "traefik.http.services.app-1466158396.loadbalancer.server.port=8080"
       - "monitoring.url=https://${CAPO_AR_DOMAIN:-ph26.berguecio.cl}"
+  api:
+    build: ./api
+    image: ${COMPOSE_PROJECT_NAME}-api:latest
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    networks: [proxy]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.api-1466158396.rule=Host(`${CAPO_AR_DOMAIN:-ph26.berguecio.cl}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.api-1466158396.entrypoints=websecure"
+      - "traefik.http.routers.api-1466158396.tls=true"
+      - "traefik.http.routers.api-1466158396.middlewares=cloudflare-only@file"
+      - "traefik.http.routers.api-1466158396.service=api-1466158396"
+      - "traefik.http.services.api-1466158396.loadbalancer.server.port=8787"
 networks:
   proxy:
     external: true

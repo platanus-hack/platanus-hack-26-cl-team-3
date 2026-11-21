@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { File } from 'expo-file-system';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { cargarDetector, puntuarFoto } from '../detector/detector';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono } from '../ui';
+import { vehicles } from '../vehicles';
 
 // Histéresis sobre el puntaje suavizado: entra a «detectado» con ≥ 0,6 (y al menos 2 análisis), sale con < 0,45.
 // 0,6 es el umbral medido en herramientas/detector-capo (95,8 % de aciertos con fotos de Wikimedia).
@@ -57,6 +58,8 @@ function borrar(uri: string) {
 }
 
 export default function Escanear() {
+  const { vehicleId } = useLocalSearchParams<{ vehicleId?: string }>();
+  const vehicle = vehicles.find((option) => option.id === vehicleId);
   const insets = useSafeAreaInsets();
   const [permiso, pedirPermiso] = useCameraPermissions();
   const camara = useRef<CameraView>(null);
@@ -149,7 +152,12 @@ export default function Escanear() {
   const barraSuperior = (
     <View style={[styles.barra, { paddingTop: insets.top + espacio.s }]}>
       <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
-      <Text style={styles.barraTitulo}>Escanear capó</Text>
+      <View style={styles.scanTitle}>
+        <Text style={styles.barraTitulo}>Escanear capó</Text>
+        {vehicle && (
+          <Text style={styles.scanVehicle}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>
+        )}
+      </View>
       <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
     </View>
   );
@@ -289,6 +297,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: espacio.l,
     paddingBottom: espacio.s,
   },
+  scanTitle: { flex: 1, alignItems: 'center', paddingHorizontal: espacio.s },
+  scanVehicle: { color: color.texto, fontSize: 13, textAlign: 'center' },
   barraTitulo: {
     color: color.texto,
     fontSize: 17,
