@@ -13,9 +13,26 @@ import { Asset } from 'expo-asset';
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as jpeg from 'jpeg-js';
-import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import type { InferenceSession } from 'onnxruntime-react-native';
 
 import textos from './textos-clip.json';
+
+type Ort = typeof import('onnxruntime-react-native');
+let ort: Ort | null = null;
+
+/**
+ * Carga ONNX Runtime recién cuando se necesita y dentro de un try: la librería instala su módulo nativo al importarse
+ * y, si falla, lanza un error. Importarla arriba hacía que ese error cerrara la app (en release, un error de JS al cargar
+ * un módulo es fatal). Así el fallo llega a la pantalla como mensaje.
+ */
+function cargarOrt(): Ort {
+  if (!ort) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const m: Ort = require('onnxruntime-react-native');
+    ort = m;
+  }
+  return ort;
+}
 
 const LADO = 224;
 const MEDIA = [0.48145466, 0.4578275, 0.40821073];
@@ -33,6 +50,7 @@ let sesion: Promise<InferenceSession> | null = null;
 export function cargarDetector(): Promise<InferenceSession> {
   if (!sesion) {
     sesion = (async () => {
+      const { InferenceSession } = cargarOrt();
       const [asset] = await Asset.loadAsync(MODELO);
       const ruta = asset.localUri ?? asset.uri;
       return InferenceSession.create(ruta, { graphOptimizationLevel: 'all', intraOpNumThreads: 4 });
@@ -48,6 +66,7 @@ export function cargarDetector(): Promise<InferenceSession> {
 export async function puntuarFoto(uri: string): Promise<number> {
   const modelo = await cargarDetector();
   const pixeles = await prepararImagen(uri);
+  const { Tensor } = cargarOrt();
   const salida = await modelo.run({ pixel_values: new Tensor('float32', pixeles, [1, 3, LADO, LADO]) });
   const imagen = salida.image_embeds.data as Float32Array;
   return probabilidadCapo(imagen);

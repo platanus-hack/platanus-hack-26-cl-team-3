@@ -18,6 +18,24 @@ const PAUSA_MS = 200;
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** expo-router muestra esto si la pantalla falla al dibujarse: mensaje en vez de cerrar la app. */
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Promise<void> }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.raiz, styles.centro, { backgroundColor: color.fondo, paddingTop: insets.top }]}>
+      <View style={styles.iconoGrande}>
+        <Icono nombre="alert-circle-outline" tam={36} tono={color.peligro} />
+      </View>
+      <Text style={[tipo.titulo, styles.textoCentro]}>El escáner falló</Text>
+      <Text style={[tipo.nota, styles.textoCentro, { marginTop: espacio.s, marginBottom: espacio.xl }]}>
+        {error.message}
+      </Text>
+      <Boton texto="Reintentar" icono="refresh" onPress={() => void retry()} />
+      <Boton texto="Volver al menú" variante="secundario" onPress={() => router.back()} estilo={{ marginTop: espacio.m }} />
+    </View>
+  );
+}
+
 /** Elige la foto más chica cuyo lado menor sea ≥ 480 px: basta para 224×224 y acelera mucho la captura. */
 function elegirTamano(tamanos: string[]): string | undefined {
   const validos = tamanos
