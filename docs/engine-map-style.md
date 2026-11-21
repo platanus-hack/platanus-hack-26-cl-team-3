@@ -8,7 +8,7 @@ Use the Subaru Outback 2016 3.6R viewer as the reference for vehicle maps, compo
 
 **Model and materials.** Render the exact variant’s registered model with its existing proportions, facets and materials. Keep nearby components visible to give the driver a point of reference. Carry the washer, dipstick and fuse box accents across vehicles. Other components retain their source materials unless the catalog assigns an accent.
 
-**Selection and labels.** Pulse the visible silhouette of the selected mesh. Anchor a short localized name to the part and use its accent for the leader line. Keep the label clear of the opening, moving lid, stream and other labels. Pair selection color with a part name and a readable step. Use the same animated pose for rendering, tapping and positioning the guide.
+**Selection and labels.** Pulse the visible silhouette of the selected mesh. In the reference viewer, anchor a short localized name to the part and use its accent for the leader line. The Android scanner shows the name in its controls and guides the driver with a distance indicator, found status or direction arrow. Keep the label clear of the opening, moving lid, stream and other labels. Pair selection color with a part name and a readable step. Use the same animated pose for rendering, tapping and positioning the guide.
 
 | Reference viewer element | Design value |
 | --- | --- |
@@ -46,4 +46,4 @@ For example, a request to locate the fuse box maps to `fuses / highlight`. Inspe
 - For a motion-reduced presentation, design discrete steps with manual advancement. Validate that mode on the target device before claiming support.
 - Verify live placement on the exact vehicle. A replay can verify the mesh and rendering independently of tracking on a physical car.
 
-The Android reference captures cover the [fuse box highlight](evidence/outback-inspection/fuses.png), [battery lift](evidence/outback-inspection/battery.png), [washer pour](evidence/outback-inspection/washer.png), [open neck from above](evidence/outback-inspection/overhead.png) and [return to the registered position](evidence/outback-inspection/returned.png).
+The five captures below are offline replays from the Android OpenGL renderer running on an emulator. Live ARCore placement on a physical Outback remains unverified. The captures cover the [fuse box highlight](evidence/outback-inspection/fuses.png), [battery lift](evidence/outback-inspection/battery.png), [washer pour](evidence/outback-inspection/washer.png), [open neck from above](evidence/outback-inspection/overhead.png) and [return to the registered position](evidence/outback-inspection/returned.png).
