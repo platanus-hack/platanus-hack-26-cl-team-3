@@ -20,6 +20,24 @@ cuadro** (vista parcial): la app pide alejarse. En **modo debug** el polígono s
 
 `scripts/preparar-modelo-vano.sh` arma el ONNX (lo llama `scripts/compilar-apk.sh`).
 
+## Anclaje con ARCore (contorno fijo al moverse)
+
+Módulo nativo propio: `app/modules/capo-ar/` (Kotlin, ARCore 1.57). Se reconoce **una vez** y se engancha al
+espacio real (`app/src/escaner/EscanerAR.tsx`):
+
+1. **Buscando:** la vista AR entrega cuadros de su cámara (`capturar`, imagen ya derecha) → modelo → polígono de vista
+   previa (ámbar punteado). En cada captura se guardan la pose de la cámara, sus intrínsecos y 49 distancias reales
+   (grilla 7×7 de *hit tests*: profundidad de ARCore si el teléfono la tiene, si no puntos y planos detectados).
+2. **Fijar:** al tener capó abierto + vano completo en la imagen + seguimiento AR durante 3 análisis seguidos (o con
+   «Fijar ahora»), cada esquina se convierte en un rayo desde la cámara de ESA captura; la distancia sale de las
+   muestras cercanas (si no hay, la mediana; si nada, 0,7 m) → un `Anchor` por esquina.
+3. **Anclado:** el modelo se detiene; en cada cuadro las anclas se proyectan con la pose actual y el polígono (verde)
+   se dibuja en nativo (Canvas), sin pasar por JavaScript. «Volver a detectar» suelta las anclas.
+
+En el manifiesto ARCore es **opcional**: sin ARCore la app usa el escáner de fotos (`EscanerCamara.tsx`), cuyo
+contorno no queda fijo. **Sin probar aún en un teléfono:** la precisión del anclaje depende de la profundidad que mida
+ARCore sobre el motor (piezas brillantes u oscuras pueden dar pocas muestras; el modo debug muestra cuántas).
+
 ## Datos y entrenamiento
 
 - **34 fotos de Wikimedia Commons** con capó abierto, anotadas a mano (`poligonos.json`, coordenadas 0-10 sobre el

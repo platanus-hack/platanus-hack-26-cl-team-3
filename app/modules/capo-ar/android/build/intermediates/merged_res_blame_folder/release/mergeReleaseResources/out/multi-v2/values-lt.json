@@ -1,0 +1,48 @@
+{
+    "logs": [
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-release-3:/values-lt/values-lt.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-lt/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "199,248,296,434,576",
+                        "endColumns": "48,47,137,141,91",
+                        "endOffsets": "247,295,433,575,667"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,108,160,302,448",
+                        "endColumns": "52,51,141,145,95",
+                        "endOffsets": "103,155,297,443,539"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-mergeReleaseResources-1:/values-lt/values-lt.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-lt/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "199,248,296,434,576",
+                        "endColumns": "48,47,137,141,91",
+                        "endOffsets": "247,295,433,575,667"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,108,160,302,448",
+                        "endColumns": "52,51,141,145,95",
+                        "endOffsets": "103,155,297,443,539"
+                    }
+                }
+            ]
+        }
+    ]
+}

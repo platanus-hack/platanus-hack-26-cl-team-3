@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "expo.modules.capoar.capo-ar-release-3:/raw/keep_arcore.xml",
+        "source": "expo.modules.capoar.capo-ar-core-1.57.0-0:/raw/keep_arcore.xml"
+    }
+]

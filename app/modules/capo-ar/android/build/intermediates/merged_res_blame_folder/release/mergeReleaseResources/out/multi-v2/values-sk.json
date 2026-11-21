@@ -1,0 +1,48 @@
+{
+    "logs": [
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-release-3:/values-sk/values-sk.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-sk/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "199,246,299,413,529",
+                        "endColumns": "46,52,113,115,83",
+                        "endOffsets": "245,298,412,528,612"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,106,163,281,401",
+                        "endColumns": "50,56,117,119,87",
+                        "endOffsets": "101,158,276,396,484"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-mergeReleaseResources-1:/values-sk/values-sk.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-sk/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "199,246,299,413,529",
+                        "endColumns": "46,52,113,115,83",
+                        "endOffsets": "245,298,412,528,612"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,106,163,281,401",
+                        "endColumns": "50,56,117,119,87",
+                        "endOffsets": "101,158,276,396,484"
+                    }
+                }
+            ]
+        }
+    ]
+}

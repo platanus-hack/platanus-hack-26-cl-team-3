@@ -1,0 +1,48 @@
+{
+    "logs": [
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-mergeReleaseResources-1:/values-gsw/values-gsw.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-gsw/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "200,250,299,433,570",
+                        "endColumns": "49,48,133,136,90",
+                        "endOffsets": "249,298,432,569,660"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,109,162,300,441",
+                        "endColumns": "53,52,137,140,94",
+                        "endOffsets": "104,157,295,436,531"
+                    }
+                }
+            ]
+        },
+        {
+            "outputFile": "expo.modules.capoar.capo-ar-release-3:/values-gsw/values-gsw.xml",
+            "map": [
+                {
+                    "source": "/home/lucasvsj/.gradle/caches/9.4.1/transforms/a3ec3a9c149de0f99af71d4bf94a322f/transformed/core-1.57.0/res/values-gsw/values.xml",
+                    "from": {
+                        "startLines": "4,5,6,7,8",
+                        "startColumns": "0,0,0,0,0",
+                        "startOffsets": "200,250,299,433,570",
+                        "endColumns": "49,48,133,136,90",
+                        "endOffsets": "249,298,432,569,660"
+                    },
+                    "to": {
+                        "startLines": "2,3,4,5,6",
+                        "startColumns": "4,4,4,4,4",
+                        "startOffsets": "55,109,162,300,441",
+                        "endColumns": "53,52,137,140,94",
+                        "endOffsets": "104,157,295,436,531"
+                    }
+                }
+            ]
+        }
+    ]
+}

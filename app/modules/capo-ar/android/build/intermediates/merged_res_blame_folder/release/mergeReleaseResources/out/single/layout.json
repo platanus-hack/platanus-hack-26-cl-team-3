@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "expo.modules.capoar.capo-ar-release-3:/layout/__arcore_education.xml",
+        "source": "expo.modules.capoar.capo-ar-core-1.57.0-0:/layout/__arcore_education.xml"
+    }
+]

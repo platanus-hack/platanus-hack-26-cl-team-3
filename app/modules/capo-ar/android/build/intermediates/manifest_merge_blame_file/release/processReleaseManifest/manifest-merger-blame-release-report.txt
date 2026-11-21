@@ -1,0 +1,25 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.capoar" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+5-->INJECTED
+5-->INJECTED
+6
+7    <uses-permission android:name="android.permission.CAMERA" />
+7-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:2:3-63
+7-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:2:20-60
+8
+9    <application>
+9-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:3:3-6:17
+10
+11        <!-- «optional»: la app se instala aunque el teléfono no tenga ARCore; entonces usa el escáner sin AR. -->
+12        <meta-data
+12-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:5:5-77
+13            android:name="com.google.ar.core"
+13-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:5:16-49
+14            android:value="optional" />
+14-->/home/lucasvsj/PersonalPlayground/capo-ar/app/modules/capo-ar/android/src/main/AndroidManifest.xml:5:50-74
+15    </application>
+16
+17</manifest>
