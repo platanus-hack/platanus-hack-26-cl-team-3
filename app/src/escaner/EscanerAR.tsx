@@ -19,6 +19,7 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
+import { inspectionActions, inspectionLabels, type InspectionAction } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { hudPart } from '../engine-maps/hud';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
@@ -61,7 +62,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
+export default function EscanerAR({ vehicle, initialPart, initialAction }: { vehicle?: Vehicle; initialPart?: PartId; initialAction?: InspectionAction }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
@@ -439,6 +440,14 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
+  const actionPlayed = useRef(false);
+  const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
+  useEffect(() => {
+    if (!actionPlayed.current && mapTracking && outbackParts && selected && selected === initialPart && initialAction && ar.current) {
+      actionPlayed.current = true;
+      void ar.current.playPartAction(selected, initialAction).catch(() => setAviso('No se pudo mostrar la acción.'));
+    }
+  }, [mapTracking, outbackParts, selected, initialPart, initialAction]);
   // Zona libre para las etiquetas del HUD: bajo la barra superior y sobre la franja de controles (si está visible).
   const hudArea = useMemo(
     () => [insets.top + ALTO_BARRA, controls.mode === 'hidden' ? 0 : panelTop] as const,
@@ -451,7 +460,6 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const puedeFijar = !anclaje && !fijando && rastreando && !!registrationCandidate;
   const leCuesta = !motorMarcado && tasa.total >= 6 && tasa.validos < tasa.total * 0.5;
   const corrido = !!calce && calce.n >= 2 && calce.valor < CALCE_BAJO;
-  const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const fuseLink = selected === 'fuses' ? map?.fuseUrl : undefined;
 
   let status = 'Apunta al motor';
@@ -532,6 +540,19 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
               <Text style={tipo.nota} accessibilityLiveRegion="polite">
                 {map.partDetails?.[selected] ?? parts[selected][1]}
               </Text>
+            )}
+            {outbackParts && selected && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
+                {inspectionActions(selected).map((action) => (
+                  <Pressable key={action} accessibilityRole="button" style={styles.part}
+                    onPress={() => {
+                      controls.setMode('compact');
+                      void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
+                    }}>
+                    <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             )}
             {fuseLink && (
               <Pressable

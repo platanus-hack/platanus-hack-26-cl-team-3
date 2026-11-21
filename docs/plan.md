@@ -47,7 +47,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 
 ## Fases
 
-**Modelo de visión (decidido el 21-11-2026): Claude Sonnet 5.5**, por OpenRouter como el chat. Lo usan E y J, con una llamada por foto. El vano y el anclaje siguen en el teléfono: el detector corre sin red cada 2,5 s y ARCore sostiene los puntos en cada cuadro, algo que un modelo en la nube no puede hacer.
+**Modelo de visión (decidido el 21-11-2026): Claude Sonnet 5.5**, por la API de Anthropic como el chat. Lo usan E y J, con una llamada por foto. El vano y el anclaje siguen en el teléfono: el detector corre sin red cada 2,5 s y ARCore sostiene los puntos en cada cuadro, algo que un modelo en la nube no puede hacer.
 
 ### Guía visual (el foco)
 
@@ -144,7 +144,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 ## Sin verificar
 
 - El error real en cm sobre el auto.
-- Qué tan bien devuelve Sonnet 5.5 puntos y contornos sobre una foto del vano, y el id del modelo en OpenRouter. Se prueba con las fotos de `docs/evidence/android-engine-maps/` antes de construir E.
+- Qué tan bien devuelve Sonnet 5.5 puntos y contornos sobre una foto del vano. Se prueba con las fotos de `docs/evidence/android-engine-maps/` antes de construir E.
 - Si Gemini Live sostiene la marca al moverse.
 - Que el Canvas de hoy vaya un cuadro atrás de la cámara: es lo esperable por cómo se dibuja, no está medido.
 - La hora de entrega: no está en el repo, así que el orden no está ajustado a un plazo.

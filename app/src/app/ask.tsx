@@ -91,7 +91,7 @@ export default function Ask() {
           setStatus(TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS);
           breakNext = true;
         } else if (ev.type === 'ar') {
-          const card = toCard(ev.part, ev.instruction);
+          const card = toCard(ev.part, ev.instruction, ev.action);
           if (card) {
             cards.push(card);
             setLiveCards([...cards]);
