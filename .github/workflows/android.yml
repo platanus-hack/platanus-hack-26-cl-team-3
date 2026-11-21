@@ -1,9 +1,5 @@
 name: Android APK
 on:
-  pull_request:
-    paths:
-      - "app/modules/capo-ar/android/src/main/assets/engine-models/**"
-      - "app/modules/capo-ar/android/src/main/java/expo/modules/capoar/*Model*.kt"
   push:
     branches: [dev, main]
 permissions:
