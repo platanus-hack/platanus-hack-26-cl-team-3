@@ -1,5 +1,7 @@
 package expo.modules.capoar
 
+import com.google.ar.core.Pose
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -9,6 +11,28 @@ class EngineRegistrationTest {
   private val bayX = floatArrayOf(20f, 140f, 140f, 20f)
   private val bayY = floatArrayOf(25f, 25f, 135f, 135f)
   private val corners = listOf(29f to 36f, 131f to 36f, 29f to 124f, 131f to 124f)
+
+  @Test
+  fun measuredPointsFollowReferenceThroughWorldCorrections() {
+    val reference = Pose.makeTranslation(1f, .6f, 1f)
+    val camera = Pose.makeTranslation(1.5f, 1.9f, 2.1f)
+      .compose(Pose.makeRotation(.21644f, 0f, 0f, .97630f))
+    val depthPoint = floatArrayOf(.08f, -.1f, -1.25f)
+    val capture = CapturePose(reference, camera)
+
+    assertArrayEquals(camera.transformPoint(depthPoint), capture.inCurrentWorld(reference).transformPoint(depthPoint), .0001f)
+
+    val correction = Pose.makeTranslation(.07f, .02f, -.09f)
+      .compose(Pose.makeRotation(0f, .052336f, 0f, .99863f))
+    val adjustedCamera = capture.inCurrentWorld(correction.compose(reference))
+    val adjustedPoint = adjustedCamera.transformPoint(depthPoint)
+    val expectedPoint = correction.transformPoint(camera.transformPoint(depthPoint))
+    assertArrayEquals(expectedPoint, adjustedPoint, .0001f)
+
+    val cameraNormal = floatArrayOf(0f, 1f, 0f)
+    val expectedNormal = correction.rotateVector(camera.rotateVector(cameraNormal))
+    assertArrayEquals(expectedNormal, adjustedCamera.rotateVector(cameraNormal), .0001f)
+  }
 
   @Test
   fun backgroundOnlyDepthCanStillDrawTheGenericContour() {

@@ -94,12 +94,14 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val local: List<FloatArray> = emptyList(),
   )
 
-  // Datos de cada captura, para anclar después con la pose de ESE momento (el modelo tarda; el teléfono se mueve).
+  // Measured captures share a nearby anchor so their saved camera poses survive world-coordinate updates.
   private class Captura(
-    val pose: Pose, val fx: Float, val fy: Float, val cx: Float, val cy: Float, val anchoImg: Int, val altoImg: Int,
-    val grados: Int, val muestras: HitSamples, val rastreando: Boolean,
+    val pose: CapturePose, val fx: Float, val fy: Float, val cx: Float, val cy: Float, val anchoImg: Int, val altoImg: Int,
+    val grados: Int, val muestras: HitSamples,
     val prof: Profundidad? // mapa de profundidad completo de ese cuadro (si el teléfono lo entrega)
   )
+  private data class CaptureReference(val session: Session, val anchor: Anchor, val createdAtNs: Long)
+  private var captureReference: CaptureReference? = null
   private val capturas = LinkedHashMap<Int, Captura>()
   private var contador = 0
 
@@ -173,6 +175,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   fun pausar() {
     gl.onPause()
+    clearCaptureReference()
     sesion?.pause()
   }
 
@@ -249,18 +252,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       anclas.clear()
       placedEngine?.anchor?.detach()
       placedEngine = null
+      clearCaptureReference()
       vistaPrevia = null
       soltarPendiente = false
     }
-    atenderCapturas(frame)
     pendingFix.getAndSet(null)?.let { request ->
       if (camara.trackingState == TrackingState.TRACKING) {
         anclar(s, request)
       } else {
-        val code = if (request.volumes.isEmpty()) "ERR_AR" else "ERR_REGISTRATION"
-        request.promise.reject(code, "ARCore perdió el seguimiento del vano", null)
+        request.promise.reject("ERR_REGISTRATION", "ARCore perdió el seguimiento del vano", null)
       }
     }
+    atenderCapturas(s, frame)
 
     val rastreando = camara.trackingState == TrackingState.TRACKING
     val engine = placedEngine?.takeIf { rastreando && it.anchor.trackingState == TrackingState.TRACKING }
@@ -300,7 +303,41 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
   }
 
-  private fun atenderCapturas(frame: Frame) {
+  private fun clearCaptureReference() {
+    captureReference?.anchor?.detach()
+    captureReference = null
+    capturas.clear()
+  }
+
+  private fun capturePose(session: Session, camera: Pose, timestampNs: Long): CapturePose? {
+    val reference = captureReference?.takeIf { it.session === session }
+    val anchor = reference?.anchor
+    if (anchor?.trackingState == TrackingState.TRACKING) {
+      val referencePose = anchor.pose
+      val dx = camera.tx() - referencePose.tx()
+      val dy = camera.ty() - referencePose.ty()
+      val dz = camera.tz() - referencePose.tz()
+      if (dx * dx + dy * dy + dz * dz <= CAPTURE_REFERENCE_RADIUS_METERS * CAPTURE_REFERENCE_RADIUS_METERS) {
+        return CapturePose(referencePose, camera)
+      }
+    }
+    // Give a newly created anchor time to start tracking before replacing it.
+    if (reference != null && anchor?.trackingState == TrackingState.PAUSED &&
+      timestampNs - reference.createdAtNs < CAPTURE_REFERENCE_STARTUP_NS
+    ) return null
+
+    clearCaptureReference()
+    val replacement = try {
+      val nearBay = camera.transformPoint(floatArrayOf(0f, 0f, -CAPTURE_REFERENCE_FORWARD_METERS))
+      session.createAnchor(Pose.makeTranslation(nearBay))
+    } catch (_: Exception) {
+      return null
+    }
+    captureReference = CaptureReference(session, replacement, timestampNs)
+    return if (replacement.trackingState == TrackingState.TRACKING) CapturePose(replacement.pose, camera) else null
+  }
+
+  private fun atenderCapturas(session: Session, frame: Frame) {
     val pedidos: List<CaptureRequest>
     synchronized(capturasPendientes) {
       if (capturasPendientes.isEmpty()) return
@@ -324,15 +361,17 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val c = intr.principalPoint
     val dims = intr.imageDimensions
     // Keep same-frame hit tests for gaps in dense depth. The bay mask is only known after inference.
-    val measure = rastreando && pedidos.any { it.includeMeasurements }
+    val requestedMeasurements = pedidos.any { it.includeMeasurements }
+    val pose = if (rastreando && requestedMeasurements) capturePose(session, camara.pose, frame.timestamp) else null
+    val measure = pose != null
     val prof = if (measure && profundidad) Profundidad.leer(frame) else null
     val muestras = if (measure) muestrearDistancias(frame) else HitSamples()
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
     val puntos = prof?.validos ?: 0
     val id = ++contador
-    if (measure) {
-      capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando, prof)
+    if (pose != null) {
+      capturas[id] = Captura(pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof)
       while (capturas.size > 8) capturas.remove(capturas.keys.first())
     }
 
@@ -344,7 +383,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
           val r = mutableMapOf<String, Any>(
             "id" to id, "uri" to "file://${archivo.absolutePath}", "ancho" to ancho, "alto" to alto,
-            "grados" to grados, "rastreando" to rastreando, "muestras" to muestras.nearest.size, "profundidad" to profundidad,
+            "grados" to grados, "rastreando" to (rastreando && (!request.includeMeasurements || measure)),
+            "muestras" to muestras.nearest.size, "profundidad" to profundidad,
             "puntos" to puntos,
             "registrationMeasurements" to (puntos >= AnclajeDenso.MIN_REGISTRATION_POINTS || muestras.local.size >= 4)
           )
@@ -398,8 +438,13 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private fun anclar(s: Session, request: FixRequest) {
     val (captureId, esquinasGiradas, registration, volumes, promise) = request
     val c = capturas[captureId]
-    if (c == null) { promise.reject("ERR_AR", "La captura ya no está disponible; vuelve a intentarlo", null); return }
-    if (!c.rastreando) { promise.reject("ERR_AR", "Cuando se tomó ese cuadro ARCore aún no seguía el movimiento", null); return }
+    val reference = captureReference?.takeIf { it.session === s }?.anchor
+      ?.takeIf { it.trackingState == TrackingState.TRACKING }
+    if (c == null || reference == null) {
+      promise.reject("ERR_REGISTRATION", "La captura ya no tiene seguimiento; vuelve a apuntar al vano.", null)
+      return
+    }
+    val cameraInCurrentWorld = c.pose.inCurrentWorld(reference.pose)
     // Esquinas en coordenadas de la imagen del sensor (las muestras de distancia están en ese sistema).
     val n = esquinasGiradas.size / 2
     val us = FloatArray(n)
@@ -431,7 +476,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val nuevas = ArrayList<Anchor>()
     var conMedida = 0
     fun cameraToWorld(point: FloatArray): EnginePoint {
-      val result = c.pose.transformPoint(point)
+      val result = cameraInCurrentWorld.transformPoint(point)
       return EnginePoint(result[0], result[1], result[2])
     }
     fun fromHitTests(
@@ -510,6 +555,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     anclas.addAll(nuevas)
     placedEngine?.anchor?.detach()
     placedEngine = placement
+    clearCaptureReference()
     vistaPrevia = null
     val metodo = registrationMethod ?: densa?.metodo ?: when {
       conMedida == nuevas.size && profundidad -> "profundidad"
@@ -527,7 +573,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       datos["plano"] = densa.fraccionPlano.toDouble()
       datos["rms"] = densa.rms.toDouble()
       densa.normal?.let { normal ->
-        val enMundo = c.pose.rotateVector(normal) // el mundo de ARCore tiene +Y hacia arriba (gravedad)
+        val enMundo = cameraInCurrentWorld.rotateVector(normal) // el mundo de ARCore tiene +Y hacia arriba (gravedad)
         // 0° = superficie horizontal (se mira hacia abajo, como un motor); 90° = vertical (una pantalla).
         datos["inclinacion"] = Math.toDegrees(acos(abs(enMundo[1]).coerceAtMost(1f)).toDouble())
         // 0° = se mira la superficie de frente; crece al mirarla de lado.
@@ -594,6 +640,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   private companion object {
+    const val CAPTURE_REFERENCE_RADIUS_METERS = 3f
+    const val CAPTURE_REFERENCE_FORWARD_METERS = .75f
+    const val CAPTURE_REFERENCE_STARTUP_NS = 1_500_000_000L
     const val DISTANCIA_POR_DEFECTO = 0.7f // m: distancia típica del teléfono al vano si ARCore no midió nada
     const val RADIO_MUESTRAS = 0.25f // radio (en fracción de imagen) para promediar distancias cercanas a cada esquina
   }
