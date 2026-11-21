@@ -35,7 +35,9 @@ if [ "$(memoria_libre)" -lt 5000 ]; then
   echo "ABORTO: tras 15 min no hay 5 GB libres. No compilo para no arriesgar un OOM." >&2; exit 4
 fi
 # Metro loads the model alongside Gradle on the dedicated GitHub VM.
-memory_limit=4G
+# CAPO_MEMORIA permite subir el tope local cuando hay memoria de sobra (empaquetar el JS con los modelos, a la vez
+# que Gradle, llegó a pasar los 4 GB).
+memory_limit=${CAPO_MEMORIA:-4G}
 if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${GITHUB_ACTIONS:-}" == true ]]; then
   memory_limit=10G
 fi

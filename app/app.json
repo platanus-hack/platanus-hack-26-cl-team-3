@@ -2,7 +2,7 @@
   "expo": {
     "name": "Capo AR",
     "slug": "capo-ar",
-    "version": "0.8.0",
+    "version": "0.10.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.capoar.app",
-      "versionCode": 10,
+      "versionCode": 13,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -29,6 +29,12 @@
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false
         }
       ],
       "expo-router",

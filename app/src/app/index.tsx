@@ -106,6 +106,19 @@ export default function Menu() {
       </Pressable>
 
       <Pressable
+        onPress={() => router.push({ pathname: '/analizar', params: { vehicleId: vehicle.id } })}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
+      >
+        <Icono nombre="image-search-outline" tam={26} tono={color.acento} />
+        <View style={styles.flex}>
+          <Text style={styles.secundariaTitulo}>Analizar foto o video</Text>
+          <Text style={tipo.nota}>¿No tienes el auto a mano? Usa una foto o un video de tu galería.</Text>
+        </View>
+        <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
+      </Pressable>
+
+      <Pressable
         onPress={() => router.push('/ask')}
         accessibilityRole="button"
         style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
