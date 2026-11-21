@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fuses",
+    "name": "Caja de fusibles del motor",
+    "detail": "Caja negra detrás de la batería, hacia el parabrisas. El plano del motor muestra el fusible 17 (O2 HTR) de 25 A para el 3.6 L. Coteja posición y amperaje con la etiqueta de la tapa. Manual, págs. 11-38 y 12-12 a 12-13.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "washer",
+    "name": "Sapito",
+    "detail": "Boca de llenado junto a la batería, hacia el costado del conductor en la versión con volante a la izquierda. Agrega líquido limpiaparabrisas hasta la marca FULL. En la foto se reconoce por la tapa amarilla en el borde del vano. Manual, págs. 11-10 y 11-32.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "dipstick",
+    "name": "Varilla de aceite",
+    "detail": "Manilla amarilla pequeña junto a la tapa de aceite, hacia el frente. Con el auto nivelado y el motor apagado, espera unos minutos. Saca la varilla, límpiala, insértala hasta el fondo y vuelve a sacarla para leer entre LOW y FULL. Manual, págs. 11-11 y 11-12.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "coolant",
+    "name": "Depósito de refrigerante",
+    "detail": "Depósito translúcido cerca del frente, junto al radiador. Lee LOW y FULL desde afuera con el motor frío. Evita abrir la tapa del radiador con el motor caliente. Manual, págs. 11-10 y 11-14.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "air_filter",
+    "name": "Caja del filtro de aire",
+    "detail": "Carcasa negra conectada al conducto corrugado de admisión, al lado opuesto de la batería. Los broches sujetan la tapa de la carcasa. Manual, págs. 11-15 y 11-16.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "oil_cap",
+    "name": "Tapa de aceite",
+    "detail": "Tapa amarilla redonda junto a la manilla de la varilla. Es la boca de llenado del aceite del motor. Manual, págs. 11-11 y 11-12.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "brake_fluid",
+    "name": "Depósito de líquido de frenos",
+    "detail": "Depósito pequeño y translúcido cerca del parabrisas. En el 3.6 L, lee MIN y MAX desde la cara exterior, hacia el guardabarros. Manual, págs. 11-19 y 11-20.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "battery",
+    "name": "Batería",
+    "detail": "Batería de 12 V delante de la caja de fusibles y junto a la boca del limpiaparabrisas. Manual, págs. 11-10 y 11-37.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  },
+  {
+    "id": "positive",
+    "name": "Borne positivo",
+    "detail": "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
+    "source": "catalog.ts del Outback (páginas del manual por verificar)"
+  }
+]

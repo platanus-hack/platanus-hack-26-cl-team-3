@@ -54,3 +54,10 @@ test('ignores SSE comment lines such as ping', () => {
   ]);
   assert.equal(rest, '');
 });
+
+test('maps ar into part and instruction', () => {
+  const buffer = 'event: ar\ndata: {"part":"washer","instruction":"Busca la tapa amarilla junto a la batería."}\n\n';
+  assert.deepEqual(splitEvents(buffer).events, [
+    { type: 'ar', part: 'washer', instruction: 'Busca la tapa amarilla junto a la batería.' },
+  ]);
+});

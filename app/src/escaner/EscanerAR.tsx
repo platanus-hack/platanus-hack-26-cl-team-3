@@ -18,7 +18,7 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
-import { engineMaps, parts } from '../engine-maps/catalog';
+import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, extendsPartialMap, encodeVolumes, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../engine-maps/registration';
@@ -57,10 +57,11 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
+export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
   const ar = useRef<VistaARRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -386,7 +387,7 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
   const empezarDeNuevo = async () => {
     if (ocupado.current) return;
     await ar.current?.soltar();
-    setSelectedIndex(-1);
+    setSelectedIndex(initialIndex);
     setAnclaje(null);
     setCalce(null);
     setVano(null);
