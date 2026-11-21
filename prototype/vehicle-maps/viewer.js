@@ -17,11 +17,16 @@ const canvas = byId('scene');
 const context = canvas.getContext('2d');
 const vehicleSelect = byId('vehicle');
 const photo = new Image();
-photo.onload = photo.onerror = () => {
+photo.referrerPolicy = 'no-referrer';
+photo.onload = () => {
   updateCoverage();
   draw();
 };
 let vehicle;
+let mode;
+let reference;
+let photoFailed;
+let scene;
 let selected;
 let yaw;
 let pitch;
@@ -29,12 +34,15 @@ let gesture;
 let faces = [];
 
 function hasPhoto() {
-  return Boolean(vehicle?.photoFile && photo.complete && photo.naturalWidth
-    && photo.getAttribute('src') === vehicle.photoFile);
+  return Boolean(scene?.src && photo.complete && photo.naturalWidth
+    && photo.getAttribute('src') === scene.src);
 }
 
 function updateCoverage() {
-  byId('coverage').textContent = hasPhoto() ? 'Foto de referencia con volúmenes 3D' : 'Esquema 3D con ubicaciones aproximadas';
+  byId('coverage').textContent = hasPhoto()
+    ? mode === 'image' ? 'Foto del motor · Arrastra para girar' : 'Foto con piezas 3D · Arrastra para girar'
+    : photoFailed ? 'La foto no se pudo cargar. Mostrando el esquema 3D.'
+      : mode === 'scheme' ? 'Esquema 3D con ubicaciones aproximadas' : 'Cargando foto del motor…';
 }
 
 function draw() {
@@ -50,7 +58,9 @@ function draw() {
   }
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, width, height);
-  const ratio = vehicle.aspectRatio || 1.65;
+  faces = [];
+  if (mode !== 'scheme' && !hasPhoto()) return;
+  const ratio = scene.aspectRatio || 1.65;
   const sinYaw = Math.sin(yaw);
   const cosYaw = Math.cos(yaw);
   const sinPitch = Math.sin(pitch);
@@ -85,7 +95,6 @@ function draw() {
   }
   context.restore();
 
-  faces = [];
   function addFace(part, points, side) {
     const area = points.reduce((sum, [x,y], index) => {
       const [nextX,nextY] = points[(index+1) % points.length];
@@ -98,7 +107,7 @@ function draw() {
     const depth = points.reduce((sum, point) => sum + point[2], 0) / points.length;
     faces.push({part, path, depth, side});
   }
-  for (const {part, outline, height: rise} of vehicle.volumes) {
+  for (const {part, outline, height: rise} of scene.volumes) {
     const base = outline.map(point => project(point));
     const top = outline.map(point => project(point, rise));
     outline.forEach((_, index) => {
@@ -131,7 +140,9 @@ function selectPart(part) {
     button.setAttribute('aria-pressed', String(button.dataset.part === selected));
   }
   byId('part-title').textContent = part ? parts[part][0] : 'Selecciona una pieza';
-  byId('part-detail').textContent = part ? parts[part][1] : 'Toca un volumen en el mapa o usa la lista de piezas.';
+  byId('part-detail').textContent = part
+    ? vehicle.partDetails?.[part] ?? parts[part][1]
+    : 'Toca un volumen en el mapa o usa la lista de piezas.';
   byId('fuses').hidden = part !== 'fuses';
   draw();
 }
@@ -142,24 +153,28 @@ function resetView() {
   draw();
 }
 
-function openVehicle() {
+function openScene(nextMode, preserveSelection = true) {
+  photoFailed = false;
+  const previousPart = preserveSelection ? selected : undefined;
   gesture = undefined;
-  vehicle = vehicles[vehicleSelect.value];
   canvas.removeAttribute('data-pickable');
-  if (vehicle.photoFile) photo.src = vehicle.photoFile;
-  else photo.removeAttribute('src');
-  byId('variant').textContent = vehicle.year + ' · ' + vehicle.variant;
-  byId('vehicle-title').textContent = vehicle.title;
+  mode = nextMode;
+  scene = mode === 'scheme' ? vehicle : reference;
+  if (mode === 'image') scene = {...reference, volumes: []};
+  if (scene.src && photo.getAttribute('src') !== scene.src) photo.src = scene.src;
+  if (!scene.src) photo.removeAttribute('src');
+
+  byId('map-modes').hidden = !reference;
+  for (const [id, value] of [['photo-mode', 'photo'], ['scheme-mode', 'scheme'], ['photo-only', 'image']]) {
+    byId(id).setAttribute('aria-pressed', String(mode === value));
+  }
   updateCoverage();
-  byId('note').textContent = vehicle.note;
-  byId('manual').href = vehicle.manualUrl;
-  byId('fuses').href = vehicle.fuseUrl || vehicle.manualUrl;
-  byId('photo-link').hidden = !vehicle.photoUrl;
-  if (vehicle.photoUrl) byId('photo-link').href = vehicle.photoUrl;
-  byId('photo-source').hidden = !vehicle.photoPage;
-  if (vehicle.photoPage) byId('photo-source').href = vehicle.photoPage;
+
+  const credit = byId('photo-credit');
+  credit.hidden = mode === 'scheme' || !reference.credit;
+  credit.textContent = credit.hidden ? '' : reference.credit;
   const buttons = Object.entries(parts)
-    .filter(([part]) => vehicle.volumes.some(volume => volume.part === part))
+    .filter(([part]) => scene.volumes.some(volume => volume.part === part))
     .map(([part, [label]]) => {
       const button = document.createElement('button');
       button.type = 'button';
@@ -168,11 +183,53 @@ function openVehicle() {
       button.onclick = () => selectPart(part);
       return button;
     });
+  byId('parts').hidden = mode === 'image';
   byId('parts').replaceChildren(...buttons);
+  selectPart(scene.volumes.some(volume => volume.part === previousPart) ? previousPart : undefined);
+  if (mode === 'image') {
+    byId('part-title').textContent = 'Recorre el vano motor';
+    byId('part-detail').textContent = 'Arrastra la imagen para mirarla desde otro ángulo.';
+  }
+}
+
+function openVehicle() {
+  vehicle = vehicles[vehicleSelect.value];
+  reference = vehicle.photoFile
+    ? {...vehicle, src: vehicle.photoFile}
+    : vehicle.photoView && {...vehicle.photoView, src: vehicle.photoUrl};
+  byId('variant').textContent = vehicle.year + ' · ' + vehicle.variant;
+  byId('vehicle-title').textContent = vehicle.title;
+  byId('note').textContent = vehicle.note;
+  byId('manual').href = vehicle.manualUrl;
+  byId('fuses').href = vehicle.fuseUrl || vehicle.manualUrl;
+  const links = [
+    ['engine-diagram', vehicle.engineDiagramUrl],
+    ['cabin-fuses', vehicle.cabinFuseUrl],
+    ['photo-link', vehicle.photoUrl],
+    ['photo-source', vehicle.photoPage],
+    ['comparison-photo', vehicle.comparisonPhotoUrl]
+  ];
+  for (const [id, url] of links) {
+    const link = byId(id);
+    link.hidden = !url;
+    if (url) link.href = url;
+    else link.removeAttribute('href');
+  }
   yaw = -.15;
   pitch = 1.05;
-  selectPart(undefined);
+  openScene(vehicle.photoFile ? 'photo' : 'scheme', false);
 }
+
+photo.onerror = () => {
+  if (mode !== 'scheme' && photo.getAttribute('src') === scene?.src) {
+    openScene('scheme');
+    photoFailed = true;
+    updateCoverage();
+  }
+};
+byId('photo-mode').onclick = () => openScene('photo');
+byId('photo-only').onclick = () => openScene('image');
+byId('scheme-mode').onclick = () => openScene('scheme');
 
 function partAt(event) {
   const {left, top} = canvas.getBoundingClientRect();
