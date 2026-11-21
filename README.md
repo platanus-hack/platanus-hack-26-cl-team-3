@@ -1,11 +1,57 @@
 # capo-ar — Guía de tu auto en Realidad Aumentada
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
-> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native) solo abre la cámara con el aviso obligatorio; sin AR todavía.
+> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native + expo-router) tiene menú principal, aviso obligatorio y **detector de capó abierto en el teléfono** (CLIP, ver `herramientas/detector-capo/`). Sin AR todavía.
 >
-> **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk`. Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
+> **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk` (baja el modelo de 88 MB la primera vez). Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
 
 ---
+
+## Web app and release
+
+The installable PWA ports the menu and open-hood detector from native revision
+`317e8367`. Select **Escanear capó**, enable the camera and aim at an open
+engine bay. Frames stay on the device. A module worker runs the pinned
+quantized CLIP image encoder with ONNX Runtime Web, using the native prompt
+vectors, smoothing and thresholds. At build time, the patch-convolution weights
+and zero point both shift by 128 to use the unsigned WASM kernel while
+preserving each centered weight. The score indicates an open hood. Individual
+part identification and AR anchoring are future features.
+
+### Start with Compose
+
+From a checkout containing the root `docker-compose.yml`, start the PWA on the
+existing home proxy network with one command:
+
+```sh
+docker compose up
+```
+
+Compose builds the image on first use. The build installs its own dependencies
+and packages the model and the web runtime. Traefik routes requests for
+`ph26.berguecio.cl` to port 8080 in the container.
+
+For a local preview without Traefik:
+
+```sh
+docker build -t capo-ar .
+docker run --rm -p 127.0.0.1:8080:8080 capo-ar
+```
+
+Open `http://localhost:8080`. Phones require HTTPS for camera access.
+The first visit downloads the app, model (about 89 MB) and WASM runtime.
+Once the service worker finishes caching, scanning works offline. The image
+also serves the map viewer if its files are present in the checkout.
+
+### Compose and CI
+
+This project uses the same hackathon repository for the PWA and its Compose
+configuration. Pull requests and pushes to `main` verify the image on
+GitHub-hosted runners. Compose carries this repository's numeric ID and uses
+`CAPO_AR_DOMAIN` for the hostname. The default is `ph26.berguecio.cl`.
+The starter's private-runner release jobs stay disabled in this public
+repository. Production runner eligibility and the initial installation are
+deferred to issue #2.
 
 ## 1. Qué es, en una frase
 
@@ -127,3 +173,17 @@ Es la parte más incierta. Evidencia disponible:
 - **AR:** Realidad Aumentada.
 - **RAG:** respuesta generada a partir de pasajes recuperados de documentos propios (aquí, los manuales).
 - **EZ36 / 3.6R:** motor boxer de 6 cilindros 3.6 L del Outback de la época.
+
+## Android download automation
+
+Each push to `main` builds the ARM64 APK, checks its Android package, update
+code and hackathon signing certificate, then publishes the verified APK and
+its SHA-256 checksum in a public Release tagged with the source commit.
+Only the publication job can write releases. Pull requests build and verify
+the package without publishing. Failed builds leave the previous APK available.
+
+Download `capo-ar.apk` from the repository's latest Release. Keep that latest
+designation for Android builds so the stable download link works. Android's
+update code increases with the first-parent history of main. The Expo template
+signing key preserves compatibility with hackathon installations and is publicly
+known. Obtain the app from the project's official download link.

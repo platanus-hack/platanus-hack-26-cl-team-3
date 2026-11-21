@@ -1,0 +1,74 @@
+name: Build and check image
+on:
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+        required: true
+    outputs:
+      configured:
+        value: ${{ jobs.verify.outputs.configured }}
+      digest:
+        value: ${{ jobs.verify.outputs.digest }}
+jobs:
+  verify:
+    if: github.event.repository.private && (!inputs.publish || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    runs-on: [self-hosted, linux, x64, home-ci]
+    timeout-minutes: 15
+    outputs:
+      configured: ${{ steps.identity.outputs.configured }}
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check Compose identity
+        id: identity
+        run: |
+          set -euo pipefail
+          id=$(docker compose config --format json | jq -er '.services.web.labels["io.github-runners.repository-id"]')
+          case "$id" in
+            0) echo "Template copy awaits configuration";;
+            "$GITHUB_REPOSITORY_ID") echo "configured=true" >> "$GITHUB_OUTPUT";;
+            *) echo "Repository identity mismatch"; exit 1;;
+          esac
+      - name: Build and check the image
+        run: bash .github/ci.sh
+      - name: Check existing package visibility
+        if: inputs.publish && steps.identity.outputs.configured == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const scope = context.payload.repository.owner.type === 'Organization' ? 'orgs' : 'users';
+            try {
+              const { data } = await github.request(`GET /${scope}/{owner}/packages/container/{package_name}`, {
+                owner, package_name: repo.toLowerCase(),
+              });
+              if (data.visibility !== 'private') core.setFailed('The GHCR package must be private.');
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+      - name: Publish verified image
+        id: publish
+        if: inputs.publish && steps.identity.outputs.configured == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          status=$(curl -sS --retry 2 --max-time 15 --output /dev/null --write-out '%{http_code}' \
+            --get --data-urlencode service=ghcr.io --data-urlencode "scope=repository:${GITHUB_REPOSITORY,,}:pull" https://ghcr.io/token)
+          case "$status" in
+            401|403) ;;
+            *) echo "Expected GHCR to deny anonymous pulls (HTTP $status)"; exit 1;;
+          esac
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d)
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag candidate "$image:$GITHUB_SHA"
+          docker push "$image:$GITHUB_SHA"
+          digest=$(docker image inspect "$image:$GITHUB_SHA" | jq -er --arg prefix "$image@" '.[0].RepoDigests[] | select(startswith($prefix)) | ltrimstr($prefix)')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"

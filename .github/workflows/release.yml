@@ -1,0 +1,55 @@
+name: Verify and release
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ${{ github.event_name == 'push' && 'release-main' || github.run_id }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event.repository.private && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/build.yml
+    with:
+      publish: false
+
+  verify:
+    if: github.event.repository.private && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build.yml
+    with:
+      publish: true
+
+  deploy:
+    needs: verify
+    if: github.event.repository.private && github.event_name == 'push' && needs.verify.outputs.configured == 'true'
+    concurrency:
+      group: install-main
+      cancel-in-progress: false
+    runs-on: [self-hosted, linux, x64, home-ci]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Deploy the current main revision
+        env:
+          RELEASE_BRANCH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          GHCR_READ_TOKEN: ${{ github.token }}
+          IMAGE_DIGEST: ${{ needs.verify.outputs.digest }}
+        run: |
+          set -euo pipefail
+          head=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" | jq -er '.object.sha')
+          if [[ "$head" == "$GITHUB_SHA" ]]; then
+            deploy-release "$IMAGE_DIGEST" docker-compose.yml
+          fi

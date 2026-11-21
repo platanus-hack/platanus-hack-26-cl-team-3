@@ -1,0 +1,24 @@
+name: Verify public build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    if: '!github.event.repository.private'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: npm ci --prefix tests/browser --ignore-scripts --no-audit
+      - run: |
+          CAPO_CHROME=$(command -v google-chrome)
+          export CAPO_CHROME
+          bash .github/ci.sh
