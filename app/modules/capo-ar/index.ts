@@ -26,6 +26,7 @@ export type CapturaAR = {
 };
 
 export type ResultadoFijar = {
+  adjustedParts?: number[];
   esquinas: number;
   /**
    * Dense placement uses a fitted plane or local relief. The part map can also use distributed hit tests.
@@ -43,6 +44,9 @@ export type ResultadoFijar = {
   anguloVista?: number; // grados: 0 = se mira de frente
 };
 
+/** Catalog volume index and center in the normalized upright capture. */
+export type PartCenter = [number, number, number];
+
 export type EstadoAR = {
   estado: 'iniciando' | 'instalando' | 'rastreando' | 'sin-rastreo' | 'error';
   detalle: string | null;
@@ -56,7 +60,7 @@ export type VistaARRef = {
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
-  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][]): Promise<ResultadoFijar>;
+  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
 };
 

@@ -7,6 +7,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.hypot
 
 class EngineRegistrationTest {
   private val bayX = floatArrayOf(20f, 140f, 140f, 20f)
@@ -131,15 +132,116 @@ class EngineRegistrationTest {
     assertTrue(moved.contains(centerX, centerY))
   }
 
+  @Test
+  fun onlyMeasuredPartMovesAndRetainsItsProjectedOutline() {
+    val fixture = PartPlacementFixture()
+    val depth = depthGrid { x, y -> if (x in 56..92 && y in 53..85) 1170 else 3700 }
+    val observed = EngineImagePoint(.46f, .44f)
+    val original = fixture.mesh()
+    val corrected = fixture.mesh { index, face ->
+      if (index == 0) fixture.correct(face, observed, depth) else null
+    }
+    val originalTop = fixture.tops(original)
+    val correctedTop = fixture.tops(corrected)
+    val before = originalTop.getValue(0).points
+    val after = correctedTop.getValue(0).points
+    assertEquals(listOf(0), corrected.adjustedParts)
+    assertEquals(originalTop.getValue(1), correctedTop.getValue(1))
+    assertTrue(original.origin == corrected.origin)
+    assertEquals(observed.x, after.map { it.x }.average().toFloat(), .00001f)
+    assertEquals(observed.y, after.map { it.y }.average().toFloat(), .00001f)
+    assertTrue(hypot(after[0].x - before[0].x, after[0].y - before[0].y) > .1f)
+    for (index in before.indices) {
+      assertEquals(before[index].x - before[0].x, after[index].x - after[0].x, .00001f)
+      assertEquals(before[index].y - before[0].y, after[index].y - after[0].y, .00001f)
+      assertEquals(1.17f, after[index].depth, .00001f)
+    }
+    assertTrue(correctedTop.getValue(0).contains(observed.x, observed.y))
+  }
+
+  @Test
+  fun unprovedObservationsLeaveTheWholePartMeshUntouched() {
+    val fixture = PartPlacementFixture()
+    val observed = EngineImagePoint(.46f, .44f)
+    val usable = depthGrid { _, _ -> 1170 }
+    val missingCenter = depthGrid { x, y ->
+      if (hypot(x + .5f - 160 * observed.x, y + .5f - 160 * observed.y) < 6) 0 else 1170
+    }
+    val mixed = depthGrid { x, y ->
+      if ((x + y) % 2 == 0 && hypot(x + .5f - 160 * observed.x, y + .5f - 160 * observed.y) > 4) 3700 else 1170
+    }
+    val cases = listOf(
+      observed to null,
+      observed to missingCenter,
+      observed to mixed,
+      observed to depthGrid { _, _ -> 3700 },
+      EngineImagePoint(.98f, .8f) to usable,
+      EngineImagePoint(.46f, .94f) to usable,
+    )
+    val original = fixture.mesh()
+    for ((center, depth) in cases) {
+      val candidate = fixture.mesh { index, face ->
+        if (index == 0 && depth != null) fixture.correct(face, center, depth) else null
+      }
+      assertTrue(candidate.adjustedParts.isEmpty())
+      assertEquals(fixture.faces(original), fixture.faces(candidate))
+    }
+  }
+
+  @Test
+  fun observedCentersRejectMalformedClippedAliasesAndDuplicateIndices() {
+    val corrections = decodeObservedCenters(
+      listOf(
+        listOf(1.0, .21, .48), listOf(0.0, .1, .2), listOf(0.0, .3, .4),
+        listOf(2.0, 1.1, .4), listOf(3.0, .5, .3), listOf(2.1, .5, .3),
+        listOf(2.0, Double.NaN, .5), listOf(2.0, .4),
+      ), 3,
+    )
+    assertEquals(mapOf(1 to EngineImagePoint(.21f, .48f)), corrections)
+  }
+
+  private class PartPlacementFixture {
+    private val intrinsics = EngineCaptureIntrinsics(160, 160, 105f, 105f, 80f, 80f)
+    private val worldCorners = listOf(
+      EnginePoint(-.76f, 0f, -.48f), EnginePoint(.76f, 0f, -.48f),
+      EnginePoint(-.76f, 0f, .48f), EnginePoint(.76f, 0f, .48f),
+    )
+    private val rows = listOf(
+      listOf(.06, .18, .25, .39, .25, .39, .47, .18, .47),
+      listOf(.04, .69, .60, .85, .60, .85, .785, .69, .785),
+    )
+    private val imageBayX = floatArrayOf(.06f, .94f, .94f, .06f)
+    private val imageBayY = floatArrayOf(.125f, .125f, .875f, .875f)
+
+    private fun cameraPoint(world: EnginePoint) = EnginePoint(world.x, -world.z, world.y - 1.25f)
+    private fun worldPoint(camera: EnginePoint) = EnginePoint(camera.x, camera.z + 1.25f, -camera.y)
+
+    fun correct(face: List<EnginePoint>, center: EngineImagePoint, depth: Profundidad): List<EnginePoint>? =
+      placeObservedFace(face.map(::cameraPoint), center, intrinsics, depth, imageBayX, imageBayY)?.map(::worldPoint)
+
+    fun mesh(refine: ((Int, List<EnginePoint>) -> List<EnginePoint>?)? = null): EngineMesh =
+      checkNotNull(EngineMesh.create(worldCorners, rows, refine) { -cameraPoint(it).z })
+
+    fun faces(mesh: EngineMesh): List<EngineFace> =
+      mesh.project { local ->
+        val camera = cameraPoint(local + mesh.origin)
+        intrinsics.project(camera)?.let { EngineScreenPoint(it.x, it.y, -camera.z) }
+      }
+
+    fun tops(mesh: EngineMesh) = faces(mesh).filter { !it.side }.associateBy { it.part }
+  }
+
   private fun insideBay(x: Int, y: Int) = x in 20 until 140 && y in 25 until 135
 
-  private fun fit(depthMillimeters: (x: Int, y: Int) -> Int): AnclajeDenso {
+  private fun depthGrid(depthMillimeters: (x: Int, y: Int) -> Int): Profundidad {
     val size = 160
     val depths = ShortArray(size * size) { depthMillimeters(it % size, it / size).toShort() }
-    val frame = Profundidad(
+    return Profundidad(
       depths, size, size, 110f, 105f, 79.5f, 79.5f,
       floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f),
     )
-    return checkNotNull(AnclajePorProfundidad.calcular(frame, bayX, bayY))
   }
+
+  private fun fit(depthMillimeters: (x: Int, y: Int) -> Int): AnclajeDenso =
+    checkNotNull(AnclajePorProfundidad.calcular(depthGrid(depthMillimeters), bayX, bayY))
 }

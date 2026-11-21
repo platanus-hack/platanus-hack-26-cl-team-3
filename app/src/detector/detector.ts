@@ -25,7 +25,7 @@ let ort: Ort | null = null;
  * Carga ONNX Runtime recién cuando se necesita: la librería instala su módulo nativo al importarse y, si falla, lanza
  * un error que en release cerraría la app. Así el fallo llega a la pantalla como mensaje.
  */
-function cargarOrt(): Ort {
+export function cargarOrt(): Ort {
   if (!ort) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m: Ort = require('onnxruntime-react-native');

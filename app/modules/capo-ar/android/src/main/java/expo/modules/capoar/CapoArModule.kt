@@ -45,8 +45,10 @@ class CapoArModule : Module() {
         vista.mostrarVista(esquinas, bordes, grados)
       }
 
-      AsyncFunction("fijar") { vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>, promise: Promise ->
-        vista.fijar(id, esquinas, registration, volumes, promise)
+      AsyncFunction("fijar") {
+        vista: CapoArView, id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
+        observedCenters: List<List<Double>>?, promise: Promise ->
+        vista.fijar(id, esquinas, registration, volumes, observedCenters.orEmpty(), promise)
       }
 
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
 import { completeBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
+import { engineMaps } from '../../app/src/engine-maps/catalog.ts';
+import { locate, type Candidates, type Point } from '../../app/src/engine-maps/landmarks/consensus.ts';
+import { confirmedPartCenters, partCenters } from '../../app/src/engine-maps/landmarks/part-centers.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
 
@@ -117,3 +120,35 @@ assert.ok(sameRegistrationView(referenceCorners, shiftedCorners(.01)));
 assert.ok(sameRegistrationView(shiftedCorners(.01), shiftedCorners(.02)));
 assert.ok(!sameRegistrationView(referenceCorners, shiftedCorners(.02)));
 console.log('19 ok: consecutive frames cannot accumulate movement across the placement window');
+
+const measuredBay = poligonoVano(mapa((x, y) => x >= 10 && x < 78 && y >= 12 && y < 75))!;
+const aspect = .75;
+const identified = partCenters(engineMaps.outback.volumes, {
+  fuseLidRearLeft: [720, 200], fuseLidFrontRight: [800, 250],
+  oilDipstick: [700, 540], washerCap: [1060, 200],
+}, measuredBay, aspect);
+assert.deepEqual(identified.map(([index]) => engineMaps.outback.volumes[index].part), ['fuses', 'dipstick']);
+assert.deepEqual(confirmedPartCenters([[0, .70, .28], [2, .42, .64]], identified, measuredBay, aspect), [identified[0]]);
+assert.deepEqual(confirmedPartCenters([], identified, measuredBay, aspect), []);
+assert.ok(!partCenters(engineMaps.outback.volumes, { fuseLidRearLeft: [720, 200], fuseLidFrontRight: [721, 199] },
+  measuredBay, aspect).length);
+console.log('20 ok: reject partial or conflicting observations without changing catalog part indices');
+
+const consensusPoints: Record<string, Point> = {
+  a: [120,100], b: [430,115], c: [780,140], d: [145,345], e: [480,325],
+  f: [740,305], g: [170,550], h: [470,515], i: [800,510], outlier: [530,440],
+};
+const hypotheses: Candidates['hypotheses'] = {};
+for (const [name, [x, y]] of Object.entries(consensusPoints)) {
+  const u = x / 1080;
+  const v = (y + (name === 'outlier' ? 23 : 0)) / 660;
+  hypotheses[name] = [[u, v], [u - .1, v + .11], [u + .1, v - .11]];
+}
+const appearance = Object.fromEntries(Object.entries(hypotheses).map(([name, peaks]) => [name, peaks[0]]));
+const fit = locate([{ file: 'test view', width: 1080, points: consensusPoints }], {
+  width: 1080, height: 660, detector_bounds: [[.09, .1], [.8, .9]],
+}, { appearance, hypotheses });
+assert.ok(fit);
+assert.ok(fit.landmarks.i);
+assert.equal(fit.landmarks.outlier, undefined);
+console.log('21 ok: an appearance match rejected by projective consensus cannot adjust a part');

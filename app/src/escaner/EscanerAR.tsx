@@ -16,11 +16,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { VistaAR, type CapturaAR, type EstadoAR, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
+import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
 import { engineMaps, parts } from '../engine-maps/catalog';
+import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
+import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, encodeVolumes, registrationCorners, sameRegistrationView } from '../engine-maps/registration';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
@@ -76,7 +78,9 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
   const [recalibrando, setRecalibrando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [ultima, setUltima] = useState<CapturaAR | null>(null);
-  const [registrationCandidate, setRegistrationCandidate] = useState<{ capture: CapturaAR; bay: Vano } | null>(null);
+  const [registrationCandidate, setRegistrationCandidate] = useState<{
+    capture: CapturaAR; bay: Vano; centers: PartCenter[];
+  } | null>(null);
   const [ms, setMs] = useState<number | null>(null);
   const [debug, setDebug] = useState(true);
   const [activa, setActiva] = useState(AppState.currentState === 'active');
@@ -93,12 +97,17 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
       .catch((e) => setError(`No se pudo cargar el modelo de reconocimiento. ${String(e?.message ?? e)}`));
   }, [intento]);
 
-  const fijar = useCallback(async (captura: CapturaAR, v: Vano) => {
+  const lookForPartCenters = useCallback((captura: CapturaAR, bay: Vano) =>
+    vehicle?.id === 'outback' && captura.profundidad && captura.puntos > 0
+      ? locateOutbackParts(captura, bay, engineMaps.outback.volumes)
+      : Promise.resolve<PartCenter[]>([]), [vehicle?.id]);
+
+  const fijar = useCallback(async (captura: CapturaAR, v: Vano, centers: PartCenter[]) => {
     if (ocupado.current || !ar.current) return;
     ocupado.current = true;
     setFijando(true);
     try {
-      setAnclaje(await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes));
+      setAnclaje(await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes, centers));
       setCalce(null);
       setAviso(null);
       return true;
@@ -124,6 +133,7 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     let fallos = 0;
     let seguidos = 0;
     let stableCorners: number[] = [];
+    let previousCenters: PartCenter[] = [];
     let validos = 0;
     let total = 0;
     const puntajeCapo = new PuntajeCapo();
@@ -133,15 +143,12 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     (async () => {
       while (vivo && ar.current) {
         const t0 = Date.now();
+        let captureUri: string | undefined;
         try {
           const recorte = encuadre.recorte();
           const cap = await ar.current.capturar();
-          let r;
-          try {
-            r = await analizarFoto(cap.uri, recorte);
-          } finally {
-            borrar(cap.uri);
-          }
+          captureUri = cap.uri;
+          const r = await analizarFoto(cap.uri, recorte);
           if (!vivo) break;
           const freshBay = volumes.length ? completeBay(poligonoVano(frameMask.agregar(r.vano)), recorte) : null;
           const e = encuadre.procesar(poligonoVano(suavizador.agregar(r.vano)));
@@ -153,7 +160,9 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
           const candidateBay = volumes.length
             ? (corners.length === 8 && cap.registrationMeasurements ? freshBay : null)
             : (valido ? v : null);
-          const candidate = candidateBay && cap.rastreando ? { capture: cap, bay: candidateBay } : null;
+          const candidate = candidateBay && cap.rastreando
+            ? { capture: cap, bay: candidateBay, centers: [] as PartCenter[] }
+            : null;
           const autoReady = candidate && !candidate.bay.cortado
             && (volumes.length > 0 || !cap.profundidad || cap.puntos >= CONTOUR_AUTO_DEPTH_POINTS);
           if (!autoReady) {
@@ -164,6 +173,14 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
             seguidos = 1;
           } else {
             seguidos += 1;
+          }
+          if (candidate && seguidos >= ESTABLES_PARA_FIJAR - 1) {
+            const observed = await lookForPartCenters(cap, candidate.bay);
+            if (!vivo) break;
+            candidate.centers = confirmedPartCenters(previousCenters, observed, candidate.bay, cap.alto / cap.ancho);
+            previousCenters = observed;
+          } else {
+            previousCenters = [];
           }
           total += 1;
           if (valido) validos += 1;
@@ -178,28 +195,37 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
           setEstables(seguidos);
           setMs(Date.now() - t0);
           if (candidate && seguidos >= ESTABLES_PARA_FIJAR) {
-            if (await fijar(candidate.capture, candidate.bay)) break;
+            if (await fijar(candidate.capture, candidate.bay, candidate.centers)) break;
             seguidos = 0;
             stableCorners = [];
+            previousCenters = [];
             setRegistrationCandidate(null);
             await esperar(500);
           }
         } catch (e) {
           if (!vivo) break;
+          seguidos = 0;
+          stableCorners = [];
+          previousCenters = [];
+          setRegistrationCandidate(null);
+          setEstables(0);
           fallos += 1;
           if (fallos >= 5) {
             setError(`El análisis falló varias veces seguidas. ${String((e as Error)?.message ?? e)}`);
             break;
           }
           await esperar(800);
+        } finally {
+          if (captureUri) borrar(captureUri);
         }
         await esperar(100);
       }
     })();
     return () => {
       vivo = false;
+      releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, volumes.length]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
@@ -248,34 +274,52 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     ocupado.current = true;
     setRecalibrando(true);
     setAviso(null);
+    const preserveRefinement = Boolean(anclaje?.adjustedParts?.length);
     try {
+      let previousCenters: PartCenter[] = [];
+      let previousCorners: number[] = [];
       for (let i = 0; i < INTENTOS_RECALIBRAR; i++) {
         const cap = await ar.current.capturar();
         // Primero mira cerca de donde está el contorno actual (zoom); en el último intento, el cuadro completo.
         const anclas = cap.anclas && cap.anclas.length >= 6 ? pares(cap.anclas) : null;
         const recorte: Recorte = anclas && i < INTENTOS_RECALIBRAR - 1 ? recorteAlrededor(anclas, i === 0 ? 1.8 : 2.8) : COMPLETO;
-        let r;
         try {
-          r = await analizarFoto(cap.uri, recorte);
+          const r = await analizarFoto(cap.uri, recorte);
+          const detection = poligonoVano(new Suavizador().agregar(r.vano));
+          if (!cap.rastreando || !vanoValido(detection)) {
+            previousCenters = [];
+            previousCorners = [];
+            continue;
+          }
+          const v = volumes.length ? completeBay(detection, recorte) : aCuadroCompleto(detection, recorte);
+          const corners = v && volumes.length ? registrationCorners(v) : [];
+          if (!v || (volumes.length && (!cap.registrationMeasurements || corners.length !== 8))
+            || detection.esquinas.some((corner, index) => corner.borde && !v.esquinas[index].borde)) {
+            previousCenters = [];
+            previousCorners = [];
+            continue;
+          }
+          const observed = await lookForPartCenters(cap, v);
+          const centers = sameRegistrationView(previousCorners, corners)
+            ? confirmedPartCenters(previousCenters, observed, v, cap.alto / cap.ancho)
+            : [];
+          previousCenters = observed;
+          previousCorners = corners;
+          if (!centers.length && (preserveRefinement || (observed.length && i < INTENTOS_RECALIBRAR - 1))) continue;
+          try {
+            setAnclaje(await ar.current.fijar(cap.id, plano(v), corners, volumes, centers));
+            setCalce(null);
+          } catch (e) {
+            if (isRegistrationPending(e)) continue;
+            throw e;
+          }
+          setVano(v);
+          setValido(true);
+          setUltima(cap);
+          return;
         } finally {
           borrar(cap.uri);
         }
-        const detection = poligonoVano(new Suavizador().agregar(r.vano));
-        if (!cap.rastreando || !vanoValido(detection)) continue;
-        const v = volumes.length ? completeBay(detection, recorte) : aCuadroCompleto(detection, recorte);
-        if (!v || (volumes.length && (!cap.registrationMeasurements || registrationCorners(v).length !== 8))) continue;
-        if (detection.esquinas.some((corner, index) => corner.borde && !v.esquinas[index].borde)) continue;
-        try {
-          setAnclaje(await ar.current.fijar(cap.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes));
-          setCalce(null);
-        } catch (e) {
-          if (isRegistrationPending(e)) continue;
-          throw e;
-        }
-        setVano(v);
-        setValido(true);
-        setUltima(cap);
-        return;
       }
       setAviso('Se conservó el anclaje anterior. Ponte frente al auto, apunta al vano completo y vuelve a intentarlo.');
     } catch (e) {
@@ -283,6 +327,7 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
     } finally {
       ocupado.current = false;
       setRecalibrando(false);
+      releaseOutbackEncoder();
     }
   };
 
@@ -405,7 +450,9 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
         </View>
         {debug && (
           <LineaDebug
-            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · ${anclaje.esquinas} anclas · ${resumenAnclaje(anclaje)} · calce del contorno ${
+            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · ${anclaje.esquinas} anclas · ${resumenAnclaje(anclaje)}${
+              anclaje.adjustedParts?.length ? ` · ${anclaje.adjustedParts.length} piezas ajustadas` : ''
+            } · calce del contorno ${
               calce ? `${pct(calce.valor)} (${calce.n})` : '–'
             }`}
           />
@@ -439,7 +486,9 @@ export default function EscanerAR({ vehicle }: { vehicle?: Vehicle }) {
             texto={fijando ? 'Fijando…' : 'Fijar ahora'}
             icono="vector-polygon"
             variante={puedeFijar ? 'primario' : 'secundario'}
-            onPress={() => puedeFijar && registrationCandidate && fijar(registrationCandidate.capture, registrationCandidate.bay)}
+            onPress={() => puedeFijar && registrationCandidate && fijar(
+              registrationCandidate.capture, registrationCandidate.bay, registrationCandidate.centers
+            )}
             estilo={[styles.flex, !puedeFijar && styles.apagado]}
           />
         </View>

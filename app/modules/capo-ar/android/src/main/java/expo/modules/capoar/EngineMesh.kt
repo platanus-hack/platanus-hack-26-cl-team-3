@@ -68,6 +68,7 @@ internal fun registrationSamples(
 
 internal class EngineMesh private constructor(
   val origin: EnginePoint,
+  val adjustedParts: List<Int>,
   private val volumes: List<Volume>
 ) {
   private data class Volume(val part: Int, val base: List<EnginePoint>, val top: List<EnginePoint>)
@@ -100,6 +101,7 @@ internal class EngineMesh private constructor(
     fun create(
       corners: List<EnginePoint>,
       rows: List<List<Double>>,
+      refineFace: ((Int, List<EnginePoint>) -> List<EnginePoint>?)? = null,
       captureDepth: (EnginePoint) -> Float,
     ): EngineMesh? {
       if (corners.size != 4 || rows.isEmpty()) return null
@@ -122,9 +124,10 @@ internal class EngineMesh private constructor(
       if (opticalDepths.any { !it.isFinite() || it < .05f }) return null
       val inverseDepths = opticalDepths.map { 1f / it }
       val rayOffsets = corners.mapIndexed { i, corner -> (corner - origin) * inverseDepths[i] }
+      val adjustedParts = ArrayList<Int>()
       val volumes = rows.mapIndexed { part, row ->
         if (row.size < 7 || row.size % 2 != 1 || row.any { !it.isFinite() || it !in 0.0..1.0 }) return null
-        val top = row.drop(1).chunked(2).map { (x, y) ->
+        val initialTop = row.drop(1).chunked(2).map { (x, y) ->
           val u = x.toFloat()
           val v = y.toFloat()
           val weights = floatArrayOf((1 - u) * (1 - v), u * (1 - v), (1 - u) * v, u * v)
@@ -134,11 +137,16 @@ internal class EngineMesh private constructor(
           val offset = weights.indices.fold(EnginePoint(0f, 0f, 0f)) { point, i -> point + rayOffsets[i] * weights[i] }
           offset * (1.0 / inverseDepth).toFloat()
         }
+        val correctedFace = refineFace?.invoke(part, initialTop.map { it + origin })
+        val top = if (correctedFace != null) {
+          adjustedParts.add(part)
+          correctedFace.map { it - origin }
+        } else initialTop
         // Height extends below the traced face and is a fraction of the measured bay width.
         val rise = EnginePoint(0f, width * row.first().toFloat(), 0f)
         Volume(part, top.map { it - rise }, top)
       }
-      return EngineMesh(origin, volumes)
+      return EngineMesh(origin, adjustedParts, volumes)
     }
   }
 }

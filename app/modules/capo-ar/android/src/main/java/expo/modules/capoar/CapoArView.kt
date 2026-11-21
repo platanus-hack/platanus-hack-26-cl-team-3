@@ -36,7 +36,6 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
 import kotlin.math.acos
-import kotlin.math.sqrt
 
 /**
  * Vista AR del vano del motor (ARCore).
@@ -75,6 +74,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val outline: FloatArray,
     val registration: List<Double>,
     val volumes: List<List<Double>>,
+    val observedCenters: Map<Int, EngineImagePoint>,
     val promise: Promise,
   )
   private val pendingFix = AtomicReference<FixRequest?>()
@@ -210,12 +210,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     vistaPrevia = p
   }
 
-  fun fijar(id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>, promise: Promise) {
+  fun fijar(
+    id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
+    observedCenters: List<List<Double>>, promise: Promise,
+  ) {
     if (esquinas.size < 6 || esquinas.size % 2 != 0) {
       promise.reject("ERR_AR", "Se necesitan al menos 3 esquinas", null)
       return
     }
-    val request = FixRequest(id, FloatArray(esquinas.size) { esquinas[it].toFloat() }, registration, volumes, promise)
+    val request = FixRequest(
+      id, FloatArray(esquinas.size) { esquinas[it].toFloat() }, registration, volumes,
+      decodeObservedCenters(observedCenters, volumes.size), promise,
+    )
     if (!pendingFix.compareAndSet(null, request)) promise.reject("ERR_AR", "Ya se está fijando el vano", null)
   }
 
@@ -436,7 +442,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   private fun anclar(s: Session, request: FixRequest) {
-    val (captureId, esquinasGiradas, registration, volumes, promise) = request
+    val (captureId, esquinasGiradas, registration, volumes, observedCenters, promise) = request
     val c = capturas[captureId]
     val reference = captureReference?.takeIf { it.session === s }?.anchor
       ?.takeIf { it.trackingState == TrackingState.TRACKING }
@@ -446,8 +452,12 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val cameraInCurrentWorld = c.pose.inCurrentWorld(reference.pose)
     val worldInCaptureCamera = cameraInCurrentWorld.inverse()
-    fun captureDepth(point: EnginePoint): Float =
-      -worldInCaptureCamera.transformPoint(floatArrayOf(point.x, point.y, point.z))[2]
+    val intrinsics = EngineCaptureIntrinsics(c.anchoImg, c.altoImg, c.fx, c.fy, c.cx, c.cy)
+    fun inCaptureCamera(point: EnginePoint): EnginePoint {
+      val (x, y, z) = worldInCaptureCamera.transformPoint(floatArrayOf(point.x, point.y, point.z))
+      return EnginePoint(x, y, z)
+    }
+    fun captureDepth(point: EnginePoint): Float = -inCaptureCamera(point).z
     // Esquinas en coordenadas de la imagen del sensor (las muestras de distancia están en ese sistema).
     val n = esquinasGiradas.size / 2
     val us = FloatArray(n)
@@ -500,12 +510,21 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         onMeasurement()
         sum / weight
       } else fallback
-      val dx = (u * c.anchoImg - c.cx) / c.fx
-      val dy = -(v * c.altoImg - c.cy) / c.fy
-      val dz = -1f
-      val scale = distance / sqrt(dx * dx + dy * dy + dz * dz)
-      return cameraToWorld(floatArrayOf(dx * scale, dy * scale, dz * scale))
+      val ray = intrinsics.ray(EngineImagePoint(u, v))
+      val point = ray * (distance / ray.length())
+      return cameraToWorld(floatArrayOf(point.x, point.y, point.z))
     }
+
+    val refinePartFace: ((Int, List<EnginePoint>) -> List<EnginePoint>?)? =
+      if (prof != null && observedCenters.isNotEmpty()) {
+        { part, face ->
+          observedCenters[part]?.let { center ->
+            val (u, v) = Imagen.desgirar(center.x, center.y, c.grados)
+            placeObservedFace(face.map(::inCaptureCamera), EngineImagePoint(u, v), intrinsics, prof, us, vs)
+              ?.map { cameraToWorld(floatArrayOf(it.x, it.y, it.z)) }
+          }
+        }
+      } else null
 
     var registrationMethod: String? = null
     val mesh = if (registration.size == 8 && volumes.isNotEmpty()) {
@@ -513,7 +532,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val denseMesh = if (densa != null) {
         val depthCorners = frameCorners.map { (u, v) -> prof.aPixel(u, v) }
         densa.registrationPoints(depthCorners)?.let { fit ->
-          EngineMesh.create(fit.points.map(::cameraToWorld), volumes, ::captureDepth)?.also {
+          EngineMesh.create(fit.points.map(::cameraToWorld), volumes, refinePartFace, ::captureDepth)?.also {
             registrationMethod = fit.method
           }
         }
@@ -521,12 +540,16 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
         EngineMesh.create(
           frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
-          volumes, ::captureDepth,
+          volumes, refinePartFace, ::captureDepth,
         )?.also { registrationMethod = "hit-test" }
       }
     } else null
     if (volumes.isNotEmpty() && mesh == null) {
       promise.reject("ERR_REGISTRATION", "Faltan medidas del vano completo.", null)
+      return
+    }
+    if (placedEngine?.mesh?.adjustedParts?.isNotEmpty() == true && mesh?.adjustedParts.isNullOrEmpty()) {
+      promise.reject("ERR_REGISTRATION", "Faltan medidas de las piezas para recalibrar el mapa.", null)
       return
     }
 
@@ -569,7 +592,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val datos = mutableMapOf<String, Any>(
       "esquinas" to nuevas.size, "metodo" to metodo,
       "muestras" to (if (usedHitTests) localHits.size else densa?.puntos ?: muestras.size),
-      "distancia" to localMedian.toDouble(), "mapPlaced" to (placement != null)
+      "distancia" to localMedian.toDouble(), "mapPlaced" to (placement != null),
+      "adjustedParts" to (mesh?.adjustedParts ?: emptyList<Int>()),
     )
     if (densa != null && !usedHitTests) {
       datos["puntos"] = densa.puntos
