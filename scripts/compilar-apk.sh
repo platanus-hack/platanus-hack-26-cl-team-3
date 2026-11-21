@@ -34,9 +34,14 @@ done
 if [ "$(memoria_libre)" -lt 5000 ]; then
   echo "ABORTO: tras 15 min no hay 5 GB libres. No compilo para no arriesgar un OOM." >&2; exit 4
 fi
+# Metro loads the model alongside Gradle on the dedicated GitHub VM.
+memory_limit=4G
+if [[ "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${GITHUB_ACTIONS:-}" == true ]]; then
+  memory_limit=10G
+fi
 CONTENER=()
-if systemd-run --user --scope -q -p MemoryMax=4G true 2>/dev/null; then
-  CONTENER=(systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=1G)
+if systemd-run --user --scope -q -p "MemoryMax=$memory_limit" true 2>/dev/null; then
+  CONTENER=(systemd-run --user --scope -q -p "MemoryMax=$memory_limit" -p MemorySwapMax=1G)
 else
   echo "AVISO: no hay cgroup de usuario con límite de memoria; se compila sin él (solo con los topes de Gradle)." >&2
 fi
