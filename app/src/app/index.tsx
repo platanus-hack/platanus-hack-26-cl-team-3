@@ -59,7 +59,7 @@ export default function Menu() {
       </Pressable>
 
       {vehicleOptionsOpen && (
-        <View accessibilityRole="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
+        <View role="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
           {vehicles.map((option) => {
             const checked = option.id === vehicle.id;
             return (
@@ -103,6 +103,19 @@ export default function Menu() {
           <Text style={styles.principalDetalle}>Abre el capó y apunta la cámara al motor.</Text>
         </View>
         <Icono nombre="chevron-right" tam={28} tono={color.acentoTexto} />
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push({ pathname: '/engine-map', params: { vehicleId: vehicle.id } })}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
+      >
+        <Icono nombre="cube-outline" tam={26} tono={color.acento} />
+        <View style={styles.flex}>
+          <Text style={styles.secundariaTitulo}>Mapa del motor</Text>
+          <Text style={tipo.nota}>Gira el mapa y selecciona una pieza.</Text>
+        </View>
+        <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>
 
       <Pressable
