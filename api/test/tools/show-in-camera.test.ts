@@ -44,3 +44,14 @@ test("the instruction is trimmed and cut to 200 characters", async () => {
   const r = await run({ part: "battery", instruction: `  ${"a".repeat(300)}  ` });
   assert.deepEqual(r.events, [{ event: "ar", data: { part: "battery", instruction: "a".repeat(200) } }]);
 });
+
+test("every catalog part supports inspection and only the washer supports refill", async () => {
+  for (const { id } of parts) {
+    for (const action of ["highlight", "lift", "refill"]) {
+      const input = { part: id, instruction: "Inspect this part.", action };
+      const result = await run(input);
+      if (action === "refill" && id !== "washer") assert.equal(result.is_error, true);
+      else assert.deepEqual(result.events, [{ event: "ar", data: input }]);
+    }
+  }
+});

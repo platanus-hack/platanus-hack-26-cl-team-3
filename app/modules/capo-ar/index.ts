@@ -75,6 +75,7 @@ export type VistaARRef = {
   fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
   pulso(): Promise<void>;
+  playPartAction(id: string, action: "highlight" | "lift" | "refill"): Promise<void>;
   /**
    * Escaneo: suma lo que el modelo vio en la captura `id`. `mascara`: 88×88 caracteres '0'/'1' sobre el recorte
    * (rx, ry, lado). Devuelve el mapa acumulado del vano (88×88, 0-100) sobre el plano del vano en el mundo.
