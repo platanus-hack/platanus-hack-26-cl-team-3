@@ -18,6 +18,14 @@ export type Vano = {
   cortado: boolean; // parte del vano queda fuera del cuadro (alguna esquina toca el borde)
 };
 
+// Hay vano si el modelo marca una región con suficiente confianza y tamaño (medido en la imagen que analizó el modelo).
+export const CONFIANZA_MIN = 0.7; // probabilidad media dentro de la región
+export const AREA_MIN = 0.03; // fracción de la imagen analizada
+
+export function vanoValido(v: Vano | null): v is Vano {
+  return !!v && v.confianza >= CONFIANZA_MIN && v.area >= AREA_MIN;
+}
+
 /** Media móvil de probabilidades entre cuadros: estabiliza el polígono cuando el teléfono se mueve poco. */
 export class Suavizador {
   private media: Float32Array | null = null;
@@ -239,6 +247,36 @@ function interseccion(p1: number[], p2: number[], p3: number[], p4: number[]): [
   if (Math.abs(d) < 1e-9) return null;
   const t = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / d;
   return [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
+}
+
+/**
+ * Coincidencia (IoU, 0 a 1) entre dos polígonos en coordenadas normalizadas, medida sobre la grilla del cuadro: lo que
+ * queda fuera de la imagen no cuenta. Sirve para comparar el contorno anclado con una detección nueva («calce»).
+ */
+export function iouPoligonos(a: { x: number; y: number }[], b: { x: number; y: number }[]): number {
+  if (a.length < 3 || b.length < 3) return 0;
+  const n = CELDAS;
+  let inter = 0;
+  let union = 0;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = (i + 0.5) / n;
+      const y = (j + 0.5) / n;
+      const enA = dentroDe(a, x, y);
+      const enB = dentroDe(b, x, y);
+      if (enA && enB) inter++;
+      if (enA || enB) union++;
+    }
+  }
+  return union ? inter / union : 0;
+}
+
+function dentroDe(p: { x: number; y: number }[], x: number, y: number): boolean {
+  let dentro = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    if (p[i].y > y !== p[j].y > y && x < ((p[j].x - p[i].x) * (y - p[i].y)) / (p[j].y - p[i].y) + p[i].x) dentro = !dentro;
+  }
+  return dentro;
 }
 
 /** Tramos horizontales para rellenar un polígono convexo con Views (sin librerías de dibujo). Coordenadas en píxeles. */

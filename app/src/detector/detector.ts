@@ -15,6 +15,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as jpeg from 'jpeg-js';
 import type { InferenceSession } from 'onnxruntime-react-native';
 
+import type { Recorte } from './encuadre';
 import textos from './textos-vano.json';
 
 type Ort = typeof import('onnxruntime-react-native');
@@ -68,10 +69,13 @@ export type Analisis = {
   alto: number;
 };
 
-/** Analiza una foto (uri de archivo). */
-export async function analizarFoto(uri: string): Promise<Analisis> {
+/**
+ * Analiza una foto (uri de archivo). Con `recorte`, el modelo ve solo esa parte de la imagen (zoom): el mapa `vano`
+ * queda en coordenadas del recorte (ver encuadre.ts para pasarlo al cuadro completo).
+ */
+export async function analizarFoto(uri: string, recorte?: Recorte): Promise<Analisis> {
   const modelo = await cargarDetector();
-  const { pixeles, ancho, alto } = await prepararImagen(uri);
+  const { pixeles, ancho, alto } = await prepararImagen(uri, recorte);
   const { Tensor } = cargarOrt();
   const salida = await modelo.run({ pixel_values: new Tensor('float32', pixeles, [1, 3, LADO, LADO]) });
   return {
@@ -82,10 +86,21 @@ export async function analizarFoto(uri: string): Promise<Analisis> {
   };
 }
 
-async function prepararImagen(uri: string): Promise<{ pixeles: Float32Array; ancho: number; alto: number }> {
-  // 1) Cargar para conocer el tamaño real (ya orientado), 2) aplastar el cuadro completo a 352×352.
+async function prepararImagen(uri: string, recorte?: Recorte): Promise<{ pixeles: Float32Array; ancho: number; alto: number }> {
+  // 1) Cargar para conocer el tamaño real (ya orientado), 2) recortar si hay zoom, 3) aplastar a 352×352.
   const original = await ImageManipulator.manipulate(uri).renderAsync();
-  const reducida = await ImageManipulator.manipulate(original).resize({ width: LADO, height: LADO }).renderAsync();
+  let contexto = ImageManipulator.manipulate(original);
+  if (recorte && recorte.lado < 1) {
+    const originX = Math.min(original.width - 1, Math.max(0, Math.round(recorte.x * original.width)));
+    const originY = Math.min(original.height - 1, Math.max(0, Math.round(recorte.y * original.height)));
+    contexto = contexto.crop({
+      originX,
+      originY,
+      width: Math.max(1, Math.min(original.width - originX, Math.round(recorte.lado * original.width))),
+      height: Math.max(1, Math.min(original.height - originY, Math.round(recorte.lado * original.height))),
+    });
+  }
+  const reducida = await contexto.resize({ width: LADO, height: LADO }).renderAsync();
   const guardada = await reducida.saveAsync({ format: SaveFormat.JPEG, compress: 0.95 });
   const archivo = new File(guardada.uri);
   try {

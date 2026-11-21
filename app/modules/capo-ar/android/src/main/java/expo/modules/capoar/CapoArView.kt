@@ -35,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
+import kotlin.math.acos
 import kotlin.math.sqrt
 
 /**
@@ -90,7 +91,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   // Datos de cada captura, para anclar después con la pose de ESE momento (el modelo tarda; el teléfono se mueve).
   private class Captura(
     val pose: Pose, val fx: Float, val fy: Float, val cx: Float, val cy: Float, val anchoImg: Int, val altoImg: Int,
-    val grados: Int, val muestras: List<FloatArray>, val rastreando: Boolean
+    val grados: Int, val muestras: List<FloatArray>, val rastreando: Boolean,
+    val prof: Profundidad? // mapa de profundidad completo de ese cuadro (si el teléfono lo entrega)
   )
   private val capturas = LinkedHashMap<Int, Captura>()
   private var contador = 0
@@ -315,19 +317,26 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val f = intr.focalLength
     val c = intr.principalPoint
     val dims = intr.imageDimensions
-    val muestras = if (rastreando) muestrearDistancias(frame) else emptyList()
+    // Mapa de profundidad completo (miles de puntos). Si aún no está, se cae a la grilla de 49 hit tests.
+    val prof = if (rastreando && profundidad) Profundidad.leer(frame) else null
+    val muestras = if (rastreando && prof == null) muestrearDistancias(frame) else emptyList()
+    // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
+    val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
+    val puntos = prof?.validos ?: 0
     val id = ++contador
-    capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando)
+    capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando, prof)
     while (capturas.size > 8) capturas.remove(capturas.keys.first())
 
     trabajo.execute {
       try {
         val archivo = File(context.cacheDir, "capo-ar-$id.jpg")
         val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
-        val r = mapOf(
+        val r = mutableMapOf<String, Any>(
           "id" to id, "uri" to "file://${archivo.absolutePath}", "ancho" to ancho, "alto" to alto,
-          "grados" to grados, "rastreando" to rastreando, "muestras" to muestras.size, "profundidad" to profundidad
+          "grados" to grados, "rastreando" to rastreando, "muestras" to muestras.size, "profundidad" to profundidad,
+          "puntos" to puntos
         )
+        anclasImagen?.let { r["anclas"] = it }
         pedidos.forEach { it.resolve(r) }
       } catch (e: Exception) {
         pedidos.forEach { it.reject("ERR_AR", "No se pudo guardar el cuadro: ${e.message}", e) }
@@ -381,15 +390,34 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val (u, v) = Imagen.desgirar(esquinasGiradas[2 * k], esquinasGiradas[2 * k + 1], c.grados)
       us[k] = u; vs[k] = v
     }
+    // Superficie medida con el mapa de profundidad completo (miles de puntos): plano o relieve. Sirve tanto para las
+    // esquinas del contorno como para registrar el mapa de piezas.
+    val prof = c.prof
+    val densa = prof?.let { p ->
+      val xs = FloatArray(n)
+      val ys = FloatArray(n)
+      for (k in 0 until n) {
+        val (x, y) = p.aPixel(us[k], vs[k])
+        xs[k] = x; ys[k] = y
+      }
+      AnclajePorProfundidad.calcular(p, xs, ys)
+    }
+    // Respaldo (sin mapa de profundidad): grilla de 49 hit tests.
     // Solo las muestras que caen DENTRO del polígono: las de fuera miden el piso o el fondo (mucho más lejos) y, mezcladas,
     // dejarían las esquinas a una distancia equivocada (el contorno se «deslizaría» al moverse).
-    val dentro = c.muestras.filter { enPoligono(it[0], it[1], us, vs) }
+    val dentro = c.muestras.filter { AnclajePorProfundidad.enPoligono(it[0], it[1], us, vs) }
     val muestras = if (dentro.size >= 4) dentro else c.muestras
     val todas = muestras.map { it[2] }.sorted()
-    val mediana = if (todas.isNotEmpty()) todas[todas.size / 2] else DISTANCIA_POR_DEFECTO
+    val mediana = densa?.mediana ?: if (todas.isNotEmpty()) todas[todas.size / 2] else DISTANCIA_POR_DEFECTO
     val nuevas = ArrayList<Anchor>()
     var conMedida = 0
     fun world(u: Float, v: Float, samples: List<FloatArray>, onMeasurement: () -> Unit = {}): EnginePoint {
+      if (densa != null && prof != null) {
+        val (x, y) = prof.aPixel(u, v)
+        onMeasurement()
+        val result = c.pose.transformPoint(densa.punto(x, y))
+        return EnginePoint(result[0], result[1], result[2])
+      }
       var sum = 0f
       var weight = 0f
       for (sample in samples) {
@@ -413,13 +441,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       return EnginePoint(result[0], result[1], result[2])
     }
 
-    val mesh = if (registration.size == 8 && dentro.size >= 4 && volumes.isNotEmpty()) {
+    val mesh = if (registration.size == 8 && volumes.isNotEmpty() && (densa != null || dentro.size >= 4)) {
       val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
-      registrationSamples(frameCorners, dentro, RADIO_MUESTRAS)?.let { nearbySamples ->
-        EngineMesh.create(
-          frameCorners.mapIndexed { index, (u, v) -> world(u, v, nearbySamples[index]) },
-          volumes,
-        )
+      if (densa != null) {
+        // Con el mapa de profundidad, las cuatro esquinas del registro salen de la misma superficie medida.
+        EngineMesh.create(frameCorners.map { (u, v) -> world(u, v, emptyList()) }, volumes)
+      } else {
+        registrationSamples(frameCorners, dentro, RADIO_MUESTRAS)?.let { nearbySamples ->
+          EngineMesh.create(
+            frameCorners.mapIndexed { index, (u, v) -> world(u, v, nearbySamples[index]) },
+            volumes,
+          )
+        }
       }
     } else null
     if (volumes.isNotEmpty() && mesh == null) {
@@ -448,24 +481,42 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     placedEngine?.anchor?.detach()
     placedEngine = placement
     vistaPrevia = null
-    val metodo = when {
+    val metodo = densa?.metodo ?: when {
       conMedida == nuevas.size && profundidad -> "profundidad"
       conMedida > 0 -> "parcial"
       todas.isNotEmpty() -> "distancia-media"
       else -> "estimado"
     }
-    promise.resolve(mapOf("esquinas" to nuevas.size, "metodo" to metodo, "muestras" to muestras.size, "distancia" to mediana, "mapPlaced" to (placement != null)))
+    val datos = mutableMapOf<String, Any>(
+      "esquinas" to nuevas.size, "metodo" to metodo, "muestras" to (densa?.puntos ?: muestras.size),
+      "distancia" to mediana.toDouble(), "mapPlaced" to (placement != null)
+    )
+    if (densa != null) {
+      datos["puntos"] = densa.puntos
+      datos["plano"] = densa.fraccionPlano.toDouble()
+      datos["rms"] = densa.rms.toDouble()
+      densa.normal?.let { normal ->
+        val enMundo = c.pose.rotateVector(normal) // el mundo de ARCore tiene +Y hacia arriba (gravedad)
+        // 0° = superficie horizontal (se mira hacia abajo, como un motor); 90° = vertical (una pantalla).
+        datos["inclinacion"] = Math.toDegrees(acos(abs(enMundo[1]).coerceAtMost(1f)).toDouble())
+        // 0° = se mira la superficie de frente; crece al mirarla de lado.
+        datos["anguloVista"] = Math.toDegrees(acos(normal[2].coerceIn(-1f, 1f)).toDouble())
+      }
+    }
+    promise.resolve(datos)
   }
 
-  /** ¿El punto (x, y) cae dentro del polígono? (regla par-impar) */
-  private fun enPoligono(x: Float, y: Float, xs: FloatArray, ys: FloatArray): Boolean {
-    var dentro = false
-    var j = xs.size - 1
-    for (i in xs.indices) {
-      if ((ys[i] > y) != (ys[j] > y) && x < (xs[j] - xs[i]) * (y - ys[i]) / (ys[j] - ys[i]) + xs[i]) dentro = !dentro
-      j = i
+  /** Esquinas ancladas proyectadas a la imagen derecha de este cuadro (x0, y0, x1, y1… normalizadas). */
+  private fun anclasEnImagen(frame: Frame, grados: Int): List<Double>? {
+    val enVista = proyectarAnclas(screenProjector(frame)) ?: return null
+    val enImagen = FloatArray(enVista.size)
+    frame.transformCoordinates2d(Coordinates2d.VIEW, enVista, Coordinates2d.IMAGE_NORMALIZED, enImagen)
+    val salida = ArrayList<Double>(enVista.size)
+    for (k in 0 until enVista.size / 2) {
+      val (x, y) = Imagen.girar(enImagen[2 * k], enImagen[2 * k + 1], grados)
+      salida.add(x.toDouble()); salida.add(y.toDouble())
     }
-    return dentro
+    return salida
   }
 
   private fun screenProjector(frame: Frame): (Float, Float, Float) -> EngineScreenPoint? {

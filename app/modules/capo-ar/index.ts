@@ -17,16 +17,29 @@ export type CapturaAR = {
   alto: number;
   grados: number; // giro aplicado a la imagen del sensor (hay que devolverlo en mostrarVista)
   rastreando: boolean; // ARCore seguía el movimiento cuando se tomó (requisito para anclar)
-  muestras: number; // distancias medidas por ARCore en ese cuadro (de 49)
+  muestras: number; // respaldo: distancias de la grilla de 49 hit tests (0 si hubo mapa de profundidad)
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
+  puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
+  /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
+  anclas?: number[];
 };
 
 export type ResultadoFijar = {
   esquinas: number;
-  metodo: 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
-  muestras: number;
-  mapPlaced: boolean;
+  /**
+   * Con mapa de profundidad: 'plano' (superficie plana: esquinas sobre el plano ajustado) o 'relieve' (cada esquina
+   * con su profundidad local). Respaldo con 49 hit tests: 'profundidad' | 'parcial' | 'distancia-media' | 'estimado'.
+   */
+  metodo: 'plano' | 'relieve' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
+  muestras: number; // puntos de profundidad usados
+  mapPlaced: boolean; // el mapa de piezas del vehículo quedó ubicado
   distancia: number; // m, mediana de las distancias medidas
+  // Solo con mapa de profundidad:
+  puntos?: number; // puntos de profundidad dentro del contorno
+  plano?: number; // fracción de esos puntos que cae sobre el plano dominante (1 = totalmente plano)
+  rms?: number; // m, dispersión respecto del plano
+  inclinacion?: number; // grados: 0 = superficie horizontal, 90 = vertical (una pantalla)
+  anguloVista?: number; // grados: 0 = se mira de frente
 };
 
 export type EstadoAR = {
