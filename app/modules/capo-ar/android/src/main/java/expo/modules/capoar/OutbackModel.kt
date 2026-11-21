@@ -8,7 +8,7 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 
 internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c: EnginePoint, val part: Int, val rgb: FloatArray, val primitive: Int = 0)
-internal data class ModelPart(val id: String, val center: EnginePoint)
+internal data class ModelPart(val id: String, val center: EnginePoint, val guideCenter: EnginePoint = center)
 internal class OutbackModel(
   val parts: List<ModelPart>, val corners: List<EnginePoint>, val triangles: List<ModelTriangle>,
   val relativeDepths: List<Float>,
@@ -19,7 +19,10 @@ internal class OutbackModel(
     fun load(assets: AssetManager): OutbackModel {
       val binding = assets.open("engine-models/outback-registration.json").bufferedReader().use { JSONObject(it.readText()) }
       fun point(a: JSONArray) = EnginePoint(a.getDouble(0).toFloat(), a.getDouble(1).toFloat(), a.getDouble(2).toFloat())
-      val parts = binding.getJSONArray("parts").objects().map { ModelPart(it.getString("id"), point(it.getJSONArray("center"))) }
+      val parts = binding.getJSONArray("parts").objects().map { part ->
+        val center = point(part.getJSONArray("center"))
+        ModelPart(part.getString("id"), center, part.optJSONArray("guideCenter")?.let(::point) ?: center)
+      }
       val corners = binding.getJSONArray("corners").let { a -> List(4) { point(a.getJSONArray(it)) } }
       val file = ByteBuffer.wrap(assets.open("engine-models/outback-ez36.glb").use { it.readBytes() }).order(ByteOrder.LITTLE_ENDIAN)
       require(file.int == 0x46546c67 && file.int == 2 && file.int == file.capacity())
@@ -125,7 +128,7 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
       if (next < score) { best=transform; score=next }
     }
     fun place(p: EnginePoint) = best(initial(p))
-    centers = model.parts.mapIndexed { i,p -> indices[i] to place(p.center) }.toMap()
+    centers = model.parts.mapIndexed { i,p -> indices[i] to place(p.guideCenter) }.toMap()
     val cache = HashMap<EnginePoint,EnginePoint>()
     fun vertex(p: EnginePoint) = cache.getOrPut(p) { place(p) }
     triangles = model.triangles.map { t -> t.copy(a = vertex(t.a), b = vertex(t.b), c = vertex(t.c), part = indices[t.part]) }

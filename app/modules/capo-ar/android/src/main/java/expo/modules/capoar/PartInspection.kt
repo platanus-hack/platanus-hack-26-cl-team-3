@@ -43,7 +43,7 @@ internal class InspectionPart(
   private val hinge = EnginePoint(points.minOf { it.x }, mouth.y, mouth.z)
   private val size = maxOf(points.maxOf { it.x } - points.minOf { it.x },
     points.maxOf { it.z } - points.minOf { it.z }, points.maxOf { it.y } - points.minOf { it.y })
-  private val restingCenter = register(part.center)
+  private val restingCenter = register(part.guideCenter)
   private val restingSurface by lazy { source.map { it.copy(a = register(it.a), b = register(it.b), c = register(it.c), part = index) } }
   private val liquid = floatArrayOf(.13f,.73f,.89f)
   private val marker = floatArrayOf(.35f,.94f,.81f)
@@ -141,6 +141,6 @@ internal class InspectionPart(
       tube(spout, spout + (mouth-spout)*pour, .0022f*pour, liquid)
       if (pour >= .99f && (liquidCenter-mouth).length() > .002f) tube(mouth, liquidCenter, .0022f, liquid)
     }
-    return InspectionFrame(index, place(part.center), surface, effects, brightness)
+    return InspectionFrame(index, place(part.guideCenter), surface, effects, brightness)
   }
 }

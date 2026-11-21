@@ -22,6 +22,9 @@ export type CapturaAR = {
   muestras: number; // Available hit-test distances, including frames that also have a depth image
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
+  visualOutline?: number[];
+  registeredOutline?: number[];
+  landmarkGainPx?: number;
   registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];
@@ -36,7 +39,7 @@ export type ResultadoFijar = {
    * Dense placement uses a fitted plane or local relief. The part map can also use distributed hit tests.
    * Generic contours retain their existing distance fallbacks.
    */
-  metodo: 'escaneo' | 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
+  metodo: 'visual' | 'escaneo' | 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
   muestras: number; // puntos de profundidad usados
   mapPlaced: boolean; // el mapa de piezas del vehículo quedó ubicado
   distancia: number; // m, mediana de las distancias medidas
@@ -72,7 +75,7 @@ export type VistaARRef = {
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
-  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
+  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[], allowVisual?: boolean): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
   pulso(): Promise<void>;
   playPartAction(id: string, action: "highlight" | "lift" | "refill"): Promise<void>;
@@ -100,6 +103,7 @@ export type ResultadoEscaneo = {
 
 export type VistaARProps = ViewProps & {
   debug?: boolean;
+  editingMap?: boolean;
   outbackParts?: string[];
   selectedPart?: number;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
