@@ -2,13 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Adapter } from "../chat/orchestrator";
 import { ProviderError } from "./errors";
 
-const BASE_URL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api";
 const MAX_TOKENS = 4096;
 
 let client: Anthropic | undefined;
 
 const PROVIDER_MESSAGE = "El proveedor del modelo falló. Inténtalo de nuevo.";
-const CREDIT_MESSAGE = "Se acabó el crédito de la key de OpenRouter.";
+const CREDIT_MESSAGE = "Se acabó el crédito de la key de Anthropic.";
 
 export function toProviderError(e: unknown): ProviderError {
   if (e instanceof Anthropic.APIError) {
@@ -20,8 +19,8 @@ export function toProviderError(e: unknown): ProviderError {
   return new ProviderError(PROVIDER_MESSAGE, "provider");
 }
 
-export const openrouter: Adapter = async function* ({ profile, system, tools, messages, signal }) {
-  client ??= new Anthropic({ baseURL: BASE_URL, authToken: process.env.OPENROUTER_API_KEY, apiKey: null });
+export const anthropic: Adapter = async function* ({ profile, system, tools, messages, signal }) {
+  client ??= new Anthropic();
   try {
     const stream = client.messages.stream(
       {

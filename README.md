@@ -126,7 +126,7 @@ Dolor concreto de partida: «No puedo prender una luz de mi auto» → ¿ampolle
 - **Plataforma: Android** (decidido; más fácil generar APK y todo el equipo usa Android).
 - **Capa de datos (offline, preprocesada):** manuales en PDF → texto troceado con metadatos `{auto, año, motor, fuente, página, sección}`. Cada fragmento guarda su procedencia.
 - **Asistente (F3/F5):** recuperación de pasajes del manual + LLM que **responde solo con lo recuperado**. Si el manual no lo dice, responde «no lo encuentro en el manual». Proyectos de referencia: [Toyota/Lexus RAG](https://huggingface.co/ClaudioCela/toyota-lexus-rag-assistant), [AutoMate](https://awesome.ecosyste.ms/projects/github.com%2Finsafhamdi%2Fautomate-a-retrieval-augmented-ai-chatbot-for-car-assistance). Ninguno muestra citas: **la cita (página/sección) hay que construirla nosotros.**
-  **Hoy** es el servidor `api/`, que llama a Claude por OpenRouter. Por ahora solo consulta la tabla de fusibles (`api/src/data/fuses.json`, de terceros y por verificar). La búsqueda en el manual completo es la fase 4 de [`docs/specs/chat-manual/`](docs/specs/chat-manual/README.md).
+  **Hoy** es el servidor `api/`, que llama a Claude por la API de Anthropic. Por ahora solo consulta la tabla de fusibles (`api/src/data/fuses.json`, de terceros y por verificar). La búsqueda en el manual completo es la fase 4 de [`docs/specs/chat-manual/`](docs/specs/chat-manual/README.md).
 - **Luces del tablero (F4):** clasificador de imagen o modelo de visión; datasets abiertos pequeños en Roboflow (p. ej. [Dashboard icons, 18 clases](https://universe.roboflow.com/shourya-chambial-axqy0/dashboard-icons)) — **licencias sin verificar**. Significado y acción salen del manual.
 - **Modelos 3D (F1):** cada pieza es un volumen simple, extruido desde un contorno trazado sobre una foto de referencia del vano (`app/src/engine-maps/catalog.ts`). No es una malla del auto.
 - **AR (F2):** ARCore 1.57 en un módulo nativo propio en Kotlin (`app/modules/capo-ar/`), dentro de la app Expo.
@@ -164,9 +164,9 @@ Es la parte más incierta. Evidencia disponible:
 
 ## Chat «Preguntar al manual»
 
-El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por OpenRouter. La key vive solo en el servidor.
+El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por la API de Anthropic (Claude Sonnet 5.5 por defecto). La key vive solo en el servidor.
 
-1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `OPENROUTER_API_KEY` en el entorno del host. En local: `cd api && npm ci && OPENROUTER_API_KEY=… npm start` (puerto 8787). Tests: `cd api && npm test`.
+1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). Tests: `cd api && npm test`.
 2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
 
 ## 10. Futuro (fuera del MVP)
