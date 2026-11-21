@@ -57,6 +57,14 @@ export type EstadoAR = {
   profundidad: boolean;
 };
 
+export type GuiaAR = {
+  part: number;
+  x: number;
+  y: number;
+  visible: boolean;
+  distance: number;
+};
+
 export type VistaARRef = {
   capturar(includeMeasurements?: boolean): Promise<CapturaAR>;
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
@@ -64,6 +72,7 @@ export type VistaARRef = {
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
   fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
+  pulso(): Promise<void>;
   /**
    * Escaneo: suma lo que el modelo vio en la captura `id`. `mascara`: 88×88 caracteres '0'/'1' sobre el recorte
    * (rx, ry, lado). Devuelve el mapa acumulado del vano (88×88, 0-100) sobre el plano del vano en el mundo.
@@ -91,6 +100,7 @@ export type VistaARProps = ViewProps & {
   selectedPart?: number;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;
+  onGuia?: (e: NativeSyntheticEvent<GuiaAR>) => void;
   ref?: Ref<VistaARRef>;
 };
 
