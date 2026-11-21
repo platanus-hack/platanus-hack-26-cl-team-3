@@ -27,7 +27,7 @@ import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
 import type { Vehicle } from '../vehicles';
 import {
-  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO,
+  ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO,
 } from './comun';
 
 const ESTABLES_PARA_FIJAR = 3;
@@ -90,7 +90,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
     capture: CapturaAR; bay: Vano; centers: PartCenter[]; partial: boolean;
   } | null>(null);
   const [ms, setMs] = useState<number | null>(null);
-  const [debug, setDebug] = useState(true);
+
   const [activa, setActiva] = useState(AppState.currentState === 'active');
   const ocupado = useRef(false); // fijando o recalibrando
 
@@ -430,8 +430,10 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
     setIntento((i) => i + 1);
   };
 
-  if (!VistaAR) return null;
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
+  const controls = useScannerControls(!!(error || errorAR));
+  const { debug } = controls;
+  if (!VistaAR) return null;
   const rastreando = estadoAR?.estado === 'rastreando';
   const detectado = valido && !!vano;
   const tono = anclaje || detectado ? color.exito : color.acento;
@@ -440,6 +442,17 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const corrido = !!calce && calce.n >= 2 && calce.valor < CALCE_BAJO;
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const fuseLink = selected === 'fuses' ? map?.fuseUrl : undefined;
+
+  let status = 'Apunta al motor';
+  if (error || errorAR) status = 'Error de cámara';
+  else if (estadoAR?.estado === 'instalando') status = 'Preparando RA…';
+  else if (!modeloListo || !sesionActiva) status = 'Iniciando cámara…';
+  else if (recalibrando) status = 'Recalibrando…';
+  else if (aviso) status = 'Ver aviso';
+  else if (anclaje && (!rastreando || (anclaje.mapPlaced && !mapTracking))) status = 'Buscando seguimiento…';
+  else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
+  else if (anclaje) status = 'Contorno fijado';
+  else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
 
   let panel;
   if (error || errorAR) {
@@ -603,7 +616,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
-      <PartGuide key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      <PartGuide hidden={controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (
@@ -615,8 +628,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         />
       )}
       {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
-      <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
-      <Panel>{panel}</Panel>
+      <ScannerControls controls={controls} status={status}>{panel}</ScannerControls>
     </View>
   );
 }

@@ -11,7 +11,7 @@ import { poligonoVano, Suavizador, tramos, type Vano } from '../detector/vano';
 import { color } from '../theme';
 import { Boton } from '../ui';
 import {
-  BarraSuperior, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, Panel, PuntajeCapo, SUAVIZADO, vanoValido,
+  ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO, vanoValido,
 } from './comun';
 
 const PAUSA_MS = 150;
@@ -43,7 +43,7 @@ export default function EscanerCamara() {
   const [foto, setFoto] = useState<Tam | null>(null);
   const [vista, setVista] = useState<Tam | null>(null);
   const [ms, setMs] = useState<number | null>(null);
-  const [debug, setDebug] = useState(true);
+
   const [activa, setActiva] = useState(AppState.currentState === 'active');
 
   useEffect(() => {
@@ -117,9 +117,12 @@ export default function EscanerCamara() {
     setIntento((i) => i + 1);
   };
 
+  const controls = useScannerControls(!!error);
+  const { debug } = controls;
   const detectado = vanoValido(vano);
   const tono = detectado ? color.exito : color.acento;
   const cargando = !error && (!modeloListo || !camaraLista || capo === null);
+  const status = error ? 'Error de cámara' : cargando ? 'Iniciando cámara…' : detectado ? 'Vano detectado' : 'Apunta al motor';
   const mostrarVano = detectado && !!foto && !!vista;
 
   return (
@@ -135,8 +138,7 @@ export default function EscanerCamara() {
         onMountError={(e) => setError(`No se pudo abrir la cámara. ${e.message}`)}
       />
       {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
-      <BarraSuperior debug={debug} alCambiarDebug={() => setDebug((d) => !d)} />
-      <Panel>
+      <ScannerControls controls={controls} status={status}>
         {error ? (
           <>
             <Encabezado icono="alert-circle-outline" tono={color.peligro} titulo="Algo falló" />
@@ -173,7 +175,7 @@ export default function EscanerCamara() {
             )}
           </>
         )}
-      </Panel>
+      </ScannerControls>
     </View>
   );
 }
