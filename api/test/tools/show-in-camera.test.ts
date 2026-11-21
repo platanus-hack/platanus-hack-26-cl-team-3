@@ -1,0 +1,46 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { tools } from "../../src/tools";
+import parts from "../../src/data/parts.json";
+
+const { run, definition } = tools.show_in_camera;
+
+test("2: a valid call returns text and an ar event", async () => {
+  const instruction = "Busca la tapa amarilla junto a la batería.";
+  const r = await run({ part: "washer", instruction });
+  assert.notEqual(r.is_error, true);
+  assert.deepEqual(r.content, [{ type: "text", text: "Tarjeta mostrada: Abrir cámara en Sapito." }]);
+  assert.deepEqual(r.events, [{ event: "ar", data: { part: "washer", instruction } }]);
+});
+
+test("3: an unknown part or a missing instruction returns is_error and no events", async () => {
+  const inputs = [
+    { part: "wheel", instruction: "x" },
+    { part: "washer" },
+    { part: "washer", instruction: "   " },
+    { part: "washer", instruction: 5 },
+    { instruction: "x" },
+    null,
+    "washer",
+  ];
+  for (const input of inputs) {
+    const r = await run(input);
+    assert.equal(r.is_error, true, JSON.stringify(input));
+    assert.equal(r.events, undefined);
+    assert.equal((r.content as { type: string }[])[0].type, "text");
+  }
+});
+
+test("5: the part enum equals the ids in parts.json", () => {
+  const schema = definition.input_schema as unknown as { properties: { part: { type: string; enum: string[] }; instruction: { type: string } }; required: string[]; additionalProperties: boolean };
+  assert.deepEqual(schema.properties.part.enum, parts.map((p) => p.id));
+  assert.equal(schema.properties.part.type, "string");
+  assert.equal(schema.properties.instruction.type, "string");
+  assert.deepEqual([...schema.required].sort(), ["instruction", "part"]);
+  assert.equal(schema.additionalProperties, false);
+});
+
+test("the instruction is trimmed and cut to 200 characters", async () => {
+  const r = await run({ part: "battery", instruction: `  ${"a".repeat(300)}  ` });
+  assert.deepEqual(r.events, [{ event: "ar", data: { part: "battery", instruction: "a".repeat(200) } }]);
+});
