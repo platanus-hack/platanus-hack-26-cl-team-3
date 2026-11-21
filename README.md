@@ -1,7 +1,12 @@
 # capo-ar — Guía de tu auto en Realidad Aumentada
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
-> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native + expo-router) tiene menú principal, aviso obligatorio y, en el teléfono, **contorno del vano del motor** con sus esquinas y modo debug (CLIPSeg con decodificador propio), **anclado al auto con ARCore** (se reconoce una vez, queda fijo al moverse; botón Recalibrar). Ver `herramientas/vano-motor/`. Aún no se muestran las piezas en AR. La PWA (`web/`) usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
+> Estado (21-11-2026): **MVP inicial** (hackathon). El resumen para el mentor está en [`docs/brief.md`](docs/brief.md).
+> - **App** (`app/`, Expo + React Native + expo-router): menú principal, aviso obligatorio y selección de vehículo (8 modelos).
+> - **Escáner:** en el teléfono detecta el **contorno del vano del motor**, con sus esquinas y un modo debug (CLIPSeg con decodificador propio). Ver `herramientas/vano-motor/`. El contorno queda **anclado al auto con ARCore**: se reconoce una vez y queda fijo al mover el teléfono, con un botón Recalibrar.
+> - **Piezas en AR:** sobre el vano anclado se proyectan las **piezas del auto elegido** (`app/src/engine-maps/`). Falta calibrarlas en el auto real (#17).
+> - **Chat «Preguntar al manual»** (`api/` + pantalla `ask`): responde con citas a partir de la tabla de fusibles. Ver la sección «Chat».
+> - **PWA** (`web/`): usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
 >
 > **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk` (la primera vez arma el modelo del vano: ~1 GB de entorno Python en `~/.cache` y ~600 MB de pesos). Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
 
@@ -99,6 +104,7 @@ Dolor concreto de partida: «No puedo prender una luz de mi auto» → ¿ampolle
 
 - **Auto de pruebas físico (obligatorio): Subaru Outback 2016, motor 3.6 (EZ36, versión «3.6R»).** Es el único auto al que el equipo tiene acceso físico hoy. Todo lo de AR se prueba aquí.
 - **Segundo auto (pendiente de decidir):** la idea original era un auto «muy genérico» con información pública abundante, p. ej. **Toyota Corolla**. Sin acceso físico a un Corolla, solo podríamos cubrir la parte de **datos/manual/chat (F3, F4, F5)**, no la parte de AR. **Decisión abierta:** conseguir acceso a un segundo auto (de un integrante o conocido) o dejar el MVP con un auto y mostrar el segundo solo en la capa de datos.
+- **Hoy:** la app trae mapas de 8 modelos (`app/src/vehicles.ts`), trazados sobre fotos de referencia. Solo el Outback se puede probar en un auto real.
 
 ### Fuentes públicas conocidas
 
@@ -112,16 +118,17 @@ Dolor concreto de partida: «No puedo prender una luz de mi auto» → ¿ampolle
 
 **Datos que NO tenemos y no debemos inventar:** modelos 3D/CAD del fabricante, datos de taller (ALLDATA, Mitchell, HaynesPro — de pago), y tabla pública de ampolletas por API (Sylvania/Philips/Bulbs.com tienen buscadores web pero **sin API pública**; raspar sus datos probablemente viola sus términos). Para las ampolletas del MVP: **leerlas del manual del auto** y/o armar la tabla a mano para el Outback.
 
-## 7. Arquitectura propuesta (a validar por el equipo)
+## 7. Arquitectura
 
-> Todo lo de esta sección es **propuesta**, no decisión tomada, salvo la plataforma.
+> Decidido: la plataforma (Android), la AR (ARCore nativo) y el asistente (`api/`). Lo demás sigue siendo propuesta.
 
 - **Plataforma: Android** (decidido; más fácil generar APK y todo el equipo usa Android).
 - **Capa de datos (offline, preprocesada):** manuales en PDF → texto troceado con metadatos `{auto, año, motor, fuente, página, sección}`. Cada fragmento guarda su procedencia.
 - **Asistente (F3/F5):** recuperación de pasajes del manual + LLM que **responde solo con lo recuperado**. Si el manual no lo dice, responde «no lo encuentro en el manual». Proyectos de referencia: [Toyota/Lexus RAG](https://huggingface.co/ClaudioCela/toyota-lexus-rag-assistant), [AutoMate](https://awesome.ecosyste.ms/projects/github.com%2Finsafhamdi%2Fautomate-a-retrieval-augmented-ai-chatbot-for-car-assistance). Ninguno muestra citas: **la cita (página/sección) hay que construirla nosotros.**
+  **Hoy** es el servidor `api/`, que llama a Claude por OpenRouter. Por ahora solo consulta la tabla de fusibles (`api/src/data/fuses.json`, de terceros y por verificar). La búsqueda en el manual completo es la fase 4 de [`docs/specs/chat-manual/`](docs/specs/chat-manual/README.md).
 - **Luces del tablero (F4):** clasificador de imagen o modelo de visión; datasets abiertos pequeños en Roboflow (p. ej. [Dashboard icons, 18 clases](https://universe.roboflow.com/shourya-chambial-axqy0/dashboard-icons)) — **licencias sin verificar**. Significado y acción salen del manual.
-- **Modelos 3D (F1):** Blender → glTF/GLB, formas simples.
-- **AR (F2):** ARCore sobre Android. Motor/UI por decidir (Kotlin nativo + ARCore, o Unity AR Foundation). Decidirlo tras la prueba de anclaje (sección 8, paso 1).
+- **Modelos 3D (F1):** cada pieza es un volumen simple, extruido desde un contorno trazado sobre una foto de referencia del vano (`app/src/engine-maps/catalog.ts`). No es una malla del auto.
+- **AR (F2):** ARCore 1.57 en un módulo nativo propio en Kotlin (`app/modules/capo-ar/`), dentro de la app Expo.
 
 ### Riesgo principal: anclar el 3D al capó real
 
@@ -132,13 +139,15 @@ Es la parte más incierta. Evidencia disponible:
 
 **Plan de mitigación (idea nuestra, aún NO probada):** anclaje asistido por el usuario. El usuario toca 2–3 puntos de referencia fijos del capó (p. ej. centro de la batería, una esquina del motor); la app coloca el modelo respecto a ellos y lo sostiene con el seguimiento de movimiento (SLAM) de ARCore. Mejora posible después: reconocimiento automático. **Probar esto antes que cualquier otra cosa.**
 
+**Lo que se hizo:** al final el anclaje es automático. Un modelo propio detecta el vano del motor y la profundidad de ARCore lo fija en el espacio (`herramientas/vano-motor/`). Falta validarlo en el Outback (#17).
+
 ## 8. Orden de trabajo (paquetes paralelizables)
 
-1. **Prueba de anclaje AR** — cubo/flechas sobre el capó del Outback con puntos de referencia. Si falla, decidir rumbo aquí. *(Bloqueante del resto de AR.)*
-2. **Capa de datos y asistente con citas** — manual del Outback → fragmentos con procedencia → preguntas en lenguaje natural. *(Independiente de AR; paralelizable desde el día 1.)*
-3. **Fotos y medidas del capó del Outback** + modelos 3D simples de las 5 piezas ubicados según fotos/manual.
-4. **Luces del tablero** — fotos propias del tablero del Outback + clasificador/modelo; significado desde el manual.
-5. **Integración** — la pregunta del usuario dispara la guía y la AR resalta la pieza.
+1. **Prueba de anclaje AR** — cubo/flechas sobre el capó del Outback con puntos de referencia. Si falla, decidir rumbo aquí. *(Bloqueante del resto de AR.)* **Estado:** el anclaje automático está hecho; falta probarlo en el Outback (#17).
+2. **Capa de datos y asistente con citas** — manual del Outback → fragmentos con procedencia → preguntas en lenguaje natural. *(Independiente de AR; paralelizable desde el día 1.)* **Estado:** el chat funciona con la tabla de fusibles; falta indexar el manual.
+3. **Fotos y medidas del capó del Outback** + modelos 3D simples de las 5 piezas ubicados según fotos/manual. **Estado:** hasta 9 piezas por auto, trazadas sobre fotos de referencia; faltan las medidas en el auto.
+4. **Luces del tablero** — fotos propias del tablero del Outback + clasificador/modelo; significado desde el manual. **Estado:** sin empezar.
+5. **Integración** — la pregunta del usuario dispara la guía y la AR resalta la pieza. **Estado:** sin empezar (es la fase 2 del chat).
 
 ## 9. Reglas del proyecto (para humanos y agentes)
 
@@ -167,7 +176,7 @@ El APK conversa con el servidor `api/`, que corre las herramientas y llama al mo
 
 ## 11. Cosas que NO sabemos aún (investigar o probar)
 
-- Si el anclaje asistido por puntos de referencia es estable en un capó real (reflejos, suciedad, luz).
+- Si el anclaje automático (vano + profundidad de ARCore) es estable en un capó real (reflejos, suciedad, luz) y qué tan cerca de su lugar real quedan las piezas.
 - Cobertura real de los manuales del Outback 2016 3.6R: diagrama del capó, tabla de ampolletas, fusibles, luces del tablero. (Las copias de terceros existen; falta revisarlas página por página.)
 - Licencias de los datasets de Roboflow y de uso de los manuales.
 - Precisión del reconocimiento por cámara para las piezas del capó (no hay benchmark público; hay que medir con fotos propias).
