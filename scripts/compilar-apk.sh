@@ -47,7 +47,7 @@ else
 fi
 export CMAKE_BUILD_PARALLEL_LEVEL=1
 
-"$RAIZ/scripts/descargar-modelo.sh"
+"$RAIZ/scripts/preparar-modelo-vano.sh"   # modelo del vano del motor (CLIPSeg + decodificador propio)
 [ -d node_modules ] || npm ci --no-audit --no-fund
 npx tsc --noEmit
 if [ "${LIMPIO:-0}" = 1 ] || [ ! -d android ]; then
@@ -60,7 +60,18 @@ cd android
 # suyo, y junto con R8 superaban los 5 GB → OOM). R8 desactivado: el APK pesa algo más, pero compila con menos memoria.
 sed -i '/^org.gradle.jvmargs=/d; /^kotlin.daemon.jvmargs=/d; /^kotlin.compiler.execution.strategy=/d; /^android.enableMinifyInReleaseBuilds=/d' gradle.properties
 printf '\norg.gradle.jvmargs=-Xmx1792m -XX:MaxMetaspaceSize=640m -XX:+UseSerialGC\nkotlin.compiler.execution.strategy=in-process\nandroid.enableMinifyInReleaseBuilds=false\norg.gradle.workers.max=1\n' >> gradle.properties
-choom -n 1000 -- "${CONTENER[@]}" nice -n 10 ./gradlew assembleRelease --max-workers=1 -PreactNativeArchitectures=arm64-v8a --no-daemon
+compilar() {
+  choom -n 1000 -- "${CONTENER[@]}" nice -n 10 ./gradlew assembleRelease --max-workers=1 -PreactNativeArchitectures=arm64-v8a --no-daemon
+}
+REGISTRO="$(mktemp)"
+if ! compilar 2>&1 | tee "$REGISTRO"; then
+  # El tope de memoria a veces mata a Gradle a mitad de camino (medido varias veces al compilar el C++ de la app). Lo ya
+  # compilado queda en disco, así que un reintento retoma desde ahí y pasa. Cualquier otro fallo no se reintenta.
+  grep -q 'daemon disappeared' "$REGISTRO" || { rm -f "$REGISTRO"; exit 1; }
+  echo "== Gradle murió por el tope de memoria: reintento (retoma lo ya compilado)"
+  compilar
+fi
+rm -f "$REGISTRO"
 
 mkdir -p "$(dirname "$SALIDA")"
 cp app/build/outputs/apk/release/app-release.apk "$SALIDA"

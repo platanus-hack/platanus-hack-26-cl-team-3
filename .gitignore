@@ -10,3 +10,7 @@ app/assets/modelo/*.onnx
 
 # Python
 __pycache__/
+app/assets/modelo/*.fuente
+
+# Salida de Gradle de los módulos nativos propios
+app/modules/*/android/build/

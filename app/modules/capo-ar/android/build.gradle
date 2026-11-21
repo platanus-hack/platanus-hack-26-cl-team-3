@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.capoar'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.capoar"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // ARCore: seguimiento del movimiento del teléfono (SLAM), anclas y profundidad.
+  implementation "com.google.ar:core:1.57.0"
+}

@@ -59,7 +59,7 @@ export default function Menu() {
       </Pressable>
 
       {vehicleOptionsOpen && (
-        <View accessibilityRole="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
+        <View role="group" accessibilityLabel="Modelos disponibles" style={styles.vehicleList}>
           {vehicles.map((option) => {
             const checked = option.id === vehicle.id;
             return (

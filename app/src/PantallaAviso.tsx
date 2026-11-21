@@ -23,11 +23,12 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
         <Text style={[tipo.seccion, styles.seccion]}>Cómo funciona</Text>
         <Punto icono="camera-iris" texto="El reconocimiento del capó corre en tu teléfono. Las imágenes de la cámara no salen del dispositivo." />
         <Punto icono="book-open-variant" texto="Cuando la app responda preguntas, cada respuesta citará el manual del propietario: documento, sección y página. Sin fuente, no se afirma." />
-        <Punto icono="car-info" texto="Por ahora, solo para Subaru Outback 2016 3.6R. Los datos de otros modelos no se asumen iguales." />
+        <Punto icono="car-info" texto="El Subaru Outback 2016 3.6R es el auto de pruebas. La posición de las piezas en la cámara es aproximada." />
 
         <Text style={[tipo.seccion, styles.seccion]}>Créditos</Text>
         <Text style={tipo.nota}>
-          Reconocimiento: modelo CLIP ViT-B/32 de OpenAI (licencia MIT), versión ONNX de Xenova.
+          Reconocimiento del vano del motor: CLIPSeg de CIDAS (licencia Apache-2.0), basado en CLIP ViT-B/16 de OpenAI
+          (licencia MIT), con un decodificador entrenado por el equipo.
         </Text>
       </ScrollView>
       <Boton texto={primerUso ? 'Entendido, continuar' : 'Cerrar'} onPress={onListo} estilo={styles.boton} />
