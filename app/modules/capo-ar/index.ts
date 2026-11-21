@@ -25,6 +25,7 @@ export type ResultadoFijar = {
   esquinas: number;
   metodo: 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
   muestras: number;
+  mapPlaced: boolean;
   distancia: number; // m, mediana de las distancias medidas
 };
 
@@ -32,6 +33,7 @@ export type EstadoAR = {
   estado: 'iniciando' | 'instalando' | 'rastreando' | 'sin-rastreo' | 'error';
   detalle: string | null;
   anclado: boolean;
+  mapTracking: boolean;
   profundidad: boolean;
 };
 
@@ -40,12 +42,14 @@ export type VistaARRef = {
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
-  fijar(id: number, esquinas: number[]): Promise<ResultadoFijar>;
+  fijar(id: number, esquinas: number[], registration: number[], volumes: number[][]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
 };
 
 export type VistaARProps = ViewProps & {
   debug?: boolean;
+  selectedPart?: number;
+  onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;
   ref?: Ref<VistaARRef>;
 };

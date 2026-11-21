@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.view.MotionEvent
 import android.view.View
 
 /**
@@ -15,9 +16,20 @@ import android.view.View
  * - Modo debug: relleno rojo claro.
  * Esquinas: puntos rojos; huecos si tocan el borde de la imagen (el vano sigue fuera del cuadro).
  */
-internal class CapaPoligono(context: Context) : View(context) {
+internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit) : View(context) {
   var debug = true
     set(v) { field = v; invalidate() }
+
+  var selectedPart = -1
+    set(value) { field = value; invalidate() }
+
+  private var faces: List<EngineFace> = emptyList()
+  private var pressedPart: Int? = null
+  private val faceFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+  private val faceEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    style = Paint.Style.STROKE
+    strokeJoin = Paint.Join.ROUND
+  }
 
   private var puntos: FloatArray? = null // x0, y0, x1, y1… en píxeles de esta vista
   private var bordes: BooleanArray? = null
@@ -31,15 +43,30 @@ internal class CapaPoligono(context: Context) : View(context) {
   private val aroBorde = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3 * densidad; color = Color.rgb(255, 59, 59) }
   private val camino = Path()
 
-  fun actualizar(p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean) {
+  fun actualizar(p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean, engineFaces: List<EngineFace>) {
     puntos = p
     bordes = b
     anclado = estaAnclado
+    faces = engineFaces
     invalidate()
   }
 
   override fun onDraw(canvas: Canvas) {
     super.onDraw(canvas)
+    for (face in faces) {
+      camino.reset()
+      camino.moveTo(face.points.first().x, face.points.first().y)
+      for (i in 1 until face.points.size) camino.lineTo(face.points[i].x, face.points[i].y)
+      camino.close()
+      val selected = face.part == selectedPart
+      val tint = if (selected) Color.rgb(255, 176, 32) else Color.rgb(61, 220, 132)
+      faceFill.color = tint
+      faceFill.alpha = if (face.side) 80 else 130
+      faceEdge.color = tint
+      faceEdge.strokeWidth = (if (selected) 2f else 1f) * densidad
+      canvas.drawPath(camino, faceFill)
+      canvas.drawPath(camino, faceEdge)
+    }
     val p = puntos ?: return
     if (p.size < 6) return
     camino.reset()
@@ -62,5 +89,30 @@ internal class CapaPoligono(context: Context) : View(context) {
         canvas.drawCircle(x, y, r, aro)
       }
     }
+  }
+  override fun onTouchEvent(event: MotionEvent): Boolean {
+    fun hit() = faces.findLast { it.contains(event.x, event.y) }?.part
+    when (event.actionMasked) {
+      MotionEvent.ACTION_DOWN -> {
+        pressedPart = hit()
+        return pressedPart != null
+      }
+      MotionEvent.ACTION_UP -> {
+        val part = pressedPart
+        pressedPart = null
+        if (part != null && hit() == part) {
+          performClick()
+          onPart(part)
+        }
+        return part != null
+      }
+      MotionEvent.ACTION_CANCEL -> pressedPart = null
+    }
+    return true
+  }
+
+  override fun performClick(): Boolean {
+    super.performClick()
+    return true
   }
 }
