@@ -15,6 +15,7 @@
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.32",
     "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
     "jpeg-js": "^0.4.4",
     "onnxruntime-react-native": "^1.24.3",
     "react": "19.3.0",
@@ -39,5 +40,10 @@
     "postinstall": "patch-package",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@expo/fingerprint@0.21.10": {
+      "minimatch": "11.0.9"
+    }
+  }
 }
