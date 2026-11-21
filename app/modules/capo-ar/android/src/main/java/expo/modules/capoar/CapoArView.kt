@@ -68,7 +68,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private var ultimoEstado = ""
 
   // Pedidos desde JS, atendidos en el hilo de OpenGL (donde vive el Frame de ARCore).
-  private val capturasPendientes = ArrayList<Promise>()
+  private data class CaptureRequest(val includeMeasurements: Boolean, val promise: Promise)
+  private val capturasPendientes = ArrayList<CaptureRequest>()
   private data class FixRequest(
     val captureId: Int,
     val outline: FloatArray,
@@ -88,10 +89,15 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val overlayFrame = AtomicReference<OverlayFrame?>()
   @Volatile private var soltarPendiente = false
 
+  private data class HitSamples(
+    val nearest: List<FloatArray> = emptyList(),
+    val local: List<FloatArray> = emptyList(),
+  )
+
   // Datos de cada captura, para anclar después con la pose de ESE momento (el modelo tarda; el teléfono se mueve).
   private class Captura(
     val pose: Pose, val fx: Float, val fy: Float, val cx: Float, val cy: Float, val anchoImg: Int, val altoImg: Int,
-    val grados: Int, val muestras: List<FloatArray>, val rastreando: Boolean,
+    val grados: Int, val muestras: HitSamples, val rastreando: Boolean,
     val prof: Profundidad? // mapa de profundidad completo de ese cuadro (si el teléfono lo entrega)
   )
   private val capturas = LinkedHashMap<Int, Captura>()
@@ -173,7 +179,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   fun destruir() {
     pausar()
     synchronized(capturasPendientes) {
-      capturasPendientes.forEach { it.reject("ERR_AR", "La vista AR se cerró", null) }
+      capturasPendientes.forEach { it.promise.reject("ERR_AR", "La vista AR se cerró", null) }
       capturasPendientes.clear()
     }
     pendingFix.getAndSet(null)?.promise?.reject("ERR_AR", "La vista AR se cerró", null)
@@ -184,9 +190,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   // ---------------- API para JS ----------------
 
-  fun capturar(promise: Promise) {
+  fun capturar(includeMeasurements: Boolean, promise: Promise) {
     if (sesion == null) { promise.reject("ERR_AR", "ARCore no está activo", null); return }
-    synchronized(capturasPendientes) { capturasPendientes.add(promise) }
+    synchronized(capturasPendientes) { capturasPendientes.add(CaptureRequest(includeMeasurements, promise)) }
   }
 
   /** Esquinas en coordenadas normalizadas de la imagen entregada por [capturar] (derecha): x0, y0, x1, y1… */
@@ -295,14 +301,14 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   private fun atenderCapturas(frame: Frame) {
-    val pedidos: List<Promise>
+    val pedidos: List<CaptureRequest>
     synchronized(capturasPendientes) {
       if (capturasPendientes.isEmpty()) return
       pedidos = ArrayList(capturasPendientes)
     }
     val imagen = try { frame.acquireCameraImage() } catch (e: NotYetAvailableException) { return } catch (e: Exception) {
       synchronized(capturasPendientes) { capturasPendientes.removeAll(pedidos.toSet()) }
-      pedidos.forEach { it.reject("ERR_AR", "No se pudo leer la cámara: ${e.javaClass.simpleName}", e) }
+      pedidos.forEach { it.promise.reject("ERR_AR", "No se pudo leer la cámara: ${e.javaClass.simpleName}", e) }
       return
     }
     synchronized(capturasPendientes) { capturasPendientes.removeAll(pedidos.toSet()) }
@@ -317,29 +323,36 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val f = intr.focalLength
     val c = intr.principalPoint
     val dims = intr.imageDimensions
-    // Mapa de profundidad completo (miles de puntos). Si aún no está, se cae a la grilla de 49 hit tests.
-    val prof = if (rastreando && profundidad) Profundidad.leer(frame) else null
-    val muestras = if (rastreando && prof == null) muestrearDistancias(frame) else emptyList()
+    // Keep same-frame hit tests for gaps in dense depth. The bay mask is only known after inference.
+    val measure = rastreando && pedidos.any { it.includeMeasurements }
+    val prof = if (measure && profundidad) Profundidad.leer(frame) else null
+    val muestras = if (measure) muestrearDistancias(frame) else HitSamples()
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
     val puntos = prof?.validos ?: 0
     val id = ++contador
-    capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando, prof)
-    while (capturas.size > 8) capturas.remove(capturas.keys.first())
+    if (measure) {
+      capturas[id] = Captura(camara.pose, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, rastreando, prof)
+      while (capturas.size > 8) capturas.remove(capturas.keys.first())
+    }
 
     trabajo.execute {
-      try {
-        val archivo = File(context.cacheDir, "capo-ar-$id.jpg")
-        val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
-        val r = mutableMapOf<String, Any>(
-          "id" to id, "uri" to "file://${archivo.absolutePath}", "ancho" to ancho, "alto" to alto,
-          "grados" to grados, "rastreando" to rastreando, "muestras" to muestras.size, "profundidad" to profundidad,
-          "puntos" to puntos
-        )
-        anclasImagen?.let { r["anclas"] = it }
-        pedidos.forEach { it.resolve(r) }
-      } catch (e: Exception) {
-        pedidos.forEach { it.reject("ERR_AR", "No se pudo guardar el cuadro: ${e.message}", e) }
+      pedidos.forEachIndexed { index, request ->
+        try {
+          // Each caller owns its JPEG, including when recalibration and a contour check share the same frame.
+          val archivo = File(context.cacheDir, "capo-ar-$id-$index.jpg")
+          val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
+          val r = mutableMapOf<String, Any>(
+            "id" to id, "uri" to "file://${archivo.absolutePath}", "ancho" to ancho, "alto" to alto,
+            "grados" to grados, "rastreando" to rastreando, "muestras" to muestras.nearest.size, "profundidad" to profundidad,
+            "puntos" to puntos,
+            "registrationMeasurements" to (puntos >= AnclajeDenso.MIN_REGISTRATION_POINTS || muestras.local.size >= 4)
+          )
+          anclasImagen?.let { r["anclas"] = it }
+          request.promise.resolve(r)
+        } catch (e: Exception) {
+          request.promise.reject("ERR_AR", "No se pudo guardar el cuadro: ${e.message}", e)
+        }
       }
     }
   }
@@ -355,26 +368,31 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   /** Grilla 7×7 de hit tests: distancia real (m) a lo que hay en cada punto, en coordenadas normalizadas de la imagen. */
-  private fun muestrearDistancias(frame: Frame): List<FloatArray> {
-    if (anchoVista == 0) return emptyList()
-    val salida = ArrayList<FloatArray>()
+  private fun muestrearDistancias(frame: Frame): HitSamples {
+    if (anchoVista == 0) return HitSamples()
+    val nearest = ArrayList<FloatArray>()
+    val local = ArrayList<FloatArray>()
     val n = 7
     for (j in 0 until n) for (i in 0 until n) {
       val vx = (i + 0.5f) / n * anchoVista
       val vy = (j + 0.5f) / n * altoVista
-      val golpe = frame.hitTest(vx, vy).firstOrNull { h ->
+      val hits = frame.hitTest(vx, vy)
+      val golpe = hits.firstOrNull { h ->
         when (val t = h.trackable) {
-          is DepthPoint -> true
+          is DepthPoint, is Point -> true
           is Plane -> t.isPoseInPolygon(h.hitPose)
-          is Point -> true
           else -> false
         }
       } ?: continue
       val img = FloatArray(2)
       frame.transformCoordinates2d(Coordinates2d.VIEW, floatArrayOf(vx, vy), Coordinates2d.IMAGE_NORMALIZED, img)
-      salida.add(floatArrayOf(img[0], img[1], golpe.distance))
+      nearest.add(floatArrayOf(img[0], img[1], golpe.distance))
+      // Keep the nearest local surface even when the generic contour uses a detected plane.
+      hits.firstOrNull { h -> (h.trackable is DepthPoint || h.trackable is Point) && h.distance in .15f..8f }?.let {
+        local.add(floatArrayOf(img[0], img[1], it.distance))
+      }
     }
-    return salida
+    return HitSamples(nearest, local)
   }
 
   private fun anclar(s: Session, request: FixRequest) {
@@ -402,22 +420,23 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }
       AnclajePorProfundidad.calcular(p, xs, ys)
     }
-    // Respaldo (sin mapa de profundidad): grilla de 49 hit tests.
+    // Respaldo: grilla de 49 hit tests.
     // Solo las muestras que caen DENTRO del polígono: las de fuera miden el piso o el fondo (mucho más lejos) y, mezcladas,
     // dejarían las esquinas a una distancia equivocada (el contorno se «deslizaría» al moverse).
-    val dentro = c.muestras.filter { AnclajePorProfundidad.enPoligono(it[0], it[1], us, vs) }
-    val muestras = if (dentro.size >= 4) dentro else c.muestras
+    val dentro = c.muestras.nearest.filter { AnclajePorProfundidad.enPoligono(it[0], it[1], us, vs) }
+    val localHits = c.muestras.local.filter { AnclajePorProfundidad.enPoligono(it[0], it[1], us, vs) }
+    val muestras = if (dentro.size >= 4) dentro else c.muestras.nearest
     val todas = muestras.map { it[2] }.sorted()
     val mediana = densa?.mediana ?: if (todas.isNotEmpty()) todas[todas.size / 2] else DISTANCIA_POR_DEFECTO
     val nuevas = ArrayList<Anchor>()
     var conMedida = 0
-    fun world(u: Float, v: Float, samples: List<FloatArray>, onMeasurement: () -> Unit = {}): EnginePoint {
-      if (densa != null && prof != null) {
-        val (x, y) = prof.aPixel(u, v)
-        onMeasurement()
-        val result = c.pose.transformPoint(densa.punto(x, y))
-        return EnginePoint(result[0], result[1], result[2])
-      }
+    fun cameraToWorld(point: FloatArray): EnginePoint {
+      val result = c.pose.transformPoint(point)
+      return EnginePoint(result[0], result[1], result[2])
+    }
+    fun fromHitTests(
+      u: Float, v: Float, samples: List<FloatArray>, fallback: Float = mediana, onMeasurement: () -> Unit = {},
+    ): EnginePoint {
       var sum = 0f
       var weight = 0f
       for (sample in samples) {
@@ -432,27 +451,30 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val distance = if (weight > 0f) {
         onMeasurement()
         sum / weight
-      } else mediana
+      } else fallback
       val dx = (u * c.anchoImg - c.cx) / c.fx
       val dy = -(v * c.altoImg - c.cy) / c.fy
       val dz = -1f
       val scale = distance / sqrt(dx * dx + dy * dy + dz * dz)
-      val result = c.pose.transformPoint(floatArrayOf(dx * scale, dy * scale, dz * scale))
-      return EnginePoint(result[0], result[1], result[2])
+      return cameraToWorld(floatArrayOf(dx * scale, dy * scale, dz * scale))
     }
 
-    val mesh = if (registration.size == 8 && volumes.isNotEmpty() && (densa != null || dentro.size >= 4)) {
+    var registrationMethod: String? = null
+    val mesh = if (registration.size == 8 && volumes.isNotEmpty()) {
       val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
-      if (densa != null) {
-        // Con el mapa de profundidad, las cuatro esquinas del registro salen de la misma superficie medida.
-        EngineMesh.create(frameCorners.map { (u, v) -> world(u, v, emptyList()) }, volumes)
-      } else {
-        registrationSamples(frameCorners, dentro, RADIO_MUESTRAS)?.let { nearbySamples ->
-          EngineMesh.create(
-            frameCorners.mapIndexed { index, (u, v) -> world(u, v, nearbySamples[index]) },
-            volumes,
-          )
+      val denseMesh = if (densa != null) {
+        val depthCorners = frameCorners.map { (u, v) -> prof.aPixel(u, v) }
+        densa.registrationPoints(depthCorners)?.let { fit ->
+          EngineMesh.create(fit.points.map(::cameraToWorld), volumes)?.also {
+            registrationMethod = fit.method
+          }
         }
+      } else null
+      denseMesh ?: registrationSamples(frameCorners, localHits, RADIO_MUESTRAS)?.let { nearbySamples ->
+        EngineMesh.create(
+          frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
+          volumes,
+        )?.also { registrationMethod = "hit-test" }
       }
     } else null
     if (volumes.isNotEmpty() && mesh == null) {
@@ -460,10 +482,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       return
     }
 
+    val usedHitTests = registrationMethod == "hit-test"
+    val localMedian = if (usedHitTests) localHits.map { it[2] }.sorted()[localHits.size / 2] else mediana
     val placement: PlacedEngine?
     try {
       for (k in 0 until n) {
-        val corner = world(us[k], vs[k], muestras) { conMedida++ }
+        val corner = if (usedHitTests) {
+          fromHitTests(us[k], vs[k], localHits, localMedian)
+        } else if (densa != null) {
+          val (x, y) = prof.aPixel(us[k], vs[k])
+          conMedida++
+          cameraToWorld(densa.punto(x, y))
+        } else fromHitTests(us[k], vs[k], muestras) { conMedida++ }
         nuevas.add(s.createAnchor(Pose.makeTranslation(corner.x, corner.y, corner.z)))
       }
       placement = mesh?.let {
@@ -481,17 +511,18 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     placedEngine?.anchor?.detach()
     placedEngine = placement
     vistaPrevia = null
-    val metodo = densa?.metodo ?: when {
+    val metodo = registrationMethod ?: densa?.metodo ?: when {
       conMedida == nuevas.size && profundidad -> "profundidad"
       conMedida > 0 -> "parcial"
       todas.isNotEmpty() -> "distancia-media"
       else -> "estimado"
     }
     val datos = mutableMapOf<String, Any>(
-      "esquinas" to nuevas.size, "metodo" to metodo, "muestras" to (densa?.puntos ?: muestras.size),
-      "distancia" to mediana.toDouble(), "mapPlaced" to (placement != null)
+      "esquinas" to nuevas.size, "metodo" to metodo,
+      "muestras" to (if (usedHitTests) localHits.size else densa?.puntos ?: muestras.size),
+      "distancia" to localMedian.toDouble(), "mapPlaced" to (placement != null)
     )
-    if (densa != null) {
+    if (densa != null && !usedHitTests) {
       datos["puntos"] = densa.puntos
       datos["plano"] = densa.fraccionPlano.toDouble()
       datos["rms"] = densa.rms.toDouble()

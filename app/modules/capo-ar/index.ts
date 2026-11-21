@@ -17,9 +17,10 @@ export type CapturaAR = {
   alto: number;
   grados: number; // giro aplicado a la imagen del sensor (hay que devolverlo en mostrarVista)
   rastreando: boolean; // ARCore seguía el movimiento cuando se tomó (requisito para anclar)
-  muestras: number; // respaldo: distancias de la grilla de 49 hit tests (0 si hubo mapa de profundidad)
+  muestras: number; // Available hit-test distances, including frames that also have a depth image
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
+  registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];
 };
@@ -27,10 +28,10 @@ export type CapturaAR = {
 export type ResultadoFijar = {
   esquinas: number;
   /**
-   * Con mapa de profundidad: 'plano' (superficie plana: esquinas sobre el plano ajustado) o 'relieve' (cada esquina
-   * con su profundidad local). Respaldo con 49 hit tests: 'profundidad' | 'parcial' | 'distancia-media' | 'estimado'.
+   * Dense placement uses a fitted plane or local relief. The part map can also use distributed hit tests.
+   * Generic contours retain their existing distance fallbacks.
    */
-  metodo: 'plano' | 'relieve' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
+  metodo: 'plano' | 'relieve' | 'hit-test' | 'profundidad' | 'parcial' | 'distancia-media' | 'estimado';
   muestras: number; // puntos de profundidad usados
   mapPlaced: boolean; // el mapa de piezas del vehículo quedó ubicado
   distancia: number; // m, mediana de las distancias medidas
@@ -51,7 +52,7 @@ export type EstadoAR = {
 };
 
 export type VistaARRef = {
-  capturar(): Promise<CapturaAR>;
+  capturar(includeMeasurements?: boolean): Promise<CapturaAR>;
   /** Vista previa (aún sin anclar): esquinas x0, y0, x1, y1… normalizadas sobre la captura. Lista vacía la borra. */
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */

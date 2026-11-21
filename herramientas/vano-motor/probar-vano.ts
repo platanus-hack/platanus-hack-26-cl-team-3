@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
+import { completeBay, registrationCorners, sameRegistrationView } from '../../app/src/engine-maps/registration.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
 
@@ -102,3 +103,17 @@ assert.ok(!enc3.procesar(null).cambio && enc3.recorte() === fijo); assert.ok(enc
 const ra = recorteAlrededor([{ x: 0.4, y: 0.3 }, { x: 0.6, y: 0.3 }, { x: 0.6, y: 0.42 }, { x: 0.4, y: 0.42 }]);
 assert.ok(Math.abs(ra.lado - 0.34) < 1e-9 && Math.abs(ra.x + ra.lado / 2 - 0.5) < 1e-9 && Math.abs(ra.y + ra.lado / 2 - 0.36) < 1e-9);
 assert.equal(aCuadroCompleto(vRec, COMPLETO).area, vRec.area); console.log('17 ok');
+
+const clippedByCrop = poligonoVano(mapa((x, y) => x >= 40 && y >= 20 && y < 70))!;
+assert.equal(completeBay(clippedByCrop, r04), null);
+assert.equal(completeBay(clippedByCrop, COMPLETO), null);
+assert.ok(completeBay(vRec, r04));
+console.log('18 ok: registration requires a complete bay in the crop and sensor image');
+
+const smallBay = completeBay(vRec, r04)!;
+const referenceCorners = registrationCorners(smallBay);
+const shiftedCorners = (offset: number) => referenceCorners.map((value, index) => value + (index % 2 === 0 ? offset : 0));
+assert.ok(sameRegistrationView(referenceCorners, shiftedCorners(.01)));
+assert.ok(sameRegistrationView(shiftedCorners(.01), shiftedCorners(.02)));
+assert.ok(!sameRegistrationView(referenceCorners, shiftedCorners(.02)));
+console.log('19 ok: consecutive frames cannot accumulate movement across the placement window');

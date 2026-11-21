@@ -1,5 +1,24 @@
-import type { Vano } from '../detector/vano';
+import { aCuadroCompleto, type Recorte } from '../detector/encuadre';
+import { vanoValido, type Vano } from '../detector/vano';
 import type { Volume } from './catalog';
+
+/** A registration or alignment check needs the entire bay in both the crop and the sensor image. */
+export function completeBay(detection: Vano | null, crop: Recorte): Vano | null {
+  if (!vanoValido(detection) || detection.cortado) return null;
+  const bay = aCuadroCompleto(detection, crop);
+  return bay.cortado ? null : bay;
+}
+
+/** Limit displacement relative to the original bay size, including on small or distant targets. */
+export function sameRegistrationView(reference: number[], current: number[]): boolean {
+  if (reference.length !== 8 || current.length !== 8) return false;
+  const width = Math.min(reference[2] - reference[0], reference[6] - reference[4]);
+  const height = reference[5] - reference[1];
+  return width > 0 && height > 0 && current.every((value, index) => {
+    const size = index % 2 === 0 ? width : height;
+    return Math.abs(value - reference[index]) <= .08 * size;
+  });
+}
 
 /**
  * Match the rear and front edges of the reference to a complete bay seen from
