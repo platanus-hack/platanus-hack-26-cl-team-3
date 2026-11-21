@@ -18,6 +18,14 @@ export type Vano = {
   cortado: boolean; // parte del vano queda fuera del cuadro (alguna esquina toca el borde)
 };
 
+// Hay vano si el modelo marca una región con suficiente confianza y tamaño (medido en la imagen que analizó el modelo).
+export const CONFIANZA_MIN = 0.7; // probabilidad media dentro de la región
+export const AREA_MIN = 0.03; // fracción de la imagen analizada
+
+export function vanoValido(v: Vano | null): v is Vano {
+  return !!v && v.confianza >= CONFIANZA_MIN && v.area >= AREA_MIN;
+}
+
 /** Media móvil de probabilidades entre cuadros: estabiliza el polígono cuando el teléfono se mueve poco. */
 export class Suavizador {
   private media: Float32Array | null = null;

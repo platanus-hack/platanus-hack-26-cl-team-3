@@ -5,20 +5,15 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { Vano } from '../detector/vano';
+import { CONFIANZA_MIN } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
 import { vehicles } from '../vehicles';
 
-// La detección sale del propio contorno: hay vano si el modelo marca una región con suficiente confianza y tamaño.
-// (El puntaje «capó abierto» de CLIP quedó solo como dato de debug: fallaba al apuntar a una pantalla.)
-export const CONFIANZA_MIN = 0.7; // probabilidad media dentro de la región
-export const AREA_MIN = 0.03; // fracción del cuadro
+// La detección sale del propio contorno (umbrales en detector/vano.ts). El puntaje «capó abierto» de CLIP quedó solo
+// como dato de debug: fallaba al apuntar a una pantalla.
+export { CONFIANZA_MIN, vanoValido } from '../detector/vano';
 export const SUAVIZADO = 0.5; // peso del análisis nuevo en las medias móviles
-
-export function vanoValido(v: Vano | null): v is Vano {
-  return !!v && v.confianza >= CONFIANZA_MIN && v.area >= AREA_MIN;
-}
 
 export const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

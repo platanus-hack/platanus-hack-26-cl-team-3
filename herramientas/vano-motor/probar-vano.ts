@@ -1,6 +1,7 @@
-// Pruebas de la geometría del vano (app/src/detector/vano.ts). Correr desde capo-ar/: node herramientas/vano-motor/probar-vano.ts
+// Pruebas de la geometría del vano y del zoom automático (app/src/detector/). Correr desde capo-ar/: app/node_modules/.bin/tsx herramientas/vano-motor/probar-vano.ts
 import assert from 'node:assert/strict';
 import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
+import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor } from '../../app/src/detector/encuadre.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
 
@@ -65,3 +66,39 @@ assert.ok(Math.abs(iouPoligonos(cuad(0.2, 0.2, 0.6, 0.6), cuad(0.2, 0.2, 0.6, 0.
 assert.ok(Math.abs(iouPoligonos(cuad(0.2, 0.2, 0.6, 0.6), cuad(0.4, 0.2, 0.8, 0.6)) - 1 / 3) < 0.03);
 assert.ok(iouPoligonos(cuad(-0.5, 0, 0.5, 1), cuad(0, 0, 0.5, 1)) > 0.97);
 assert.equal(iouPoligonos(cuad(0, 0, 0.3, 0.3), cuad(0.6, 0.6, 0.9, 0.9)), 0); console.log('12 ok');
+
+// 13) zoom automático: sin detección recorre completo → zoom → más zoom; al detectar entrega coordenadas del cuadro completo
+const enc = new Encuadre();
+assert.equal(enc.recorte(), COMPLETO);
+let res = enc.procesar(null); assert.ok(res.cambio && Math.abs(enc.recorte().lado - 0.6) < 1e-9);
+res = enc.procesar(null); assert.ok(res.cambio && Math.abs(enc.recorte().lado - 0.4) < 1e-9);
+const r04 = enc.recorte();
+const vRec = poligonoVano(mapa((x, y) => x >= 22 && x < 66 && y >= 26 && y < 62))!; // vano centrado, 20 % del recorte
+res = enc.procesar(vRec);
+assert.ok(res.valido && res.vano && !res.cambio, 'detección válida y el recorte se mantiene');
+assert.ok(Math.abs(res.vano!.area - vRec.area * 0.16) < 1e-9, 'área referida al cuadro completo');
+assert.ok(Math.abs(res.vano!.esquinas[0].x - (r04.x + vRec.esquinas[0].x * 0.4)) < 1e-9);
+assert.ok(!res.vano!.cortado, 'dentro del cuadro: no cortado');
+console.log('13 ok', `recorte lado ${r04.lado} en (${r04.x.toFixed(2)}, ${r04.y.toFixed(2)})`);
+
+// 14) si el vano toca el borde del recorte (no del cuadro), no es válido y el zoom se aleja
+res = enc.procesar(poligonoVano(mapa((x, y) => x >= 40 && y >= 20 && y < 70))!);
+assert.ok(!res.valido && res.cambio && enc.recorte().lado > 0.4 * 1.4, 'se aleja'); console.log('14 ok', `lado ${enc.recorte().lado.toFixed(2)}`);
+
+// 15) con el cuadro completo: un vano grande mantiene el cuadro completo; uno chico acerca el zoom sobre él
+const enc2 = new Encuadre();
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 10 && x < 78 && y >= 20 && y < 75))!);
+assert.ok(res.valido && enc2.recorte() === COMPLETO);
+res = enc2.procesar(poligonoVano(mapa((x, y) => x >= 50 && x < 70 && y >= 20 && y < 34))!); // 3,6 % del cuadro, arriba a la derecha
+const rz = enc2.recorte();
+assert.ok(res.cambio && rz.lado < 0.5 && rz.x < 50 / n && rz.x + rz.lado > 70 / n && rz.y < 20 / n && rz.y + rz.lado > 34 / n, 'el recorte contiene al vano');
+console.log('15 ok', `lado ${rz.lado.toFixed(2)}`);
+
+// 16) un análisis vacío no hace perder el recorte si venía viendo un vano; dos sí
+const enc3 = new Encuadre(); enc3.procesar(null); enc3.procesar(null); enc3.procesar(vRec); const fijo = enc3.recorte();
+assert.ok(!enc3.procesar(null).cambio && enc3.recorte() === fijo); assert.ok(enc3.procesar(null).cambio); console.log('16 ok');
+
+// 17) recorte alrededor de un contorno anclado (para recalibrar y medir el calce con zoom)
+const ra = recorteAlrededor([{ x: 0.4, y: 0.3 }, { x: 0.6, y: 0.3 }, { x: 0.6, y: 0.42 }, { x: 0.4, y: 0.42 }]);
+assert.ok(Math.abs(ra.lado - 0.34) < 1e-9 && Math.abs(ra.x + ra.lado / 2 - 0.5) < 1e-9 && Math.abs(ra.y + ra.lado / 2 - 0.36) < 1e-9);
+assert.equal(aCuadroCompleto(vRec, COMPLETO).area, vRec.area); console.log('17 ok');

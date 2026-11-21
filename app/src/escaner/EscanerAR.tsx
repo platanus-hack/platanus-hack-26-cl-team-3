@@ -1,7 +1,8 @@
 /**
  * Escáner con ARCore: reconoce el vano UNA vez y lo «engancha» al espacio real.
  *
- * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado).
+ * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado). Si el vano se ve chico
+ *    (auto lejos, o una foto del auto completo en una pantalla) el análisis hace zoom solo (detector/encuadre.ts).
  * 2. Cuando la detección es estable (contorno válido, completo en la imagen, ARCore siguiendo el movimiento y con
  *    mapa de profundidad, 3 análisis seguidos) —o el usuario toca «Fijar ahora»— cada esquina pasa a ser un ancla.
  *    El módulo nativo usa el mapa de profundidad completo (miles de puntos): si la superficie es plana ajusta un
@@ -17,6 +18,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { VistaAR, type CapturaAR, type EstadoAR, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
+import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, type Vano } from '../detector/vano';
 import { color, espacio } from '../theme';
 import { Boton } from '../ui';
@@ -54,7 +56,9 @@ export default function EscanerAR() {
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [capo, setCapo] = useState(0); // puntaje «capó abierto» de CLIP (solo debug)
-  const [vano, setVano] = useState<Vano | null>(null);
+  const [vano, setVano] = useState<Vano | null>(null); // en coordenadas del cuadro completo
+  const [valido, setValido] = useState(false);
+  const [zoom, setZoom] = useState(1);
   const [estables, setEstables] = useState(0);
   const [tasa, setTasa] = useState({ validos: 0, total: 0 }); // análisis con contorno válido / análisis hechos
   const [anclaje, setAnclaje] = useState<ResultadoFijar | null>(null);
@@ -107,33 +111,39 @@ export default function EscanerAR() {
     let total = 0;
     const puntajeCapo = new PuntajeCapo();
     const suavizador = new Suavizador(SUAVIZADO);
+    const encuadre = new Encuadre();
     (async () => {
       while (vivo && ar.current) {
         const t0 = Date.now();
         try {
+          const recorte = encuadre.recorte();
           const cap = await ar.current.capturar();
           let r;
           try {
-            r = await analizarFoto(cap.uri);
+            r = await analizarFoto(cap.uri, recorte);
           } finally {
             borrar(cap.uri);
           }
           if (!vivo) break;
-          const v = poligonoVano(suavizador.agregar(r.vano));
-          const valido = vanoValido(v);
-          await ar.current?.mostrarVista(valido ? plano(v) : [], valido ? v.esquinas.map((e) => e.borde) : [], cap.grados);
+          const e = encuadre.procesar(poligonoVano(suavizador.agregar(r.vano)));
+          if (e.cambio) suavizador.reiniciar(); // el próximo análisis mira otro recorte: no se mezclan
+          const v = e.vano;
+          const valido = e.valido && !!v;
+          await ar.current?.mostrarVista(valido && v ? plano(v) : [], valido && v ? v.esquinas.map((q) => q.borde) : [], cap.grados);
           const conProfundidad = !cap.profundidad || cap.puntos >= PUNTOS_MINIMOS;
-          seguidos = valido && !v.cortado && cap.rastreando && conProfundidad ? seguidos + 1 : 0;
+          seguidos = valido && v && !v.cortado && cap.rastreando && conProfundidad ? seguidos + 1 : 0;
           total += 1;
           if (valido) validos += 1;
           fallos = 0;
           setCapo(puntajeCapo.agregar(r.puntaje).media);
           setVano(v);
+          setValido(valido);
+          setZoom(1 / recorte.lado);
           setUltima(cap);
           setEstables(seguidos);
           setTasa({ validos, total });
           setMs(Date.now() - t0);
-          if (valido && seguidos >= ESTABLES_PARA_FIJAR) {
+          if (valido && v && seguidos >= ESTABLES_PARA_FIJAR) {
             await fijar(cap, v);
             break;
           }
@@ -167,17 +177,20 @@ export default function EscanerAR() {
         if (ocupado.current || !ar.current) continue;
         try {
           const cap = await ar.current.capturar();
+          // El modelo mira la zona donde quedó el contorno anclado, con holgura (zoom): así también mide vanos chicos.
+          const anclas = cap.anclas && cap.anclas.length >= 6 ? pares(cap.anclas) : null;
+          const recorte = anclas ? recorteAlrededor(anclas, 2) : COMPLETO;
           let r;
           try {
-            r = await analizarFoto(cap.uri);
+            r = await analizarFoto(cap.uri, recorte);
           } finally {
             borrar(cap.uri);
           }
           if (!vivo) break;
           const v = poligonoVano(new Suavizador().agregar(r.vano));
           // Sin contorno válido en esta vista (o anclas fuera de cuadro) no hay con qué comparar: no se opina.
-          if (!vanoValido(v) || !cap.anclas || cap.anclas.length < 6) continue;
-          ultimos.push(iouPoligonos(pares(cap.anclas), v.esquinas));
+          if (!vanoValido(v) || !anclas) continue;
+          ultimos.push(iouPoligonos(anclas, aCuadroCompleto(v, recorte).esquinas));
           if (ultimos.length > 3) ultimos.shift();
           setCalce({ valor: ultimos.reduce((a, b) => a + b, 0) / ultimos.length, n: ultimos.length });
         } catch {
@@ -199,19 +212,25 @@ export default function EscanerAR() {
     try {
       for (let i = 0; i < INTENTOS_RECALIBRAR; i++) {
         const cap = await ar.current.capturar();
+        // Primero mira cerca de donde está el contorno actual (zoom); en el último intento, el cuadro completo.
+        const anclas = cap.anclas && cap.anclas.length >= 6 ? pares(cap.anclas) : null;
+        const recorte: Recorte = anclas && i < INTENTOS_RECALIBRAR - 1 ? recorteAlrededor(anclas, i === 0 ? 1.8 : 2.8) : COMPLETO;
         let r;
         try {
-          r = await analizarFoto(cap.uri);
+          r = await analizarFoto(cap.uri, recorte);
         } finally {
           borrar(cap.uri);
         }
-        const v = poligonoVano(new Suavizador().agregar(r.vano));
-        if (vanoValido(v) && cap.rastreando) {
-          setAnclaje(await ar.current.fijar(cap.id, plano(v)));
-          setVano(v);
-          setUltima(cap);
-          return;
-        }
+        const enRecorte = poligonoVano(new Suavizador().agregar(r.vano));
+        if (!vanoValido(enRecorte) || !cap.rastreando) continue;
+        const v = aCuadroCompleto(enRecorte, recorte);
+        // Si el vano toca el borde del recorte (y no el del cuadro) quedó cortado por el zoom: se reintenta más abierto.
+        if (enRecorte.esquinas.some((q, k) => q.borde && !v.esquinas[k].borde)) continue;
+        setAnclaje(await ar.current.fijar(cap.id, plano(v)));
+        setVano(v);
+        setValido(true);
+        setUltima(cap);
+        return;
       }
       setAviso('No reconocí el vano desde aquí, así que dejé el contorno como estaba. Apunta al motor completo y vuelve a intentarlo.');
     } catch (e) {
@@ -226,6 +245,7 @@ export default function EscanerAR() {
     await ar.current?.soltar();
     setAnclaje(null);
     setVano(null);
+    setValido(false);
     setEstables(0);
     setTasa({ validos: 0, total: 0 });
     setAviso(null);
@@ -239,7 +259,7 @@ export default function EscanerAR() {
   if (!VistaAR) return null;
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const rastreando = estadoAR?.estado === 'rastreando';
-  const detectado = vanoValido(vano);
+  const detectado = valido && !!vano;
   const tono = anclaje || detectado ? color.exito : color.acento;
   const puedeFijar = !anclaje && !fijando && detectado && !!ultima?.rastreando;
   const faltaProfundidad = !!ultima?.profundidad && ultima.puntos < PUNTOS_MINIMOS;
@@ -313,7 +333,7 @@ export default function EscanerAR() {
             ? 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno.'
             : !detectado
               ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
-              : vano.cortado
+              : vano?.cortado
                 ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
                 : faltaProfundidad
                   ? 'Mueve el teléfono un poco hacia los lados para medir la profundidad; después se fija solo.'
@@ -333,7 +353,7 @@ export default function EscanerAR() {
           <LineaDebug
             texto={`Debug · AR ${estadoAR?.estado ?? '–'} · detección ${tasa.validos}/${tasa.total}${
               tasa.total ? ` (${pct(tasa.validos / tasa.total)})` : ''
-            } · vano ${vano ? `${pct(vano.area)} · ${vano.esquinas.length} esquinas` : '–'} · capó ${pct(capo)} · profundidad ${
+            } · zoom ×${zoom.toFixed(1)} · vano ${vano ? `${pct(vano.area)} · ${vano.esquinas.length} esquinas` : '–'} · capó ${pct(capo)} · profundidad ${
               ultima?.profundidad ? `${ultima.puntos} puntos` : `no (${ultima?.muestras ?? 0}/49)`
             }${ms !== null ? ` · ${ms} ms` : ''}`}
           />

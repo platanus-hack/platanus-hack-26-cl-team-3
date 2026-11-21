@@ -20,6 +20,14 @@ grande → envolvente convexa → ≤ 8 esquinas (las «biseladas» se juntan en
 esquinas que tocan el borde de la imagen marcan que **parte del vano queda fuera del cuadro** (vista parcial). En
 **modo debug** el polígono se pinta en rojo claro.
 
+**Zoom automático** (`app/src/detector/encuadre.ts`): el modelo ve la imagen reducida a 352×352, y la captura abarca
+más que lo que muestra la pantalla del teléfono; si el vano ocupa poco del cuadro (auto lejos, o una foto del auto
+completo en un monitor) no lo reconoce. Medido con una grabación real del equipo: con el cuadro completo, 0 %; con un
+recorte ampliado, vano detectado con 95 % de confianza. Por eso, sin detección se alterna cuadro completo → recorte
+central (60 %) → recorte central (40 %); con detección, el recorte sigue al vano para que ocupe ~30 % de lo que ve
+el modelo y se aleja si el vano toca el borde del recorte. El contorno siempre se entrega en coordenadas del cuadro
+completo. Recalibrar y el calce analizan un recorte alrededor del contorno anclado.
+
 `scripts/preparar-modelo-vano.sh` arma el ONNX (lo llama `scripts/compilar-apk.sh`).
 
 ## Anclaje con ARCore (contorno fijo al moverse)
@@ -106,5 +114,5 @@ export CAPO_REFERENCIA=referencia.webp CAPO_ANTERIOR=herramientas/vano-motor/dec
 /tmp/venv-vano/bin/python -I herramientas/vano-motor/entrenar.py <datos> eval /tmp/prueba.safetensors   # mide
 /tmp/venv-vano/bin/python -I herramientas/vano-motor/entrenar.py <datos> final herramientas/vano-motor/decodificador.safetensors
 /tmp/venv-vano/bin/python -I herramientas/vano-motor/estabilidad.py nuevo=/tmp/prueba.safetensors <datos>/videos/VmWr7JCogyY.mp4@0@15@crop=205:360:218:0
-scripts/preparar-modelo-vano.sh && node herramientas/vano-motor/probar-vano.ts
+scripts/preparar-modelo-vano.sh && app/node_modules/.bin/tsx herramientas/vano-motor/probar-vano.ts
 ```
