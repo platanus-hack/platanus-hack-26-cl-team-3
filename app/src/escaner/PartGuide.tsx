@@ -20,9 +20,11 @@ export function PartGuide({
   part,
   active,
   onFound,
+  hidden,
   ref,
 }: {
   part: number;
+  hidden: boolean;
   active: boolean;
   onFound: () => void;
   ref?: Ref<PartGuideRef>;
@@ -47,7 +49,7 @@ export function PartGuide({
   );
 
   const { width, height } = size;
-  const ready = active && event !== null && width > 0 && height > 0;
+  const ready = !hidden && active && event !== null && width > 0 && height > 0;
 
   return (
     <View
