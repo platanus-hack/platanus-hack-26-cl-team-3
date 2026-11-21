@@ -56,7 +56,6 @@ Hoy el chat y la cámara funcionan por separado. Falta unirlos (fase 2 del chat)
 
 ## Dónde nos sirve tu opinión
 
-- Con el tiempo que queda, ¿centramos la demo en la AR bajo el capó o en el chat con citas?
-- ¿Mantenemos la historia de la ventana (fusibles de la cabina) o la cambiamos por un caso bajo el capó, como rellenar el sapito o revisar el aceite?
-- ¿Mostramos los 8 autos aunque solo el Outback esté validado, o nos quedamos con uno?
-- ¿Cortamos las luces del tablero y las ampolletas del alcance?
+Nos preocupa que el producto se vea pobre. El happy path está casi armado: le cuentas la falla al chat, te dice qué revisar y la cámara te muestra dónde está. Pero más allá de eso, ¿qué otras features nos recomiendas mostrar, o incluso construir si nos da el tiempo?
+
+En la lista tenemos las luces del tablero, el cambio de ampolletas, un agente por voz y la búsqueda en el manual completo.
