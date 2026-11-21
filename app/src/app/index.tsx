@@ -8,7 +8,6 @@ import { BotonIcono, Icono, Insignia, Tarjeta, type NombreIcono } from '../ui';
 
 // Funciones del MVP (README, sección 5) que aún no están hechas: se muestran para orientar, sin acción.
 const PROXIMAMENTE: { icono: NombreIcono; titulo: string; detalle: string }[] = [
-  { icono: 'book-open-variant', titulo: 'Preguntar al manual', detalle: 'Respuestas con cita' },
   { icono: 'car-light-alert', titulo: 'Luces del tablero', detalle: 'Qué significa cada una' },
   { icono: 'lightbulb-outline', titulo: 'Ampolletas', detalle: 'Cuál lleva y cómo cambiarla' },
   { icono: 'fuse', titulo: 'Fusibles', detalle: 'Dónde está cada uno' },
@@ -59,6 +58,19 @@ export default function Menu() {
           <Text style={styles.principalDetalle}>Abre el capó y apunta la cámara al motor: la app lo reconoce.</Text>
         </View>
         <Icono nombre="chevron-right" tam={28} tono={color.acentoTexto} />
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.push('/preguntar')}
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
+      >
+        <Icono nombre="book-open-variant" tam={26} tono={color.acento} />
+        <View style={styles.flex}>
+          <Text style={styles.secundariaTitulo}>Preguntar al manual</Text>
+          <Text style={tipo.nota}>Cuéntanos la falla y te respondemos con citas.</Text>
+        </View>
+        <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>
 
       <Text style={[tipo.seccion, styles.seccion]}>Próximamente</Text>
@@ -122,6 +134,18 @@ const styles = StyleSheet.create({
   },
   principalTitulo: { fontSize: 21, fontWeight: '800', color: color.acentoTexto },
   principalDetalle: { fontSize: 14, color: 'rgba(26,19,0,0.78)', marginTop: 4, lineHeight: 19 },
+  secundaria: {
+    marginTop: espacio.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espacio.l,
+    backgroundColor: color.superficie,
+    borderRadius: radio.l,
+    borderWidth: 1,
+    borderColor: color.borde,
+    padding: espacio.l,
+  },
+  secundariaTitulo: { fontSize: 16, fontWeight: '700', color: color.texto },
   seccion: { marginTop: espacio.xxl, marginBottom: espacio.m },
   rejilla: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.m },
   celda: {
