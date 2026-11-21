@@ -17,4 +17,5 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - run: bash .github/ci.sh
+      - run: npm ci --prefix tests/browser --ignore-scripts --no-audit
+      - run: CAPO_CHROME="$(command -v google-chrome)" bash .github/ci.sh

@@ -13,3 +13,12 @@
 !prototype/vehicle-maps/viewer.css
 !prototype/vehicle-maps/viewer.js
 !prototype/vehicle-maps/vehicles.js
+!web/detector.js
+!app/
+!app/src/
+!app/src/detector/
+!app/src/detector/textos-clip.json
+!scripts/
+!scripts/prepare-web-model.py
+!web/licenses/
+!web/licenses/*.txt

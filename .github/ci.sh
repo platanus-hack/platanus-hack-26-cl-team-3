@@ -25,7 +25,7 @@ curl -fsS "$url/manifest.webmanifest" | jq -e '.display == "standalone" and .sta
 curl -fsSI "$url/manifest.webmanifest" | grep -Ei '^content-type: application/manifest\+json'
 curl -fsSI "$url/sw.js" | grep -Ei '^content-type: application/javascript'
 curl -fsS "$url/sw.js" | grep -E "const CACHE = 'capo-ar-shell-[a-f0-9]{64}';" >/dev/null
-for asset in app.js styles.css icon-192.png icon-512.png; do
+for asset in app.js detector.js prompts.json runtime/ort.wasm.min.mjs runtime/ort-wasm-simd-threaded.mjs runtime/ort-wasm-simd-threaded.wasm runtime/vision.onnx styles.css icon-192.png icon-512.png; do
   curl -fsS -o /dev/null "$url/$asset"
 done
 
@@ -34,4 +34,8 @@ if [[ -f prototype/vehicle-maps/index.html ]]; then
   for asset in index.html viewer.css viewer.js vehicles.js; do
     curl -fsS -o /dev/null "$url/maps/$asset"
   done
+fi
+
+if [[ -n "${CAPO_CHROME:-}" ]]; then
+  node tests/browser/scan.cjs "$url"
 fi

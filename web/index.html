@@ -15,21 +15,32 @@
   <main>
     <header>
       <h1>Capo AR</h1>
-      <button type="button" id="show-notice" class="quiet">Ver aviso</button>
+      <button type="button" id="show-notice" class="quiet">Aviso y fuentes</button>
     </header>
-    <section class="viewer" aria-label="Visor del capó">
+    <section id="menu" aria-label="Menú principal">
+      <p class="subtitle">Tu guía bajo el capó</p>
+      <article class="vehicle"><small>Tu auto</small><h2>Subaru Outback 2016</h2><p>Motor 3.6R (EZ36)</p></article>
+      <button id="scan" class="primary scan" type="button">Escanear capó</button>
+      <p>Abre el capó y apunta la cámara al motor.</p>
+      <a id="maps" href="/maps/" hidden>Ver mapas de motor</a>
+      <h2>Próximamente</h2>
+      <ul class="features"><li>Preguntar al manual</li><li>Luces del tablero</li><li>Ampolletas</li><li>Fusibles</li></ul>
+    </section>
+    <section hidden class="viewer" aria-label="Visor del capó">
       <video id="camera" playsinline muted hidden></video>
       <div class="guide" aria-hidden="true"></div>
       <p id="camera-status" role="status">Apunta la cámara al capó abierto.</p>
     </section>
-    <footer>
+    <footer hidden>
+      <button type="button" id="back" class="quiet">Volver al menú</button>
       <button type="button" id="toggle-camera" class="primary">Activar cámara</button>
-      <a id="maps" href="/maps/" hidden>Ver mapas de motor</a>
     </footer>
   </main>
   <dialog id="notice" aria-labelledby="notice-title">
     <h2 id="notice-title">Antes de empezar</h2>
     <p>Esta app es una guía informativa. No reemplaza el manual del propietario ni a un mecánico. Confirma siempre con el manual de tu vehículo antes de actuar.</p>
+    <p>Las imágenes se analizan en tu teléfono. Las futuras respuestas citarán documento, sección y página del manual del propietario.</p>
+    <p>Reconocimiento de capó abierto con CLIP ViT-B/32 de OpenAI, versión ONNX de Xenova.</p>
     <form method="dialog">
       <button class="primary" value="confirmed">Entendido</button>
     </form>

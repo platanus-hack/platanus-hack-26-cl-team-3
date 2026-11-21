@@ -2,6 +2,8 @@
 
 const CACHE = 'capo-ar-shell-__CAPO_AR_BUILD__';
 const SHELL = [
+  '/detector.js', '/prompts.json', '/runtime/ort.wasm.min.mjs', '/runtime/ort-wasm-simd-threaded.mjs',
+  '/runtime/ort-wasm-simd-threaded.wasm', '/runtime/vision.onnx',
   '/', '/app.js', '/styles.css', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png',
 ];
 

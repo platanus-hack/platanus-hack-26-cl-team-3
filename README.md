@@ -9,36 +9,36 @@
 
 ## Web app and release
 
-The installable web app lives in `web/`. It prefers the rear camera after the user
-accepts the notice and requests access. The app shell works offline after its
-first successful load. AR anchoring and recognition are pending. The Expo
-Android app remains available in `app/`.
+The installable PWA ports the menu and open-hood detector from native revision
+`317e8367`. Select **Escanear capó**, enable the camera and aim at an open
+engine bay. Frames stay on the device. A module worker runs the pinned
+quantized CLIP image encoder with ONNX Runtime Web, using the native prompt
+vectors, smoothing and thresholds. At build time, the patch-convolution weights
+and zero point both shift by 128 to use the unsigned WASM kernel while
+preserving each centered weight. The score indicates an open hood. Individual
+part identification and AR anchoring are future features.
 
-For a local preview, run `python3 -m http.server 8080 --bind 127.0.0.1 --directory web`
-and open `http://localhost:8080`. On a phone, camera access requires HTTPS.
-The Docker build serves the vehicle-map viewer at `/maps/` when
-`prototype/vehicle-maps/` is present in the checked-out revision.
+Build and preview the production image locally:
 
-### CI and production
+```sh
+docker build -t capo-ar .
+docker run --rm -p 127.0.0.1:8080:8080 capo-ar
+```
 
-- The public hackathon repository verifies the PWA image on GitHub-hosted
-  runners for pull requests and pushes to `main`.
-- `docker-compose.yml` follows the Home Server Starter service, Traefik, TLS
-  and health-check conventions. The placeholder repository ID and hostname
-  keep deployment unconfigured until the release repository is selected.
-- For production, use a trusted private release repository accessible to the
-  home runner manager. In that checkout, run
-  `python3 scripts/configure.py --domain <approved-hostname>`. This links
-  Compose to that repository's numeric ID. Confirm the hostname has proxied
-  DNS and TLS coverage and that the GHCR package remains private.
-- The first installation requires an authorized operator to start the Compose
-  service with the external `proxy` network. After that setup, a push to the
-  private release repository's `main` builds and verifies the image,
-  publishes its commit-tagged digest to GHCR, and calls `deploy-release`
-  for the current revision. The public repository never schedules home
-  runners and has no credential that can release to the home server.
-- Use a feature branch and a pull request to `dev` for implementation.
-  Release promotion to `main` uses the full `dev` branch.
+Open `http://localhost:8080`. Phones require HTTPS for camera access.
+The first visit downloads the app, model (about 89 MB) and WASM runtime.
+Once the service worker finishes caching, scanning works offline. The image
+also serves the map viewer if its files are present in the checkout.
+
+### Compose and CI
+
+This project uses the same hackathon repository for the PWA and its Compose
+configuration. Pull requests and pushes to `main` verify the image on
+GitHub-hosted runners. Compose carries this repository's numeric ID and uses
+`CAPO_AR_DOMAIN` for the hostname. The default is an inactive placeholder.
+The starter's private-runner release jobs stay disabled in this public
+repository. Production runner eligibility and the initial installation are
+deferred to issue #2.
 
 ## 1. Qué es, en una frase
 
