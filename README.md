@@ -7,6 +7,39 @@
 
 ---
 
+## Web app and release
+
+The installable PWA ports the menu and open-hood detector from native revision
+`317e8367`. Select **Escanear capó**, enable the camera and aim at an open
+engine bay. Frames stay on the device. A module worker runs the pinned
+quantized CLIP image encoder with ONNX Runtime Web, using the native prompt
+vectors, smoothing and thresholds. At build time, the patch-convolution weights
+and zero point both shift by 128 to use the unsigned WASM kernel while
+preserving each centered weight. The score indicates an open hood. Individual
+part identification and AR anchoring are future features.
+
+Build and preview the production image locally:
+
+```sh
+docker build -t capo-ar .
+docker run --rm -p 127.0.0.1:8080:8080 capo-ar
+```
+
+Open `http://localhost:8080`. Phones require HTTPS for camera access.
+The first visit downloads the app, model (about 89 MB) and WASM runtime.
+Once the service worker finishes caching, scanning works offline. The image
+also serves the map viewer if its files are present in the checkout.
+
+### Compose and CI
+
+This project uses the same hackathon repository for the PWA and its Compose
+configuration. Pull requests and pushes to `main` verify the image on
+GitHub-hosted runners. Compose carries this repository's numeric ID and uses
+`CAPO_AR_DOMAIN` for the hostname. The default is an inactive placeholder.
+The starter's private-runner release jobs stay disabled in this public
+repository. Production runner eligibility and the initial installation are
+deferred to issue #2.
+
 ## 1. Qué es, en una frase
 
 Una app Android que, al apuntar la cámara al capó (o al tablero) de tu auto, **muestra en Realidad Aumentada dónde están y cómo se revisan las cosas básicas** (caja de fusibles, depósito del limpiaparabrisas, varilla del aceite, refrigerante, filtro de aire, ampolletas) y responde en lenguaje natural «¿cómo cambio este fusible?», **siempre citando el manual del auto**.
