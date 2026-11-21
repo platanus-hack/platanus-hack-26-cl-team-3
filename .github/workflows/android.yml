@@ -30,7 +30,7 @@ jobs:
       - name: Prepare build tools and Android version code
         run: |
           echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
-          sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006' 'cmake;3.22.1'
           export APK_CODE=$((10000 + $(git rev-list --first-parent --count HEAD)))
           echo "APK_CODE=$APK_CODE" >> "$GITHUB_ENV"
           node -e 'const fs = require("node:fs"); const path = "app/app.json"; const config = require("./" + path); config.expo.android.versionCode = Number(process.env.APK_CODE); fs.writeFileSync(path, JSON.stringify(config));'
