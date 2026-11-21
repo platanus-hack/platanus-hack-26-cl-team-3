@@ -61,7 +61,7 @@ export default function Menu() {
       </Pressable>
 
       <Pressable
-        onPress={() => router.push('/preguntar')}
+        onPress={() => router.push('/ask')}
         accessibilityRole="button"
         style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
       >

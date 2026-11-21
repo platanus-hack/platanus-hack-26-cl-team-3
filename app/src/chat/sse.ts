@@ -1,40 +1,40 @@
-import type { Evento } from './contrato';
+import type { ChatEvent } from './contract';
 
-export function aEvento(nombre: string, datos: any): Evento | null {
-  switch (nombre) {
-    case 'herramienta':
-      return { tipo: 'herramienta', nombre: datos.nombre };
-    case 'texto':
-      return { tipo: 'texto', bloque: datos.bloque, texto: datos.texto };
-    case 'cita':
-      return { tipo: 'cita', bloque: datos.bloque, titulo: datos.titulo, fuente: datos.fuente, texto_citado: datos.texto_citado };
-    case 'fin':
-      return { tipo: 'fin', mensajes: datos.mensajes };
+export function toEvent(name: string, data: any): ChatEvent | null {
+  switch (name) {
+    case 'tool':
+      return { type: 'tool', name: data.name };
+    case 'text':
+      return { type: 'text', block: data.block, text: data.text };
+    case 'citation':
+      return { type: 'citation', block: data.block, title: data.title, source: data.source, cited_text: data.cited_text };
+    case 'done':
+      return { type: 'done', messages: data.messages };
     case 'error':
-      return { tipo: 'error', codigo: datos.codigo, mensaje: datos.mensaje };
+      return { type: 'error', code: data.code, message: data.message };
     default:
       return null;
   }
 }
 
-export function separarEventos(buffer: string): { eventos: Evento[]; resto: string } {
-  const eventos: Evento[] = [];
-  const partes = buffer.split('\n\n');
-  const resto = partes.pop() ?? '';
-  for (const bloque of partes) {
-    let nombre = '';
-    let datos = '';
-    for (const linea of bloque.split('\n')) {
-      if (linea.startsWith('event:')) nombre = linea.slice(6).trim();
-      else if (linea.startsWith('data:')) datos += linea.slice(5).trim();
+export function splitEvents(buffer: string): { events: ChatEvent[]; rest: string } {
+  const events: ChatEvent[] = [];
+  const chunks = buffer.split('\n\n');
+  const rest = chunks.pop() ?? '';
+  for (const chunk of chunks) {
+    let name = '';
+    let data = '';
+    for (const line of chunk.split('\n')) {
+      if (line.startsWith('event:')) name = line.slice(6).trim();
+      else if (line.startsWith('data:')) data += line.slice(5).trim();
     }
-    if (!nombre || !datos) continue;
+    if (!name || !data) continue;
     try {
-      const ev = aEvento(nombre, JSON.parse(datos));
-      if (ev) eventos.push(ev);
+      const event = toEvent(name, JSON.parse(data));
+      if (event) events.push(event);
     } catch {
       continue;
     }
   }
-  return { eventos, resto };
+  return { events, rest };
 }
