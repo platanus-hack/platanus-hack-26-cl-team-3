@@ -17,7 +17,8 @@ RUN mkdir /www && cp -R /src/web/. /www/ && \
     cd /www && shell_build=$(sha256sum index.html app.js styles.css manifest.webmanifest icon-*.png detector.js prompts.json runtime/* sw.js | sha256sum | cut -d ' ' -f 1) && \
     sed -i "s/__CAPO_AR_BUILD__/$shell_build/" sw.js && \
     if [ -f /src/prototype/vehicle-maps/index.html ]; then \
-      mkdir /www/maps && cp /src/prototype/vehicle-maps/* /www/maps/; \
+      mkdir /www/maps && \
+      cp /src/prototype/vehicle-maps/index.html /src/prototype/vehicle-maps/*.css /src/prototype/vehicle-maps/*.js /www/maps/; \
     fi
 
 FROM busybox:1.37.0
