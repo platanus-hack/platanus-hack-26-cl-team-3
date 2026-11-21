@@ -7,8 +7,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
 
-internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c: EnginePoint, val part: Int, val rgb: FloatArray)
-internal data class ModelPart(val id: String, val center: EnginePoint)
+internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c: EnginePoint, val part: Int, val rgb: FloatArray, val primitive: Int = 0)
+internal data class ModelPart(val id: String, val center: EnginePoint, val guideCenter: EnginePoint = center)
 internal class OutbackModel(
   val parts: List<ModelPart>, val corners: List<EnginePoint>, val triangles: List<ModelTriangle>,
   val relativeDepths: List<Float>,
@@ -19,7 +19,10 @@ internal class OutbackModel(
     fun load(assets: AssetManager): OutbackModel {
       val binding = assets.open("engine-models/outback-registration.json").bufferedReader().use { JSONObject(it.readText()) }
       fun point(a: JSONArray) = EnginePoint(a.getDouble(0).toFloat(), a.getDouble(1).toFloat(), a.getDouble(2).toFloat())
-      val parts = binding.getJSONArray("parts").objects().map { ModelPart(it.getString("id"), point(it.getJSONArray("center"))) }
+      val parts = binding.getJSONArray("parts").objects().map { part ->
+        val center = point(part.getJSONArray("center"))
+        ModelPart(part.getString("id"), center, part.optJSONArray("guideCenter")?.let(::point) ?: center)
+      }
       val corners = binding.getJSONArray("corners").let { a -> List(4) { point(a.getJSONArray(it)) } }
       val file = ByteBuffer.wrap(assets.open("engine-models/outback-ez36.glb").use { it.readBytes() }).order(ByteOrder.LITTLE_ENDIAN)
       require(file.int == 0x46546c67 && file.int == 2 && file.int == file.capacity())
@@ -44,7 +47,7 @@ internal class OutbackModel(
         for (part in parts.indices) {
           val node = doc.getJSONArray("nodes").getJSONObject(scene.getInt(part))
           val mesh = doc.getJSONArray("meshes").getJSONObject(node.getInt("mesh"))
-          for (primitive in mesh.getJSONArray("primitives").objects()) {
+          for ((primitiveIndex, primitive) in mesh.getJSONArray("primitives").objects().withIndex()) {
             val (pos, count) = data(primitive.getJSONObject("attributes").getInt("POSITION"), 5126, "VEC3")
             val vertices = List(count) { i ->
               val at = pos + 12 * i
@@ -60,7 +63,7 @@ internal class OutbackModel(
             }
             val (indices, n) = data(primitive.getInt("indices"), 5123, "SCALAR")
             fun vertex(i: Int) = vertices[binary.getShort(indices + 2 * i).toInt() and 65535]
-            for (i in 0 until n step 3) add(ModelTriangle(vertex(i), vertex(i+1), vertex(i+2), part, rgb))
+            for (i in 0 until n step 3) add(ModelTriangle(vertex(i), vertex(i+1), vertex(i+2), part, rgb, primitiveIndex))
           }
         }
       }
@@ -89,6 +92,7 @@ internal class ModelBasis(points: List<EnginePoint>) {
 internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: List<String>) {
   val triangles: List<ModelTriangle>
   val centers: Map<Int, EnginePoint>
+  val inspections: Map<Int, InspectionPart>
   init {
     val indices = model.parts.map { ids.indexOf(it.id).also { i -> require(i >= 0) } }
     val src = model.corners
@@ -124,27 +128,44 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
       if (next < score) { best=transform; score=next }
     }
     fun place(p: EnginePoint) = best(initial(p))
-    centers = model.parts.mapIndexed { i,p -> indices[i] to place(p.center) }.toMap()
+    centers = model.parts.mapIndexed { i,p -> indices[i] to place(p.guideCenter) }.toMap()
     val cache = HashMap<EnginePoint,EnginePoint>()
     fun vertex(p: EnginePoint) = cache.getOrPut(p) { place(p) }
-    triangles = model.triangles.map { t -> ModelTriangle(vertex(t.a),vertex(t.b),vertex(t.c),indices[t.part],t.rgb) }
+    triangles = model.triangles.map { t -> t.copy(a = vertex(t.a), b = vertex(t.b), c = vertex(t.c), part = indices[t.part]) }
+    // Registration is affine. Cache its columns before animating individual vertices.
+    val zero = place(EnginePoint(0f,0f,0f))
+    val dx = place(EnginePoint(1f,0f,0f)) - zero
+    val dy = place(EnginePoint(0f,1f,0f)) - zero
+    val dz = place(EnginePoint(0f,0f,1f)) - zero
+    fun registered(p: EnginePoint) = EnginePoint(
+      zero.x + dx.x*p.x + dy.x*p.y + dz.x*p.z,
+      zero.y + dx.y*p.x + dy.y*p.y + dz.y*p.z,
+      zero.z + dx.z*p.x + dy.z*p.y + dz.z*p.z,
+    )
+    inspections = model.triangles.groupBy { it.part }.map { (index, sourceTriangles) ->
+      val part = model.parts[index]
+      indices[index] to InspectionPart(part, indices[index], sourceTriangles, ::registered)
+    }.toMap()
   }
 
   /** Nearest intersection on the same double-sided triangles drawn by OpenGL. */
-  fun pick(start: EnginePoint, end: EnginePoint): Int? {
+  fun pick(start: EnginePoint, end: EnginePoint, animation: InspectionFrame? = null): Int? {
     val direction=end-start
     var nearest=1f
     var part: Int?=null
-    for (t in triangles) {
+    fun intersect(t: ModelTriangle) {
       val e1=t.b-t.a; val e2=t.c-t.a; val p=direction.cross(e2); val det=e1.dot(p)
-      if (abs(det)<1e-10f) continue
+      if (abs(det)<1e-10f) return
       val d=start-t.a; val u=d.dot(p)/det
-      if (u !in 0f..1f) continue
+      if (u !in 0f..1f) return
       val q=d.cross(e1); val v=direction.dot(q)/det
-      if (v<0 || u+v>1) continue
+      if (v<0 || u+v>1) return
       val distance=e2.dot(q)/det
       if (distance>=0 && distance<nearest) {nearest=distance; part=t.part}
     }
+    animation?.surface?.forEach(::intersect)
+    if (part != null) return part
+    for (triangle in triangles) if (triangle.part != animation?.index) intersect(triangle)
     return part
   }
 }

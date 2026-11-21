@@ -16,6 +16,18 @@ export const color = {
   velo: 'rgba(10, 12, 16, 0.72)',
 } as const;
 
+export const video = {
+  panel: '#192228',
+  control: '#26343d',
+  borde: '#51616b',
+  presionado: '#12685e',
+  texto: '#edf2f4',
+  textoSuave: '#cbd7dc',
+  paso: '#ffe79e',
+  radio: 6,
+  espacio: 8,
+} as const;
+
 export const espacio = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;
 export const radio = { s: 8, m: 12, l: 18, xl: 24 } as const;
 

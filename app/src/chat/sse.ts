@@ -9,7 +9,7 @@ export function toEvent(name: string, data: any): ChatEvent | null {
     case 'citation':
       return { type: 'citation', block: data.block, title: data.title, source: data.source, cited_text: data.cited_text };
     case 'ar':
-      return { type: 'ar', part: data.part, instruction: data.instruction };
+      return { type: 'ar', part: data.part, instruction: data.instruction, ...(data.action !== undefined ? { action: data.action } : {}) };
     case 'done':
       return data.truncated === true ? { type: 'done', messages: data.messages, truncated: true } : { type: 'done', messages: data.messages };
     case 'error':

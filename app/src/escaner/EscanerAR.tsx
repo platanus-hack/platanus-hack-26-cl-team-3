@@ -14,15 +14,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
+import { inspectionActions, inspectionLabels } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
-import { completeBay, extendsPartialMap, encodeVolumes, overlapsPlacedBay, registrationCorners, sameRegistrationView } from '../engine-maps/registration';
+import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
 import { PartGuide, type PartGuideRef } from './PartGuide';
+import { GuideCaptions, useCameraGuide } from './CameraGuide';
+import { StepCounter } from './StepCounter';
+import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
 import type { Vehicle } from '../vehicles';
@@ -58,13 +64,14 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle; initialPart?: PartId }) {
+export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0 }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -78,7 +85,9 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const [tasa, setTasa] = useState({ validos: 0, total: 0 }); // análisis con contorno válido / análisis hechos
   const [calce, setCalce] = useState<{ valor: number; n: number } | null>(null);
   const [estables, setEstables] = useState(0);
-  const [anclaje, setAnclaje] = useState<(ResultadoFijar & { partial?: boolean }) | null>(null);
+  const [anclaje, setAnclaje] = useState<(ResultadoFijar & { partial?: boolean; manual?: boolean }) | null>(null);
+  const [editingMap, setEditingMap] = useState(false);
+  const insets = useSafeAreaInsets();
   const [fijando, setFijando] = useState(false);
   const [recalibrando, setRecalibrando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -92,6 +101,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
+  const registrationGeneration = useRef(0);
   const ocupado = useRef(false); // fijando o recalibrando
 
   useEffect(() => {
@@ -115,8 +125,8 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
     ocupado.current = true;
     setFijando(true);
     try {
-      const result = await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes, centers);
-      setAnclaje({ ...result, partial });
+      const result = await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes, centers, !!visualBay(captura.visualOutline, v));
+      setAnclaje({ ...result, partial: result.metodo !== 'visual' && partial });
       setCalce(null);
       setAviso(null);
       return true;
@@ -125,9 +135,9 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         setAviso('Aún faltan medidas del vano. Muévete un poco y vuelve a apuntar desde el frente.');
         return false;
       }
-      if (anclaje?.partial) {
-        setAviso('Se mantiene el mapa aproximado. Puedes volver a recalibrar.');
-        return true;
+      if (anclaje) {
+        setAviso('Se mantiene el mapa anterior. Puedes volver a recalibrar.');
+        return false;
       }
       setError(`No se pudo fijar el vano. ${String((e as Error)?.message ?? e)}`);
       return true;
@@ -139,9 +149,12 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
 
   const sesionActiva = estadoAR?.estado === 'rastreando' || estadoAR?.estado === 'sin-rastreo';
 
+  const awaitingVisual = vehicle?.id === 'outback' && anclaje?.mapPlaced && anclaje.metodo !== 'visual' && !anclaje.manual;
+
   // Bucle de detección: solo mientras NO está anclado (después, ARCore sostiene el polígono solo).
   useEffect(() => {
-    if (!modeloListo || !sesionActiva || !activa || (anclaje && !anclaje.partial) || recalibrando || error) return;
+    if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
+    const generation = registrationGeneration.current;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
@@ -191,6 +204,11 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
               // The original detection remains usable.
             }
             if (!vivo) break;
+          }
+          const visual = visualBay(cap.visualOutline, candidateBay);
+          if (!candidateBay && visual) {
+            candidateBay = visual;
+            clipped = visual.cortado;
           }
           await ar.current?.mostrarVista(candidateBay ? plano(candidateBay) : [], candidateBay?.esquinas.map(q => q.borde) ?? [], cap.grados);
           const contourReady = candidateBay && cap.rastreando && !candidateBay.cortado
@@ -252,12 +270,12 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
             const partial = !!volumes.length && clipped;
             const sameTarget = !!scan || (previous.length > 0 && overlapsPlacedBay(previous, bay));
             const attempt = volumes.length
-              ? (!anclaje || (sameTarget && (!partial || !!scan)))
+              ? (!anclaje || (awaitingVisual && !!visual && overlapsPlacedBay(previous, visual)) || (anclaje.partial && sameTarget && (!partial || !!scan)))
               : (!!scan || seguidos >= ESTABLES_PARA_FIJAR);
-            const centers = attempt && volumes.length ? await lookForPartCenters(cap, bay) : [];
+            const centers = attempt && volumes.length && !visual ? await lookForPartCenters(cap, bay) : [];
             if (!vivo) break;
             setRegistrationCandidate({ capture: cap, bay: attempt ? bay : (delEscaneo ?? bay), centers, partial });
-            if (attempt && await fijar(cap, bay, centers, partial)) break;
+            if (generation === registrationGeneration.current && attempt && await fijar(cap, bay, centers, partial)) break;
           } else {
             setRegistrationCandidate(null);
           }
@@ -269,9 +287,11 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           setEstables(0);
           fallos += 1;
           if (fallos >= 5) {
-            if (anclaje?.partial) {
-              setAviso('Se mantiene el mapa aproximado. Puedes volver a recalibrar.');
-              break;
+            if (anclaje) {
+              setAviso('Se mantiene el mapa mientras se recupera la cámara.');
+              fallos = 0;
+              await esperar(PAUSA_CALCE_MS);
+              continue;
             }
             setError(`El análisis falló varias veces seguidas. ${String((e as Error)?.message ?? e)}`);
             break;
@@ -280,27 +300,30 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         } finally {
           if (captureUri) borrar(captureUri);
         }
-        await esperar(100);
+        await esperar(awaitingVisual ? PAUSA_CALCE_MS : 100);
       }
     })();
     return () => {
       vivo = false;
       releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
-    if (!anclaje || anclaje.partial || !modeloListo || !activa || error) return;
+    if (!anclaje || anclaje.partial || awaitingVisual || !modeloListo || !activa || error) return;
+    const generation = registrationGeneration.current;
     let vivo = true;
     const ultimos: number[] = [];
+    let previousCorrection: number[] | null = null;
+    const monitor = anclaje.metodo === 'visual' && !anclaje.manual;
     (async () => {
       while (vivo) {
-        await esperar(PAUSA_CALCE_MS);
+        await esperar(monitor ? 750 : PAUSA_CALCE_MS);
         if (!vivo) break;
         if (ocupado.current || !ar.current) continue;
         try {
-          const cap = await ar.current.capturar(false);
+          const cap = await ar.current.capturar(monitor);
           // El modelo mira la zona donde quedó el contorno anclado, con holgura (zoom): así también mide vanos chicos.
           const anclas = cap.anclas && cap.anclas.length >= 6 ? pares(cap.anclas) : null;
           const recorte = anclas ? recorteAlrededor(anclas, 2) : COMPLETO;
@@ -312,6 +335,17 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           }
           if (!vivo) break;
           const bay = completeBay(poligonoVano(new Suavizador().agregar(r.vano)), recorte);
+          const visual = monitor && cap.rastreando ? visualBay(cap.visualOutline, bay) : null;
+          const registered = cap.registeredOutline;
+          const correction = registered && visual && needsVisualCorrection(registered, visual, cap.landmarkGainPx)
+            ? visual.esquinas.flatMap(({ x, y }, i) => [x - registered[2*i], y - registered[2*i+1]])
+            : null;
+          const confirmed = consistentCorrection(previousCorrection, correction);
+          previousCorrection = correction;
+          if (visual && confirmed && generation === registrationGeneration.current) {
+            previousCorrection = null;
+            if (await fijar(cap, bay ?? visual, [])) break;
+          }
           if (!bay || !anclas || anclas.some(({ x, y }) => x <= 0 || x >= 1 || y <= 0 || y >= 1)) {
             ultimos.length = 0;
             setCalce(null);
@@ -321,14 +355,14 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           if (ultimos.length > 3) ultimos.shift();
           setCalce({ valor: ultimos.reduce((a, b) => a + b, 0) / ultimos.length, n: ultimos.length });
         } catch {
-          // una medición fallida no importa: se reintenta en la próxima vuelta
+          previousCorrection = null;
         }
       }
     })();
     return () => {
       vivo = false;
     };
-  }, [anclaje, modeloListo, activa, error]);
+  }, [anclaje, modeloListo, activa, error, awaitingVisual, fijar]);
 
   /** Reconoce de nuevo desde la posición actual y reemplaza las anclas. Si no reconoce, deja el contorno como estaba. */
   const recalibrar = async () => {
@@ -347,14 +381,16 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         try {
           const r = await analizarFoto(cap.uri, recorte);
           const detection = poligonoVano(new Suavizador().agregar(r.vano));
-          if (!cap.rastreando || !vanoValido(detection)) {
+          const detected = vanoValido(detection) ? aCuadroCompleto(detection, recorte) : null;
+          const visual = visualBay(cap.visualOutline, detected);
+          const v = detected ?? visual;
+          if (!cap.rastreando || !v) {
             previousCenters = [];
             previousCorners = [];
             continue;
           }
-          const v = aCuadroCompleto(detection, recorte);
           const corners = volumes.length ? registrationCorners(v) : [];
-          const observed = await lookForPartCenters(cap, v);
+          const observed = visual ? [] : await lookForPartCenters(cap, v);
           const centers = sameRegistrationView(previousCorners, corners)
             ? confirmedPartCenters(previousCenters, observed, v, cap.alto / cap.ancho)
             : [];
@@ -362,8 +398,8 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
           previousCorners = corners;
           if (!centers.length && observed.length && i < INTENTOS_RECALIBRAR - 1) continue;
           try {
-            const result = await ar.current.fijar(cap.id, plano(v), corners, volumes, centers);
-            setAnclaje({ ...result, partial: !!volumes.length && detection.cortado });
+            const result = await ar.current.fijar(cap.id, plano(v), corners, volumes, centers, !!visual);
+            setAnclaje({ ...result, partial: result.metodo !== 'visual' && !!volumes.length && v.cortado });
             setCalce(null);
           } catch (e) {
             if (isRegistrationPending(e)) continue;
@@ -389,8 +425,19 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
 
   const empezarDeNuevo = async () => {
     if (ocupado.current) return;
-    await ar.current?.soltar();
+    ocupado.current = true;
+    registrationGeneration.current++;
+    try {
+      await ar.current?.soltar();
+    } catch {
+      setAviso('No se pudo reiniciar el mapa. Vuelve a intentarlo.');
+      setAnclaje(current => current && { ...current });
+      return;
+    } finally {
+      ocupado.current = false;
+    }
     setSelectedIndex(initialIndex);
+    setEditingMap(false);
     setAnclaje(null);
     setCalce(null);
     setVano(null);
@@ -433,6 +480,16 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
+  const playedStep = useRef(-1);
+  const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
+  const { current: step, stepKey, play } = cameraGuide;
+  useEffect(() => {
+    if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
+      playedStep.current = stepKey;
+      play(step.action);
+      void ar.current.playPartAction(step.part, step.action).catch(() => setAviso('No se pudo mostrar la acción.'));
+    }
+  }, [mapTracking, outbackParts, selected, step, stepKey, play]);
   if (!VistaAR) return null;
   const rastreando = estadoAR?.estado === 'rastreando';
   const detectado = valido && !!vano;
@@ -440,7 +497,6 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
   const puedeFijar = !anclaje && !fijando && rastreando && !!registrationCandidate;
   const leCuesta = !motorMarcado && tasa.total >= 6 && tasa.validos < tasa.total * 0.5;
   const corrido = !!calce && calce.n >= 2 && calce.valor < CALCE_BAJO;
-  const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const fuseLink = selected === 'fuses' ? map?.fuseUrl : undefined;
 
   let status = 'Apunta al motor';
@@ -522,6 +578,20 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
                 {map.partDetails?.[selected] ?? parts[selected][1]}
               </Text>
             )}
+            {outbackParts && selected && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
+                {inspectionActions(selected).map((action) => (
+                  <Pressable key={action} accessibilityRole="button" style={styles.part}
+                    onPress={() => {
+                      controls.setMode('compact');
+                      cameraGuide.play(action);
+                      void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
+                    }}>
+                    <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
             {fuseLink && (
               <Pressable
                 accessibilityRole="link"
@@ -531,6 +601,15 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
               </Pressable>
             )}
           </>
+        )}
+        {mapTracking && (
+          <Boton texto="Ajustar mapa a mano" icono="gesture-pinch" variante="secundario" onPress={() => {
+            if (ocupado.current) return;
+            registrationGeneration.current++;
+            setAnclaje(current => current && { ...current, manual: true });
+            setEditingMap(true);
+            controls.setMode('compact');
+          }} />
         )}
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <View style={estilos.botones}>
@@ -609,6 +688,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
       <VistaAR
         ref={ar}
         style={StyleSheet.absoluteFill}
+        editingMap={editingMap && !error && !errorAR}
         debug={debug}
         outbackParts={outbackParts}
         selectedPart={selectedIndex}
@@ -616,7 +696,7 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
-      <PartGuide hidden={controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (
@@ -628,12 +708,23 @@ export default function EscanerAR({ vehicle, initialPart }: { vehicle?: Vehicle;
         />
       )}
       {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
-      <ScannerControls controls={controls} status={status}>{panel}</ScannerControls>
+      {editingMap && !error && !errorAR ? (
+        <View style={[styles.editBar, { bottom: insets.bottom + espacio.m }]}>
+          <Text style={styles.editHint}>{mapTracking ? 'Arrastra o pellizca el mapa' : 'Vuelve a apuntar al motor'}</Text>
+          <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
+        </View>
+      ) : (
+        <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
+          captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  editBar: { position: 'absolute', alignSelf: 'center', maxWidth: '96%', flexDirection: 'row', alignItems: 'center',
+    gap: espacio.s, paddingLeft: espacio.m, borderRadius: radio.m, backgroundColor: color.velo },
+  editHint: { ...tipo.nota, color: color.texto, flexShrink: 1 },
   flex: { flex: 1 },
   apagado: { opacity: 0.5 },
   parts: { marginTop: espacio.s, marginBottom: espacio.xs },

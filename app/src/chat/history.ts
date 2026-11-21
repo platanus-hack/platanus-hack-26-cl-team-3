@@ -1,3 +1,4 @@
+import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
 
@@ -5,15 +6,16 @@ const KEY = 'capo-ar:chat-v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
-export type ViewCard = { part: PartId; instruction: string };
+export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction };
 export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[] };
 
 const MAX_INSTRUCTION = 200;
 
-export function toCard(part: unknown, instruction: unknown): ViewCard | null {
+export function toCard(part: unknown, instruction: unknown, action?: unknown): ViewCard | null {
   if (typeof part !== 'string' || !Object.hasOwn(catalogParts, part)) return null;
   if (typeof instruction !== 'string' || instruction.trim() === '') return null;
-  return { part: part as PartId, instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
+  if (action !== undefined && !supportsInspection(part, action)) return null;
+  return { ...(action ? { action } : {}), part: part as PartId, instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
 }
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
@@ -54,7 +56,7 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
     if (Array.isArray(m.content)) {
       for (const b of m.content as any[]) {
         if (b.type === 'tool_use' && b.name === 'show_in_camera') {
-          const card = toCard(b.input?.part, b.input?.instruction);
+          const card = toCard(b.input?.part, b.input?.instruction, b.input?.action);
           if (card) cards.push(card);
           continue;
         }
