@@ -147,15 +147,46 @@ test("6: more than 6 rounds produces error limit", async () => {
   assert.equal(calls.length, 6);
 });
 
-test("a non-API error is retried up to 2 times; then internal", async () => {
+test("an adapter that emits text and then throws ends with a single error and no duplicated text", async () => {
   let n = 0;
   const adapter: Adapter = async function* () {
     n++;
+    yield { event: "text", data: { block: 0, text: "parcial" } };
     throw new SyntaxError("json");
   };
   const events = await collect(runTurn({ messages, profile, adapter, tools: registry().tools }));
-  assert.equal(n, 3);
-  assert.equal((events.at(-1)!.data as { code: string }).code, "internal");
+  assert.equal(n, 1);
+  assert.deepEqual(events.map((e) => e.event), ["text", "error"]);
+  assert.equal((events[1].data as { code: string }).code, "internal");
+});
+
+test("aborting the signal before the second round does not call the adapter again", async () => {
+  const controller = new AbortController();
+  let n = 0;
+  const adapter: Adapter = async function* () {
+    n++;
+    controller.abort();
+    return toolMsg(toolUse("t1")) as Message;
+  };
+  const events = await collect(runTurn({ messages, profile, adapter, tools: registry().tools, signal: controller.signal }));
+  assert.equal(n, 1);
+  assert.equal(events.some((e) => e.event === "done"), false);
+});
+
+test("max_tokens without tool_use ends with done truncated", async () => {
+  const { adapter } = fake([{ message: { stop_reason: "max_tokens", content: [{ type: "text", text: "a" } as ContentBlock] } }]);
+  const events = await collect(runTurn({ messages, profile, adapter, tools: registry().tools }));
+  assert.equal(events.at(-1)!.event, "done");
+  assert.equal((events.at(-1)!.data as { truncated?: boolean }).truncated, true);
+});
+
+test("end_turn and stop_sequence ends with done without truncated", async () => {
+  for (const stop_reason of ["end_turn", "stop_sequence"] as const) {
+    const { adapter } = fake([{ message: { stop_reason, content: [{ type: "text", text: "a" } as ContentBlock] } }]);
+    const events = await collect(runTurn({ messages, profile, adapter, tools: registry().tools }));
+    assert.equal(events.at(-1)!.event, "done");
+    assert.equal("truncated" in events.at(-1)!.data, false);
+  }
 });
 
 test("a provider error ends with code provider without retrying", async () => {

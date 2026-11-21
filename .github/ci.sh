@@ -6,10 +6,17 @@ port=$(docker compose config --format json | jq -er '
   .["traefik.http.services.app-" + $id + ".loadbalancer.server.port"]')
 [[ "$port" =~ ^[1-9][0-9]{0,4}$ && "$port" -le 65535 ]]
 
+if command -v npm >/dev/null; then
+  npm ci --prefix api --no-audit
+  npm --prefix api test
+  npm --prefix api run typecheck
+fi
+
 docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" \
   --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" -t candidate .
 container=$(docker run -d -p "127.0.0.1::${port}" candidate)
-trap 'docker rm -f "$container" >/dev/null' EXIT
+api_container=
+trap 'docker rm -f "$container" ${api_container:+"$api_container"} >/dev/null' EXIT
 
 for _ in {1..30}; do
   case "$(docker inspect -f '{{.State.Health.Status}}' "$container")" in
@@ -28,6 +35,19 @@ curl -fsS "$url/sw.js" | grep -E "const CACHE = 'capo-ar-shell-[a-f0-9]{64}';" >
 for asset in app.js detector.js prompts.json runtime/ort.wasm.min.mjs runtime/ort-wasm-simd-threaded.mjs runtime/ort-wasm-simd-threaded.wasm runtime/vision.onnx styles.css icon-192.png icon-512.png; do
   curl -fsS -o /dev/null "$url/$asset"
 done
+
+docker build -t candidate-api api
+api_container=$(docker run -d -p 127.0.0.1::8787 candidate-api)
+for _ in {1..30}; do
+  case "$(docker inspect -f '{{.State.Health.Status}}' "$api_container")" in
+    healthy) break ;;
+    unhealthy) docker logs "$api_container"; exit 1 ;;
+  esac
+  sleep 2
+done
+[[ $(docker inspect -f '{{.State.Health.Status}}' "$api_container") == healthy ]]
+api_url="http://$(docker port "$api_container" 8787/tcp)"
+curl -fsS "$api_url/api/health"
 
 if [[ -f prototype/vehicle-maps/index.html ]]; then
   curl -fsSI -o /dev/null "$url/maps/index.html"

@@ -41,3 +41,21 @@ test("filter by fuse number", async () => {
   assert.equal(sr.content.length, 1);
   assert.match(sr.content[0].text, /^Fusible 24 /);
 });
+
+test("a numeric filter compares the exact fuse number", async () => {
+  const one = await run({ filter: "1" });
+  assert.deepEqual(one.content, [{ type: "text", text: "Sin resultados en la tabla de fusibles." }]);
+  const eleven = (await run({ filter: "11" })).content as any[];
+  assert.equal(eleven[0].content.length, 1);
+  assert.match(eleven[0].content[0].text, /^Fusible 11 /);
+});
+
+test("the title names the data source", async () => {
+  const [sr] = (await run({ filter: "p/w" })).content as any[];
+  assert.match(sr.title, /fuente: autogenius\.info/);
+});
+
+test("the description explains the manual abbreviations", () => {
+  const d = tools.lookup_fuses.definition.description!;
+  for (const s of ["P/W", "alzavidrios", "R.LH", "R.RH", "PASS", "MAIN"]) assert.ok(d.includes(s), s);
+});

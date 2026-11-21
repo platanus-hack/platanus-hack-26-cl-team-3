@@ -15,13 +15,13 @@ interface FuseRow {
 const FUSES: FuseRow[] = rows;
 
 const SOURCE = "fusibles://outback-2016-3.6r/cabina";
-const TITLE = "Tabla de fusibles — caja de la cabina (tercero, por verificar en el auto)";
 
 const definition: ToolDefinition = {
   name: "lookup_fuses",
   description:
     "Devuelve filas de la tabla de fusibles del auto (caja, número, amperaje, circuito). " +
-    "Filtra por circuito (p. ej. 'P/W') o por número de fusible.",
+    "Los circuitos usan la sigla del manual: P/W = alzavidrios (power window), R.LH / R.RH = trasera izquierda / derecha, " +
+    "PASS = pasajero, MAIN = principal. Filtra por circuito con esa sigla (p. ej. 'P/W') o por número exacto de fusible (p. ej. '24').",
   input_schema: {
     type: "object",
     properties: { filter: { type: "string" } },
@@ -39,7 +39,7 @@ async function run(input: unknown): Promise<ToolOutput> {
     return { content: [{ type: "text", text: "Input inválido: se espera { filter: string }." }], is_error: true };
   }
   const q = (input as { filter: string }).filter.trim().toLowerCase();
-  const matches = q === "" ? [] : FUSES.filter((f) => f.circuit.toLowerCase().includes(q) || String(f.number).includes(q));
+  const matches = q === "" ? [] : FUSES.filter((f) => (/^\d+$/.test(q) ? f.number === Number(q) : f.circuit.toLowerCase().includes(q)));
   if (matches.length === 0) {
     return { content: [{ type: "text", text: "Sin resultados en la tabla de fusibles." }] };
   }
@@ -48,7 +48,7 @@ async function run(input: unknown): Promise<ToolOutput> {
       {
         type: "search_result",
         source: SOURCE,
-        title: TITLE,
+        title: `Tabla de fusibles — caja de la cabina (fuente: ${[...new Set(matches.map((f) => f.source))].join("; ")})`,
         content: matches.map((f) => ({ type: "text", text: rowToText(f) })),
         citations: { enabled: true },
       },

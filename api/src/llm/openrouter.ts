@@ -7,17 +7,33 @@ const MAX_TOKENS = 4096;
 
 let client: Anthropic | undefined;
 
-export const openrouter: Adapter = async function* ({ profile, system, tools, messages }) {
+const PROVIDER_MESSAGE = "El proveedor del modelo falló. Inténtalo de nuevo.";
+const CREDIT_MESSAGE = "Se acabó el crédito de la key de OpenRouter.";
+
+export function toProviderError(e: unknown): ProviderError {
+  if (e instanceof Anthropic.APIError) {
+    const body = e.error as { type?: unknown; error?: { type?: unknown } } | undefined;
+    if (e.status === 402 || body?.error?.type === "billing_error" || body?.type === "billing_error") {
+      return new ProviderError(CREDIT_MESSAGE, "credit");
+    }
+  }
+  return new ProviderError(PROVIDER_MESSAGE, "provider");
+}
+
+export const openrouter: Adapter = async function* ({ profile, system, tools, messages, signal }) {
   client ??= new Anthropic({ baseURL: BASE_URL, authToken: process.env.OPENROUTER_API_KEY, apiKey: null });
   try {
-    const stream = client.messages.stream({
-      model: profile.model,
-      max_tokens: MAX_TOKENS,
-      ...(profile.effort ? { output_config: { effort: profile.effort } } : {}),
-      system,
-      tools,
-      messages,
-    });
+    const stream = client.messages.stream(
+      {
+        model: profile.model,
+        max_tokens: MAX_TOKENS,
+        ...(profile.effort ? { output_config: { effort: profile.effort } } : {}),
+        system,
+        tools,
+        messages,
+      },
+      { signal },
+    );
     let block = -1;
     for await (const ev of stream) {
       if (ev.type === "content_block_start") {
@@ -34,10 +50,7 @@ export const openrouter: Adapter = async function* ({ profile, system, tools, me
     }
     return await stream.finalMessage();
   } catch (e) {
-    if (e instanceof Anthropic.APIError) {
-      if (e.status === 402) throw new ProviderError("Se acabó el crédito de la key de OpenRouter.", "credit");
-      throw new ProviderError(e.message, "provider");
-    }
-    throw e;
+    if (!signal?.aborted) console.error(e);
+    throw toProviderError(e);
   }
 };
