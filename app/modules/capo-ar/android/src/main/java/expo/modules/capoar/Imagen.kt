@@ -60,4 +60,12 @@ internal object Imagen {
     270 -> Pair(1f - y, x)
     else -> Pair(x, y)
   }
+
+  /** Inversa de [desgirar]: de la imagen original del sensor a la imagen GIRADA (derecha). */
+  fun girar(u: Float, v: Float, grados: Int): Pair<Float, Float> = when ((grados % 360 + 360) % 360) {
+    90 -> Pair(1f - v, u)
+    180 -> Pair(1f - u, 1f - v)
+    270 -> Pair(v, 1f - u)
+    else -> Pair(u, v)
+  }
 }

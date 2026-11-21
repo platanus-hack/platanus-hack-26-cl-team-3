@@ -241,6 +241,36 @@ function interseccion(p1: number[], p2: number[], p3: number[], p4: number[]): [
   return [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])];
 }
 
+/**
+ * Coincidencia (IoU, 0 a 1) entre dos polígonos en coordenadas normalizadas, medida sobre la grilla del cuadro: lo que
+ * queda fuera de la imagen no cuenta. Sirve para comparar el contorno anclado con una detección nueva («calce»).
+ */
+export function iouPoligonos(a: { x: number; y: number }[], b: { x: number; y: number }[]): number {
+  if (a.length < 3 || b.length < 3) return 0;
+  const n = CELDAS;
+  let inter = 0;
+  let union = 0;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = (i + 0.5) / n;
+      const y = (j + 0.5) / n;
+      const enA = dentroDe(a, x, y);
+      const enB = dentroDe(b, x, y);
+      if (enA && enB) inter++;
+      if (enA || enB) union++;
+    }
+  }
+  return union ? inter / union : 0;
+}
+
+function dentroDe(p: { x: number; y: number }[], x: number, y: number): boolean {
+  let dentro = false;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    if (p[i].y > y !== p[j].y > y && x < ((p[j].x - p[i].x) * (y - p[i].y)) / (p[j].y - p[i].y) + p[i].x) dentro = !dentro;
+  }
+  return dentro;
+}
+
 /** Tramos horizontales para rellenar un polígono convexo con Views (sin librerías de dibujo). Coordenadas en píxeles. */
 export function tramos(poli: { x: number; y: number }[], filas: number): { y: number; alto: number; x0: number; x1: number }[] {
   if (poli.length < 3) return [];

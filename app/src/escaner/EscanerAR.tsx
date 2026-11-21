@@ -2,12 +2,14 @@
  * Escáner con ARCore: reconoce el vano UNA vez y lo «engancha» al espacio real.
  *
  * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado).
- * 2. Cuando la detección es estable (contorno válido, completo en la imagen y ARCore siguiendo el movimiento, 3
- *    análisis seguidos) —o el usuario toca «Fijar ahora»— cada esquina pasa a ser un ancla de ARCore.
- * 3. Anclado: el modelo se detiene; el polígono (verde) se dibuja en nativo en cada cuadro con la pose actual del
- *    teléfono y queda fijo sobre el auto mientras el usuario se mueve.
- *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas (para cuando el contorno
- *      quedó corrido tras alejarse y volver). El contorno anterior se mantiene hasta que hay uno nuevo.
+ * 2. Cuando la detección es estable (contorno válido, completo en la imagen, ARCore siguiendo el movimiento y con
+ *    mapa de profundidad, 3 análisis seguidos) —o el usuario toca «Fijar ahora»— cada esquina pasa a ser un ancla.
+ *    El módulo nativo usa el mapa de profundidad completo (miles de puntos): si la superficie es plana ajusta un
+ *    plano y pone las esquinas sobre él; si tiene relieve, usa la profundidad local de cada esquina.
+ * 3. Anclado: el polígono (verde) se dibuja en nativo en cada cuadro con la pose actual del teléfono.
+ *    - Cada pocos segundos se compara el contorno anclado con una detección nueva («calce», 0-100 %): mide cuánto se
+ *      corrió. Si baja mucho, se sugiere recalibrar.
+ *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas.
  *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -15,7 +17,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { VistaAR, type CapturaAR, type EstadoAR, type ResultadoFijar, type VistaARRef } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
-import { poligonoVano, Suavizador, type Vano } from '../detector/vano';
+import { iouPoligonos, poligonoVano, Suavizador, type Vano } from '../detector/vano';
 import { color, espacio } from '../theme';
 import { Boton } from '../ui';
 import {
@@ -24,8 +26,26 @@ import {
 
 const ESTABLES_PARA_FIJAR = 3;
 const INTENTOS_RECALIBRAR = 3;
+const PUNTOS_MINIMOS = 500; // puntos del mapa de profundidad para fijar solo (si el teléfono tiene profundidad)
+const PAUSA_CALCE_MS = 2500;
+const CALCE_BAJO = 0.5;
 
 const plano = (v: Vano) => v.esquinas.flatMap((e) => [e.x, e.y]);
+const pares = (c: number[]) => Array.from({ length: c.length / 2 }, (_, k) => ({ x: c[2 * k], y: c[2 * k + 1] }));
+const pct = (x: number) => `${Math.round(x * 100)} %`;
+
+function resumenAnclaje(a: ResultadoFijar): string {
+  if (a.metodo === 'plano' || a.metodo === 'relieve') {
+    const partes = [`${a.metodo} · ${a.puntos ?? a.muestras} puntos`];
+    if (a.plano !== undefined) partes.push(`${pct(a.plano)} en el plano`);
+    if (a.rms !== undefined) partes.push(`±${(a.rms * 100).toFixed(1)} cm`);
+    if (a.inclinacion !== undefined) partes.push(`superficie a ${Math.round(a.inclinacion)}°`);
+    if (a.anguloVista !== undefined) partes.push(`vista a ${Math.round(a.anguloVista)}°`);
+    partes.push(`${a.distancia.toFixed(2)} m`);
+    return partes.join(' · ');
+  }
+  return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
+}
 
 export default function EscanerAR() {
   const ar = useRef<VistaARRef>(null);
@@ -36,7 +56,9 @@ export default function EscanerAR() {
   const [capo, setCapo] = useState(0); // puntaje «capó abierto» de CLIP (solo debug)
   const [vano, setVano] = useState<Vano | null>(null);
   const [estables, setEstables] = useState(0);
+  const [tasa, setTasa] = useState({ validos: 0, total: 0 }); // análisis con contorno válido / análisis hechos
   const [anclaje, setAnclaje] = useState<ResultadoFijar | null>(null);
+  const [calce, setCalce] = useState<{ valor: number; n: number } | null>(null);
   const [fijando, setFijando] = useState(false);
   const [recalibrando, setRecalibrando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -75,12 +97,14 @@ export default function EscanerAR() {
 
   const sesionActiva = estadoAR?.estado === 'rastreando' || estadoAR?.estado === 'sin-rastreo';
 
-  // Bucle de detección: solo mientras NO está anclado (después, ARCore sostiene el polígono solo).
+  // Bucle de detección: solo mientras NO está anclado.
   useEffect(() => {
     if (!modeloListo || !sesionActiva || !activa || anclaje || error) return;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
+    let validos = 0;
+    let total = 0;
     const puntajeCapo = new PuntajeCapo();
     const suavizador = new Suavizador(SUAVIZADO);
     (async () => {
@@ -98,12 +122,16 @@ export default function EscanerAR() {
           const v = poligonoVano(suavizador.agregar(r.vano));
           const valido = vanoValido(v);
           await ar.current?.mostrarVista(valido ? plano(v) : [], valido ? v.esquinas.map((e) => e.borde) : [], cap.grados);
-          seguidos = valido && !v.cortado && cap.rastreando ? seguidos + 1 : 0;
+          const conProfundidad = !cap.profundidad || cap.puntos >= PUNTOS_MINIMOS;
+          seguidos = valido && !v.cortado && cap.rastreando && conProfundidad ? seguidos + 1 : 0;
+          total += 1;
+          if (valido) validos += 1;
           fallos = 0;
           setCapo(puntajeCapo.agregar(r.puntaje).media);
           setVano(v);
           setUltima(cap);
           setEstables(seguidos);
+          setTasa({ validos, total });
           setMs(Date.now() - t0);
           if (valido && seguidos >= ESTABLES_PARA_FIJAR) {
             await fijar(cap, v);
@@ -125,6 +153,42 @@ export default function EscanerAR() {
       vivo = false;
     };
   }, [modeloListo, sesionActiva, activa, anclaje, error, fijar]);
+
+  // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
+  useEffect(() => {
+    setCalce(null);
+    if (!anclaje || !modeloListo || !activa || error) return;
+    let vivo = true;
+    const ultimos: number[] = [];
+    (async () => {
+      while (vivo) {
+        await esperar(PAUSA_CALCE_MS);
+        if (!vivo) break;
+        if (ocupado.current || !ar.current) continue;
+        try {
+          const cap = await ar.current.capturar();
+          let r;
+          try {
+            r = await analizarFoto(cap.uri);
+          } finally {
+            borrar(cap.uri);
+          }
+          if (!vivo) break;
+          const v = poligonoVano(new Suavizador().agregar(r.vano));
+          // Sin contorno válido en esta vista (o anclas fuera de cuadro) no hay con qué comparar: no se opina.
+          if (!vanoValido(v) || !cap.anclas || cap.anclas.length < 6) continue;
+          ultimos.push(iouPoligonos(pares(cap.anclas), v.esquinas));
+          if (ultimos.length > 3) ultimos.shift();
+          setCalce({ valor: ultimos.reduce((a, b) => a + b, 0) / ultimos.length, n: ultimos.length });
+        } catch {
+          // una medición fallida no importa: se reintenta en la próxima vuelta
+        }
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [anclaje, modeloListo, activa, error]);
 
   /** Reconoce de nuevo desde la posición actual y reemplaza las anclas. Si no reconoce, deja el contorno como estaba. */
   const recalibrar = async () => {
@@ -163,6 +227,7 @@ export default function EscanerAR() {
     setAnclaje(null);
     setVano(null);
     setEstables(0);
+    setTasa({ validos: 0, total: 0 });
     setAviso(null);
   };
 
@@ -177,6 +242,8 @@ export default function EscanerAR() {
   const detectado = vanoValido(vano);
   const tono = anclaje || detectado ? color.exito : color.acento;
   const puedeFijar = !anclaje && !fijando && detectado && !!ultima?.rastreando;
+  const faltaProfundidad = !!ultima?.profundidad && ultima.puntos < PUNTOS_MINIMOS;
+  const corrido = !!calce && calce.n >= 2 && calce.valor < CALCE_BAJO;
 
   let panel;
   if (error || errorAR) {
@@ -206,30 +273,29 @@ export default function EscanerAR() {
       <>
         <Encabezado
           icono="vector-polygon"
-          tono={color.exito}
+          tono={corrido ? color.acento : color.exito}
           cargando={recalibrando}
           titulo={recalibrando ? 'Recalibrando…' : 'Contorno fijado'}
         />
         <Detalle>
           {recalibrando
             ? 'Mantén el teléfono quieto apuntando al motor.'
-            : rastreando
-              ? 'Recorre el motor: el contorno se queda sobre el vano. Si se corre, apunta al motor completo y toca Recalibrar.'
-              : 'La realidad aumentada perdió el seguimiento: vuelve a apuntar al motor y muévete despacio.'}
+            : !rastreando
+              ? 'La realidad aumentada perdió el seguimiento: vuelve a apuntar al motor y muévete despacio.'
+              : corrido
+                ? 'El contorno parece corrido respecto de lo que veo ahora. Apunta al motor completo y toca Recalibrar.'
+                : 'Recorre el motor: el contorno se queda sobre el vano. Si se corre, apunta al motor completo y toca Recalibrar.'}
         </Detalle>
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
         <View style={estilos.botones}>
-          <Boton
-            texto="Recalibrar"
-            icono="crosshairs-gps"
-            onPress={recalibrar}
-            estilo={[styles.flex, recalibrando && styles.apagado]}
-          />
+          <Boton texto="Recalibrar" icono="crosshairs-gps" onPress={recalibrar} estilo={[styles.flex, recalibrando && styles.apagado]} />
           <Boton texto="Empezar de nuevo" variante="secundario" onPress={empezarDeNuevo} estilo={[styles.flex, recalibrando && styles.apagado]} />
         </View>
         {debug && (
           <LineaDebug
-            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · anclas ${anclaje.esquinas} · ${anclaje.metodo} · ${anclaje.muestras} medidas en el vano · ${anclaje.distancia.toFixed(2)} m`}
+            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · ${anclaje.esquinas} anclas · ${resumenAnclaje(anclaje)} · calce ${
+              calce ? `${pct(calce.valor)} (${calce.n})` : '–'
+            }`}
           />
         )}
       </>
@@ -249,7 +315,9 @@ export default function EscanerAR() {
               ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
               : vano.cortado
                 ? 'Aléjate un poco para que todo el vano quede en la imagen: así se fija solo.'
-                : `Mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
+                : faltaProfundidad
+                  ? 'Mueve el teléfono un poco hacia los lados para medir la profundidad; después se fija solo.'
+                  : `Mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>
         <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
         <View style={estilos.botones}>
@@ -263,9 +331,11 @@ export default function EscanerAR() {
         </View>
         {debug && (
           <LineaDebug
-            texto={`Debug · AR ${estadoAR?.estado ?? '–'}${estadoAR?.profundidad ? ' · profundidad' : ''} · vano ${
-              vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'
-            } · capó ${Math.round(capo * 100)} % · ${ultima?.muestras ?? 0}/49 medidas${ms !== null ? ` · ${ms} ms` : ''}`}
+            texto={`Debug · AR ${estadoAR?.estado ?? '–'} · detección ${tasa.validos}/${tasa.total}${
+              tasa.total ? ` (${pct(tasa.validos / tasa.total)})` : ''
+            } · vano ${vano ? `${pct(vano.area)} · ${vano.esquinas.length} esquinas` : '–'} · capó ${pct(capo)} · profundidad ${
+              ultima?.profundidad ? `${ultima.puntos} puntos` : `no (${ultima?.muestras ?? 0}/49)`
+            }${ms !== null ? ` · ${ms} ms` : ''}`}
           />
         )}
       </>

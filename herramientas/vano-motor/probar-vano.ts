@@ -1,6 +1,6 @@
 // Pruebas de la geometría del vano (app/src/detector/vano.ts). Correr desde capo-ar/: node herramientas/vano-motor/probar-vano.ts
 import assert from 'node:assert/strict';
-import { CELDAS, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
+import { CELDAS, iouPoligonos, poligonoVano, tramos, Suavizador } from '../../app/src/detector/vano.ts';
 const n = CELDAS;
 const mapa = (f: (x: number, y: number) => boolean) => { const p = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) p[y * n + x] = f(x, y) ? 0.9 : 0.1; return p; };
 
@@ -58,3 +58,10 @@ assert.ok(Math.abs(v.confianza - 0.9) < 1e-6); console.log('10 ok');
 const s2 = new Suavizador(0.5); const L = (f: (i: number) => boolean) => Float32Array.from({ length: n * n }, (_, i) => (f(i) ? 8 : -8));
 s2.agregar(L(i => i % n < 30)); const m2 = s2.agregar(L(i => i % n >= 50));
 assert.ok(m2[0] < 0.01 && m2[60] > 0.99, 'sin fantasma de la posición anterior'); console.log('11 ok');
+
+// 12) calce entre polígonos: idénticos = 1; desplazado medio ancho ≈ 1/3; lo de fuera del cuadro no cuenta
+const cuad = (x0: number, y0: number, x1: number, y1: number) => [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+assert.ok(Math.abs(iouPoligonos(cuad(0.2, 0.2, 0.6, 0.6), cuad(0.2, 0.2, 0.6, 0.6)) - 1) < 1e-9);
+assert.ok(Math.abs(iouPoligonos(cuad(0.2, 0.2, 0.6, 0.6), cuad(0.4, 0.2, 0.8, 0.6)) - 1 / 3) < 0.03);
+assert.ok(iouPoligonos(cuad(-0.5, 0, 0.5, 1), cuad(0, 0, 0.5, 1)) > 0.97);
+assert.equal(iouPoligonos(cuad(0, 0, 0.3, 0.3), cuad(0.6, 0.6, 0.9, 0.9)), 0); console.log('12 ok');

@@ -28,21 +28,34 @@ Módulo nativo propio: `app/modules/capo-ar/` (Kotlin, ARCore 1.57). Se reconoce
 espacio real (`app/src/escaner/EscanerAR.tsx`):
 
 1. **Buscando:** la vista AR entrega cuadros de su cámara (`capturar`, imagen ya derecha) → modelo → polígono de vista
-   previa (ámbar punteado). En cada captura se guardan la pose de la cámara, sus intrínsecos y 49 distancias reales
-   (grilla 7×7 de *hit tests*: profundidad de ARCore si el teléfono la tiene, si no puntos y planos detectados).
-2. **Fijar:** con contorno válido + vano completo en la imagen + seguimiento AR durante 3 análisis seguidos (o con
-   «Fijar ahora»), cada esquina se convierte en un rayo desde la cámara de ESA captura; la distancia sale de las
-   muestras cercanas **que caen dentro del polígono** (las de fuera miden el piso o el fondo); si no hay, la mediana;
-   si nada, 0,7 m → un `Anchor` por esquina.
-3. **Anclado:** el modelo se detiene; en cada cuadro las anclas se proyectan con la pose actual y el polígono (verde)
-   se dibuja en nativo (Canvas), sin pasar por JavaScript.
+   previa (ámbar punteado). En cada captura se guardan la pose de la cámara y el **mapa de profundidad completo** de
+   ARCore (`Profundidad.kt`: miles de puntos, p. ej. 160×90; antes eran 49 *hit tests*, que quedan de respaldo si el
+   mapa aún no está disponible).
+2. **Fijar:** con contorno válido + vano completo en la imagen + seguimiento AR + ≥ 500 puntos de profundidad durante
+   3 análisis seguidos (o con «Fijar ahora»). Con los puntos que caen **dentro del polígono** se ajusta un plano
+   (RANSAC + mínimos cuadrados):
+   - **`plano`** (≥ 75 % de los puntos sobre el plano: una pantalla, una foto, una superficie plana): las esquinas se
+     ponen sobre ese plano → contorno rígido y coplanar.
+   - **`relieve`** (un vano real, con piezas a distintas alturas): cada esquina usa la profundidad mediana de los
+     puntos cercanos dentro del polígono.
+   Cada esquina queda como un `Anchor`. Se informan: puntos usados, % sobre el plano, dispersión (cm), inclinación de
+   la superficie (0° horizontal, 90° vertical) y ángulo de vista (0° de frente).
+3. **Anclado:** en cada cuadro las anclas se proyectan con la pose actual y el polígono (verde) se dibuja en nativo
+   (Canvas), sin pasar por JavaScript.
+   - **Calce:** cada 2,5 s se corre el modelo y se compara el contorno anclado con la detección nueva (IoU, promedio
+     de las últimas 3). Mide cuánto se corrió el anclaje; bajo 50 % la app sugiere recalibrar.
    - **Recalibrar:** reconoce de nuevo desde donde está el teléfono y reemplaza las anclas (hasta 3 intentos; si no
      reconoce, el contorno anterior se mantiene). Para la deriva de ARCore tras alejarse y volver.
    - **Empezar de nuevo:** suelta las anclas y vuelve a buscar.
 
+El modo debug muestra, mientras busca, **detección n/total** (análisis con contorno válido) y los puntos de
+profundidad; y ya anclado, el método, los puntos, el plano y el **calce**. Con eso se compara una versión con otra.
+
 En el manifiesto ARCore es **opcional**: sin ARCore la app usa el escáner de fotos (`EscanerCamara.tsx`), cuyo
-contorno no queda fijo. Probado en un teléfono apuntando a una pantalla (21-nov-2026): seguimiento, profundidad
-(49/49 medidas) y anclaje funcionan, ~500 ms por análisis; **falta probar sobre el Outback real**.
+contorno no queda fijo. Probado en un teléfono apuntando a una pantalla (21-nov-2026, con la versión de 49 medidas):
+seguimiento, profundidad y anclaje funcionan, ~500 ms por análisis. **El anclaje con el mapa completo (v0.6.0) y el
+calce aún no se probaron en un teléfono; tampoco nada sobre el Outback real.** La matemática del plano se verificó
+con datos sintéticos.
 
 ## Datos
 
