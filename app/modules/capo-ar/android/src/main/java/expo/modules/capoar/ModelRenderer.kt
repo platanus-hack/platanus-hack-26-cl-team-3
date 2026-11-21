@@ -43,14 +43,14 @@ internal class ModelRenderer {
     val vs=shader(GL.GL_VERTEX_SHADER,"""
       uniform mat4 matrix; uniform float selected;
       attribute vec3 position; attribute vec3 color; attribute float part;
-      varying vec4 tint;
+      varying mediump vec4 tint;
       void main() {
         bool highlighted = abs(part-selected) < 0.25;
         tint = highlighted ? vec4(1.0,0.72,0.16,0.76) : vec4(color,0.52);
         gl_Position = matrix * vec4(position,1.0);
       }
     """.trimIndent())
-    val fs=shader(GL.GL_FRAGMENT_SHADER,"precision mediump float; varying vec4 tint; void main(){gl_FragColor=tint;}")
+    val fs=shader(GL.GL_FRAGMENT_SHADER,"precision mediump float; varying mediump vec4 tint; void main(){gl_FragColor=tint;}")
     program=GL.glCreateProgram(); GL.glAttachShader(program,vs); GL.glAttachShader(program,fs)
     GL.glLinkProgram(program); GL.glDeleteShader(vs); GL.glDeleteShader(fs)
     val ok=IntArray(1); GL.glGetProgramiv(program,GL.GL_LINK_STATUS,ok,0)

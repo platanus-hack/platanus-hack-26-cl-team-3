@@ -11,6 +11,7 @@ internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c:
 internal data class ModelPart(val id: String, val center: EnginePoint)
 internal class OutbackModel(
   val parts: List<ModelPart>, val corners: List<EnginePoint>, val triangles: List<ModelTriangle>,
+  val relativeDepths: List<Float>,
 ) {
   companion object {
     // The bundled GLB has a single scene of identity-transform nodes, indexed triangles,
@@ -63,7 +64,8 @@ internal class OutbackModel(
           }
         }
       }
-      return OutbackModel(parts, corners, triangles)
+      val depths = binding.getJSONArray("relativeDepths")
+      return OutbackModel(parts, corners, triangles, List(4) { depths.getDouble(it).toFloat() })
     }
 
     private fun JSONArray.objects() = List(length()) { getJSONObject(it) }

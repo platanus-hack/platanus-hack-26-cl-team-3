@@ -661,8 +661,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val targetDepth = densa?.takeIf { it.insideBay }?.mediana ?: dentro.map { hit ->
       hit[2] / intrinsics.ray(EngineImagePoint(hit[0], hit[1])).length()
     }.sorted().let { it.getOrNull(it.size / 2) } ?: DISTANCIA_POR_DEFECTO
-    fun estimatedPoint(u: Float, v: Float): EnginePoint {
-      val point = intrinsics.ray(EngineImagePoint(u, v)) * targetDepth
+    fun estimatedPoint(u: Float, v: Float, relativeDepth: Float = 1f): EnginePoint {
+      val point = intrinsics.ray(EngineImagePoint(u, v)) * (targetDepth * relativeDepth)
       return cameraToWorld(floatArrayOf(point.x, point.y, point.z))
     }
 
@@ -690,8 +690,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           frameCorners.mapIndexed { index, (u, v) -> fromHitTests(u, v, nearbySamples[index]) },
           volumes, refinePartFace, captureDepth = ::captureDepth,
         )?.also { registrationMethod = "hit-test" }
-      } ?: EngineMesh.create(frameCorners.map { (u, v) ->
-        estimatedPoint(u, v)
+      } ?: EngineMesh.create(frameCorners.mapIndexed { index, (u, v) ->
+        val ratio = if (outbackParts.isEmpty()) 1f else outbackModel.relativeDepths[index]
+        estimatedPoint(u, v, ratio)
       }, volumes, refinePartFace, estimatedPlane = true, captureDepth = ::captureDepth)?.also { registrationMethod = "estimado" }
     } else null
     if (volumes.isNotEmpty() && mesh == null) {
