@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Anthropic from "@anthropic-ai/sdk";
-import { toProviderError } from "../../src/llm/openrouter";
+import { toProviderError } from "../../src/llm/anthropic";
 import { ProviderError } from "../../src/llm/errors";
 
 const api = (status: number | undefined, body: unknown) => Anthropic.APIError.generate(status, body as object, "raw sdk text", new Headers());
@@ -10,7 +10,7 @@ test("status 402 maps to credit with the fixed message", () => {
   const e = toProviderError(api(402, { error: { message: "x" } }));
   assert.ok(e instanceof ProviderError);
   assert.equal(e.code, "credit");
-  assert.equal(e.message, "Se acabó el crédito de la key de OpenRouter.");
+  assert.equal(e.message, "Se acabó el crédito de la key de Anthropic.");
 });
 
 test("billing_error type maps to credit, nested or flat", () => {
