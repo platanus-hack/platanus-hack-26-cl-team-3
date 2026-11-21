@@ -22,6 +22,8 @@ export type CapturaAR = {
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
   /** Solo con el contorno ya anclado: sus esquinas proyectadas a esta captura (x0, y0, x1, y1… normalizadas). */
   anclas?: number[];
+  /** Punto que el usuario marcó manteniendo presionado, visto en esta captura: [x, y] normalizado. */
+  semilla?: number[];
 };
 
 export type ResultadoFijar = {
@@ -57,6 +59,26 @@ export type VistaARRef = {
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
   fijar(id: number, esquinas: number[], registration: number[], volumes: number[][]): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
+  /**
+   * Escaneo: suma lo que el modelo vio en la captura `id`. `mascara`: 88×88 caracteres '0'/'1' sobre el recorte
+   * (rx, ry, lado). Devuelve el mapa acumulado del vano (88×88, 0-100) sobre el plano del vano en el mundo.
+   */
+  acumular(id: number, mascara: string, rx: number, ry: number, lado: number): Promise<ResultadoEscaneo>;
+  /**
+   * Deja como vista previa (pegada al mundo) el contorno del escaneo, dado en coordenadas de su mapa, y lo devuelve
+   * proyectado a la captura `id` (x0, y0, x1, y1…; puede salirse de 0..1). Lista vacía si no se pudo.
+   */
+  contornoEscaneo(id: number, esquinas: number[]): Promise<number[]>;
+  reiniciarEscaneo(): Promise<void>;
+  /** «Mantener presionado»: guarda el punto del mundo que hay en (x, y) de la vista, en píxeles. false si no se pudo medir. */
+  sembrar(x: number, y: number): Promise<boolean>;
+};
+
+export type ResultadoEscaneo = {
+  ok: boolean; // el cuadro sirvió (había profundidad y vano)
+  vistas: number; // cuadros acumulados
+  mapa?: number[]; // 88×88, fila por fila
+  semilla?: number[]; // el punto marcado por el usuario, en coordenadas del mapa (0..1)
 };
 
 export type VistaARProps = ViewProps & {

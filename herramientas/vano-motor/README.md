@@ -65,6 +65,39 @@ seguimiento, profundidad y anclaje funcionan, ~500 ms por análisis. **El anclaj
 calce aún no se probaron en un teléfono; tampoco nada sobre el Outback real.** La matemática del plano se verificó
 con datos sintéticos.
 
+## Prueba sobre el Outback real y escaneo (21-nov-2026)
+
+Primera prueba sobre el auto (Outback 2016 3.6R), con grabaciones de pantalla y cuatro videos del vano.
+
+**Qué se midió** (23 cuadros de esos videos y un banco de pruebas que corre el modelo real y la lógica de la app
+sobre las secuencias):
+
+- El modelo **sí reconoce el vano real**: lo marca en los 23 cuadros y en el 100 % de los cuadros de las cuatro
+  secuencias. Por eso no se reentrenó con estos videos: el problema no era el modelo.
+- Desde la distancia real de uso, en **ningún cuadro el vano cabe completo** (0 de 82). La app exigía verlo completo
+  para fijarlo solo, así que no lo fijaba y pedía «aléjate».
+- El zoom automático **oscilaba** con vanos anchos y bajos (el vano visto de frente es una franja): recortaba por
+  área, cortaba la franja por los lados y descartaba la detección. En pantalla se veía «Buscando» con 94 % de
+  confianza. Corregido: si el recorte actual ya da una detección válida, no se toca. En secuencias con el vano chico
+  pasó de 21/24 a 24/24 cuadros válidos.
+- El anclaje con ARCore funcionó sobre el auto: 4.430 puntos de profundidad, superficie a 4° de la horizontal.
+
+**Escaneo** (`Escaneo.kt`, `EscanerAR.tsx`). Cada cuadro con vano y profundidad se suma a un mapa del vano en el
+mundo: sus puntos de profundidad, ubicados con la pose del teléfono, se proyectan sobre el plano del vano (fijado con
+el primer cuadro) y votan «vano / no vano» en una grilla de 88×88 celdas (3,2 m de lado). Lo que queda a más de 60 cm
+del plano (el piso) no entra. Del mapa sale el contorno con el mismo código de siempre (`poligonoVano`), que se
+muestra **pegado al mundo** mientras se escanea. Se fija solo cuando hay ≥ 5 vistas, el área del contorno varía menos
+de 8 % en tres análisis y, como control cruzado, coincide ≥ 50 % con lo que el modelo ve en el cuadro actual
+(«acuerdo» en debug). Así el vano se arma completo aunque nunca quepa entero en la imagen.
+
+**Mantener presionado sobre el motor.** Guarda el punto del mundo que hay bajo el dedo. La búsqueda con zoom se centra
+ahí y, si hay varias zonas candidatas (en el cuadro o en el mapa del escaneo), se elige la que contiene ese punto.
+La app lo sugiere cuando menos de la mitad de los análisis encuentra el vano. **No ubica el mapa de piezas por sí
+solo**: el catálogo no tiene medidas reales del vano, así que sin contorno no hay escala ni giro.
+
+**Sin probar en un teléfono:** el escaneo, el mantener presionado y la corrección del zoom. La geometría de la app
+tiene pruebas (`probar-vano.ts`); la parte nativa del escaneo solo se verificó compilando.
+
 ## Datos
 
 - **34 fotos de Wikimedia Commons** con capó abierto, anotadas a mano (`poligonos.json`, coordenadas 0-10 sobre el

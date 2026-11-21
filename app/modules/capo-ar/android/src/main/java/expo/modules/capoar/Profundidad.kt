@@ -30,6 +30,18 @@ internal class Profundidad(
     return Pair(tu * w, tv * h)
   }
 
+  /** De un píxel de este mapa a coordenadas normalizadas de la imagen del sensor (inversa de [aPixel]). */
+  fun aImagen(x: Float, y: Float): Pair<Float, Float> {
+    val a11 = aTextura[2] - aTextura[0]
+    val a12 = aTextura[4] - aTextura[0]
+    val a21 = aTextura[3] - aTextura[1]
+    val a22 = aTextura[5] - aTextura[1]
+    val det = a11 * a22 - a12 * a21
+    val du = x / w - aTextura[0]
+    val dv = y / h - aTextura[1]
+    return Pair((a22 * du - a12 * dv) / det, (-a21 * du + a11 * dv) / det)
+  }
+
   /**
    * Rayo de la cámara por el píxel (x, y), con z = -1 (la cámara mira hacia -Z, +X derecha, +Y arriba).
    * Multiplicado por la profundidad (que ARCore entrega a lo largo del eje óptico) da el punto 3D.
@@ -168,7 +180,7 @@ internal object AnclajePorProfundidad {
   }
 
   /** Plano dominante por RANSAC y reajuste por mínimos cuadrados sobre los puntos que lo apoyan. */
-  private fun ajustarPlano(pts: List<FloatArray>, umbral: Float): PlanoAjustado? {
+  fun ajustarPlano(pts: List<FloatArray>, umbral: Float): PlanoAjustado? {
     val azar = Random(7)
     var mejor: FloatArray? = null
     var mejorD = 0f
