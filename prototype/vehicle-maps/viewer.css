@@ -1,0 +1,48 @@
+:root {
+  color-scheme: light;
+  font: 16px/1.45 system-ui, sans-serif;
+  color: #172620;
+  background: #edf2ee;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(74rem, 100%); margin: auto; padding: 2rem clamp(1rem, 4vw, 2.5rem); }
+header { margin-bottom: 1.2rem; }
+h1, h2, h3, p { margin: 0 0 .75rem; }
+h1 { font-size: clamp(2rem, 6vw, 3.4rem); line-height: 1; letter-spacing: -.055em; }
+.brand, .variant { color: #36594a; font-weight: 700; }
+label { display: block; font-size: .85rem; font-weight: 700; margin: 1.2rem 0 .25rem; }
+button, select { font: inherit; color: inherit; }
+select {
+  max-width: 100%;
+  min-height: 2.7rem;
+  padding: .35rem .6rem;
+  background: white;
+  border: 1px solid #9ab1a4;
+  border-radius: .4rem;
+}
+button {
+  min-height: 2.65rem;
+  padding: .4rem .65rem;
+  background: white;
+  border: 1px solid #a7bcb0;
+  border-radius: .4rem;
+  cursor: pointer;
+}
+button[aria-pressed="true"] { background: #174d39; border-color: #174d39; color: white; }
+:focus-visible { outline: 3px solid #a85517; outline-offset: 2px; }
+a { color: #125137; text-decoration-thickness: .1em; text-underline-offset: .17em; }
+.layout { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(16rem, 1fr); gap: 1rem; align-items: start; }
+.card { border: 1px solid #c9d6cf; border-radius: .75rem; background: white; overflow: hidden; }
+canvas { display: block; width: 100%; aspect-ratio: 1.55; background: #132923; touch-action: none; cursor: grab; }
+canvas[data-pickable] { cursor: pointer; }
+canvas:active { cursor: grabbing; }
+.controls { display: flex; flex-wrap: wrap; gap: .4rem; padding: .75rem 1rem; }
+.parts { padding-top: 0; }
+.detail { padding: 1rem; }
+.selection { border-block: 1px solid #d6e2db; padding: 1rem 0; margin: 1rem 0; }
+.selection p:last-child, .sources { margin-bottom: 0; }
+.sources a { display: block; margin-top: .5rem; }
+.notice { font-size: .875rem; margin-top: 1rem; }
+[hidden] { display: none !important; }
+@media (max-width: 50rem) { .layout { grid-template-columns: 1fr; } }
