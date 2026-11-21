@@ -9,6 +9,8 @@ Una pantalla «Preguntar al manual» en el APK. El conductor escribe la falla y 
 
 ## Arquitectura
 
+Diagrama: [`docs/arquitectura/chat-manual.html`](../../arquitectura/chat-manual.html) (Archify, se abre en el navegador).
+
 | Pieza | Decisión | Alternativa descartada |
 |---|---|---|
 | Dónde corre el bucle | Servicio `api` en el `docker-compose.yml` de `dev`. Traefik manda `Host(...) && PathPrefix(/api)` al contenedor | Todo en el APK: la key quedaba dentro de la app |
