@@ -1,8 +1,0 @@
-[
-  { "caja": "cabina", "numero": 6, "amperaje": 20, "circuito": "P/W R.LH", "pieza_id": "fusible-cabina-6", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null },
-  { "caja": "cabina", "numero": 11, "amperaje": 30, "circuito": "P/W MAIN1", "pieza_id": "fusible-cabina-11", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null },
-  { "caja": "cabina", "numero": 16, "amperaje": 20, "circuito": "P/W R.RH", "pieza_id": "fusible-cabina-16", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null },
-  { "caja": "cabina", "numero": 21, "amperaje": 20, "circuito": "P/W PASS1", "pieza_id": "fusible-cabina-21", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null },
-  { "caja": "cabina", "numero": 24, "amperaje": 20, "circuito": "P/W MAIN2", "pieza_id": "fusible-cabina-24", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null },
-  { "caja": "cabina", "numero": 29, "amperaje": 20, "circuito": "P/W PASS2", "pieza_id": "fusible-cabina-29", "fuente": "autogenius.info (tercero, por verificar en el auto)", "pagina": null }
-]
