@@ -31,17 +31,22 @@ function errorResult(toolUseId: string, text: string): ToolResultBlockParam {
   return { type: "tool_result", tool_use_id: toolUseId, content: [{ type: "text", text }], is_error: true };
 }
 
-async function runTool(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolResultBlockParam> {
+interface ToolRun {
+  result: ToolResultBlockParam;
+  events: ChatEvent[];
+}
+
+async function runTool(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolRun> {
   const tool = tools[use.name];
-  if (!tool) return errorResult(use.id, `Herramienta desconocida: ${use.name}`);
+  if (!tool) return { result: errorResult(use.id, `Herramienta desconocida: ${use.name}`), events: [] };
   try {
     const r = await tool.run(use.input);
     const result: ToolResultBlockParam = { type: "tool_result", tool_use_id: use.id, content: r.content };
     if (r.is_error) result.is_error = true;
-    return result;
+    return { result, events: r.events ?? [] };
   } catch (e) {
     console.error(e);
-    return errorResult(use.id, "Error al ejecutar la herramienta.");
+    return { result: errorResult(use.id, "Error al ejecutar la herramienta."), events: [] };
   }
 }
 
@@ -107,8 +112,9 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
         return;
       }
 
-      const results = await Promise.all(uses.map((u) => runTool(tools, u)));
-      const user: MessageParam = { role: "user", content: results };
+      const runs = await Promise.all(uses.map((u) => runTool(tools, u)));
+      for (const r of runs) yield* r.events;
+      const user: MessageParam = { role: "user", content: runs.map((r) => r.result) };
       history.push(user);
       fresh.push(user);
     }

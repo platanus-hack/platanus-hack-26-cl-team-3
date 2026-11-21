@@ -14,13 +14,13 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | # | Paso de la experiencia | Estado | Hoy | Lo cierra |
 |---|---|---|---|---|
 | 1 | Cuentas la falla | Listo | Chat por texto en el APK, en streaming y con historial. Sin voz | I |
-| 2 | Responde con cita | A medias | Solo 6 fusibles de la cabina, de terceros y sin página. El manual no está indexado | G, A |
-| 3 | Abre la cámara en la pieza | Falta | `show_in_camera` y el evento `ar` están diseñados, no escritos | D |
+| 2 | Responde con cita | A medias | 6 fusibles de la cabina (de terceros, sin página) y las fichas de las 9 piezas del vano, con páginas sin contrastar. El manual no está indexado | G, A |
+| 3 | Abre la cámara en la pieza | Hecho, sin probar en el teléfono | El chat muestra «Abrir cámara: <pieza>» y el escáner abre con esa pieza elegida (fase D). No se probó con el modelo real ni en un APK | A |
 | 4 | Encuentra el vano | Listo | En los videos del Outback real lo marca en todos los cuadros | — |
 | 5 | Lo ancla en 3D | Hecho, sin probar en el teléfono | El anclaje funcionó sobre el auto. El escaneo por varias vistas, que arma el vano cuando no cabe en el cuadro, solo se verificó compilando | A |
 | 6 | Ubica cada pieza | A medias | Plantilla del catálogo más un ajuste por apariencia que corre en el teléfono, solo para el Outback (PR #21). Sin error medido en cm sobre el auto (#17) | A, E |
 | 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. No oscurece el resto ni sigue el contorno real | B, C, F |
-| 8 | Guía el paso y vuelve al chat | Falta | No hay instrucción sobre la cámara ni procedimientos por pasos | D, G |
+| 8 | Guía el paso y vuelve al chat | A medias | La cámara muestra la instrucción y «Volver al chat», y el chat ofrece «Listo, ¿qué sigue?». Los procedimientos por pasos no existen | G |
 
 Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
 
@@ -88,7 +88,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - Grabar el mismo pedido en Gemini Live, moviéndose alrededor del auto.
 - **Listo cuando:** hay un error en cm por pieza y un video del anclaje en el auto.
 
-**D · Chat → cámara** (fase 2 del chat) — parte hoy.
+**D · Chat → cámara** (fase 2 del chat) — hecha; spec en [`specs/chat-manual/fase-2.md`](specs/chat-manual/fase-2.md). Falta probarla con el modelo real y en un APK.
 - Herramienta `show_in_camera` y evento `ar`; tarjeta «Abrir cámara»; la cámara abre con la pieza elegida, la instrucción arriba y «Volver al chat»; respuestas rápidas al volver.
 - **Zona:** `api/src/tools/`, `app/src/chat/`, `ask.tsx` y los parámetros de `escanear.tsx`.
 - **Listo cuando:** la demo corre de punta a punta sin tocar el menú.

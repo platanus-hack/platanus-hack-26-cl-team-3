@@ -6,7 +6,7 @@
 > - **App** (`app/`, Expo + React Native + expo-router): menú principal, aviso obligatorio y selección de vehículo (8 modelos).
 > - **Escáner:** en el teléfono detecta el **contorno del vano del motor**, con sus esquinas y un modo debug (CLIPSeg con decodificador propio). Ver `herramientas/vano-motor/`. El contorno queda **anclado al auto con ARCore**: se reconoce una vez y queda fijo al mover el teléfono, con un botón Recalibrar.
 > - **Piezas en AR:** sobre el vano anclado se proyectan las **piezas del auto elegido** (`app/src/engine-maps/`). Falta calibrarlas en el auto real (#17).
-> - **Chat «Preguntar al manual»** (`api/` + pantalla `ask`): responde con citas a partir de la tabla de fusibles. Ver la sección «Chat».
+> - **Chat «Preguntar al manual»** (`api/` + pantalla `ask`): responde con citas a partir de la tabla de fusibles y de las fichas de las piezas del vano, y abre la cámara en la pieza que toca revisar. Ver la sección «Chat».
 > - **PWA** (`web/`): usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
 >
 > **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk` (la primera vez arma el modelo del vano: ~1 GB de entorno Python en `~/.cache` y ~600 MB de pesos). Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
@@ -148,7 +148,7 @@ Es la parte más incierta. Evidencia disponible:
 2. **Capa de datos y asistente con citas** — manual del Outback → fragmentos con procedencia → preguntas en lenguaje natural. *(Independiente de AR; paralelizable desde el día 1.)* **Estado:** el chat funciona con la tabla de fusibles; falta indexar el manual.
 3. **Fotos y medidas del capó del Outback** + modelos 3D simples de las 5 piezas ubicados según fotos/manual. **Estado:** hasta 9 piezas por auto, trazadas sobre fotos de referencia; faltan las medidas en el auto.
 4. **Luces del tablero** — fotos propias del tablero del Outback + clasificador/modelo; significado desde el manual. **Estado:** sin empezar.
-5. **Integración** — la pregunta del usuario dispara la guía y la AR resalta la pieza. **Estado:** sin empezar (es la fase 2 del chat).
+5. **Integración** — la pregunta del usuario dispara la guía y la AR resalta la pieza. **Estado:** el chat abre la cámara en la pieza (fase 2 del chat); falta probarlo en el teléfono.
 
 ## 9. Reglas del proyecto (para humanos y agentes)
 

@@ -1,13 +1,33 @@
 package expo.modules.capoar
 
+import android.view.View
+import android.view.ViewGroup
+import androidx.camera.view.PreviewView
 import com.google.ar.core.ArCoreApk
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import expo.modules.kotlin.Promise
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.util.Collections
 import java.util.WeakHashMap
 
 class CapoArModule : Module() {
+  private val plateReader = lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
+  private var closed = false
+
+  private fun findCameraPreview(view: View): PreviewView? {
+    if (view is PreviewView) return view
+    if (view is ViewGroup) {
+      for (index in 0 until view.childCount) {
+        findCameraPreview(view.getChildAt(index))?.let { return it }
+      }
+    }
+    return null
+  }
+
   companion object {
     /** Vistas AR vivas, para pausar/reanudar ARCore cuando la app pasa a segundo plano. */
     val vistas: MutableSet<CapoArView> = Collections.newSetFromMap(WeakHashMap())
@@ -15,6 +35,26 @@ class CapoArModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("CapoAr")
+
+    AsyncFunction("readPlatePreview") { cameraContainer: View, promise: Promise ->
+      val preview = requireNotNull(findCameraPreview(cameraContainer)) { "Camera preview is unavailable" }
+      val frame = preview.bitmap
+      if (frame == null) {
+        promise.resolve(emptyList<String>())
+        return@AsyncFunction
+      }
+      val image = InputImage.fromBitmap(frame, 0)
+      val task = synchronized(plateReader) {
+        check(!closed) { "Plate reader module was destroyed" }
+        plateReader.value.process(image)
+      }
+      task
+        .addOnSuccessListener { text ->
+          promise.resolve(text.textBlocks.flatMap { block -> block.lines.map { it.text } })
+        }
+        .addOnFailureListener { error -> promise.reject("ERR_PLATE_OCR", error.message, error) }
+        .addOnCompleteListener { frame.recycle() }
+    }.runOnQueue(Queues.MAIN)
 
     /**
      * ¿El teléfono soporta ARCore? Devuelve el nombre de ArCoreApk.Availability: SUPPORTED_INSTALLED,
@@ -25,6 +65,13 @@ class CapoArModule : Module() {
       val ctx = appContext.reactContext
       if (ctx == null) { promise.resolve("UNKNOWN_ERROR"); return@AsyncFunction }
       promise.resolve(ArCoreApk.getInstance().checkAvailability(ctx).name)
+    }
+
+    OnDestroy {
+      synchronized(plateReader) {
+        closed = true
+        if (plateReader.isInitialized()) plateReader.value.close()
+      }
     }
 
     OnActivityEntersForeground { vistas.toList().forEach { it.reanudar() } }
