@@ -49,10 +49,13 @@ export function useScannerControls(hasError: boolean) {
   return { mode, setMode, hasError, debug: diagnostics && mode !== 'hidden', toggleDebug: () => setDiagnostics(value => !value) };
 }
 
-export function ScannerControls({ controls, status, children }: {
+export function ScannerControls({ controls, status, children, top, captions, step }: {
   controls: ReturnType<typeof useScannerControls>;
   status: string;
   children: ReactNode;
+  top?: ReactNode;
+  captions?: ReactNode;
+  step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
   const { mode, setMode, debug, toggleDebug, hasError } = controls;
@@ -66,6 +69,7 @@ export function ScannerControls({ controls, status, children }: {
     <>
       <View pointerEvents="box-none" style={[estilos.barra, { paddingTop: insets.top + espacio.s }]}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
+        {top && <View pointerEvents="box-none" style={estilos.barraCentro}>{top}</View>}
         <BotonIcono icono={hidden ? 'eye-off-outline' : 'eye-outline'}
           etiqueta={hidden ? 'Mostrar controles' : 'Ocultar controles'}
           onPress={() => setMode(hidden ? 'compact' : 'hidden')} />
@@ -75,7 +79,7 @@ export function ScannerControls({ controls, status, children }: {
           {expanded && (
             <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
               {vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
-              {instruction && <GuideBanner part={guidePart} instruction={instruction} />}
+              {(step?.instruction ?? instruction) && <GuideBanner part={step?.part ?? guidePart} instruction={step?.instruction ?? instruction ?? ''} />}
               {children}
               <View style={estilos.options}>
                 <Pressable accessibilityRole="switch" accessibilityState={{checked: debug}} onPress={toggleDebug}
@@ -87,6 +91,7 @@ export function ScannerControls({ controls, status, children }: {
               </View>
             </ScrollView>
           )}
+          {!expanded && captions}
           <Pressable accessibilityRole="button" accessibilityState={{expanded}}
             accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
             onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
@@ -188,6 +193,7 @@ export const estilos = StyleSheet.create({
     paddingHorizontal: espacio.l,
     paddingBottom: espacio.s,
   },
+  barraCentro: { flex: 1, alignItems: 'flex-end', paddingHorizontal: espacio.s },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -163,8 +163,9 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
       val distance=e2.dot(q)/det
       if (distance>=0 && distance<nearest) {nearest=distance; part=t.part}
     }
-    for (triangle in triangles) if (triangle.part != animation?.index) intersect(triangle)
     animation?.surface?.forEach(::intersect)
+    if (part != null) return part
+    for (triangle in triangles) if (triangle.part != animation?.index) intersect(triangle)
     return part
   }
 }

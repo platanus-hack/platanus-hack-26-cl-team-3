@@ -4,7 +4,7 @@ import type { ContentBlock, Message, MessageParam, ToolUseBlock } from "@anthrop
 import { runTurn } from "../../src/chat/orchestrator";
 import type { Adapter, AdapterArgs } from "../../src/chat/orchestrator";
 import type { ChatEvent, Profile } from "../../src/chat/contract";
-import type { Tool, ToolRegistry } from "../../src/tools";
+import { tools as realTools, type Tool, type ToolRegistry } from "../../src/tools";
 import { ProviderError } from "../../src/llm/errors";
 
 type Round = { events?: ChatEvent[]; message: Pick<Message, "stop_reason" | "content"> };
@@ -128,6 +128,30 @@ test("4: tool events are emitted after the round tools, in tool order, before th
   );
   const m = (events.at(-1)!.data as unknown as { messages: { content: Record<string, unknown>[] }[] }).messages;
   assert.deepEqual(Object.keys(m[1].content[0]).sort(), ["content", "tool_use_id", "type"]);
+});
+
+test("several show_in_camera calls in one turn come out as ar events in call order", async () => {
+  const show = (id: string, input: Record<string, string>) => ({ type: "tool_use", id, name: "show_in_camera", input }) as ToolUseBlock;
+  const { adapter } = fake([
+    {
+      message: toolMsg(
+        show("s1", { part: "washer", instruction: "Revisa el nivel del sapito.", action: "refill" }),
+        show("s2", { part: "fuses", instruction: "Abre la caja de fusibles.", action: "lift" }),
+      ),
+    },
+    { message: toolMsg(show("s3", { part: "battery", instruction: "Mira los bornes de la batería." })) },
+    { events: [{ event: "text", data: { block: 0, text: "Sigue los pasos." } }], message: endMsg([{ type: "text", text: "Sigue los pasos." } as ContentBlock]) },
+  ]);
+  const events = await collect(runTurn({ messages, profile, adapter, tools: realTools }));
+  assert.deepEqual(events.map((e) => e.event), ["ar", "ar", "ar", "text", "done"]);
+  assert.deepEqual(
+    events.flatMap((e) => (e.event === "ar" ? [e.data] : [])),
+    [
+      { part: "washer", instruction: "Revisa el nivel del sapito.", action: "refill" },
+      { part: "fuses", instruction: "Abre la caja de fusibles.", action: "lift" },
+      { part: "battery", instruction: "Mira los bornes de la batería." },
+    ],
+  );
 });
 
 test("unknown tool produces a tool_result with is_error", async () => {

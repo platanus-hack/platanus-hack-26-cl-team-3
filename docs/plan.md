@@ -20,7 +20,7 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | 5 | Lo ancla en 3D | Hecho, sin probar en el teléfono | El anclaje funcionó sobre el auto. El escaneo por varias vistas, que arma el vano cuando no cabe en el cuadro, solo se verificó compilando | A |
 | 6 | Ubica cada pieza | A medias | Plantilla del catálogo más un ajuste por apariencia que corre en el teléfono, solo para el Outback (PR #21). Sin error medido en cm sobre el auto (#17) | A, E |
 | 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. Una flecha lleva hasta la pieza y avisa al encontrarla (fase C, sin probar en el teléfono). No oscurece el resto ni sigue el contorno real | B, F, A |
-| 8 | Guía el paso y vuelve al chat | A medias | La cámara muestra la instrucción y «Volver al chat», y el chat ofrece «Listo, ¿qué sigue?». Los procedimientos por pasos no existen | G |
+| 8 | Guía el paso y vuelve al chat | Hecho, sin probar en el teléfono | La cámara muestra la respuesta como subtítulos de dos líneas, con contador de pasos. «Listo» avanza de pieza y «No lo encuentro» pide una pista sin salir del video. Los pasos los arma el modelo; los procedimientos del manual siguen sin existir | G, A |
 
 Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
 

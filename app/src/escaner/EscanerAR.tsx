@@ -20,12 +20,15 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
-import { inspectionActions, inspectionLabels, type InspectionAction } from '../engine-maps/inspection';
+import { inspectionActions, inspectionLabels } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
 import { PartGuide, type PartGuideRef } from './PartGuide';
+import { GuideCaptions, useCameraGuide } from './CameraGuide';
+import { StepCounter } from './StepCounter';
+import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton } from '../ui';
 import type { Vehicle } from '../vehicles';
@@ -61,13 +64,14 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart, initialAction }: { vehicle?: Vehicle; initialPart?: PartId; initialAction?: InspectionAction }) {
+export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0 }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -476,14 +480,16 @@ export default function EscanerAR({ vehicle, initialPart, initialAction }: { veh
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
-  const actionPlayed = useRef(false);
+  const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
+  const { current: step, stepKey, play } = cameraGuide;
   useEffect(() => {
-    if (!actionPlayed.current && mapTracking && outbackParts && selected && selected === initialPart && initialAction && ar.current) {
-      actionPlayed.current = true;
-      void ar.current.playPartAction(selected, initialAction).catch(() => setAviso('No se pudo mostrar la acción.'));
+    if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
+      playedStep.current = stepKey;
+      play(step.action);
+      void ar.current.playPartAction(step.part, step.action).catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [mapTracking, outbackParts, selected, initialPart, initialAction]);
+  }, [mapTracking, outbackParts, selected, step, stepKey, play]);
   if (!VistaAR) return null;
   const rastreando = estadoAR?.estado === 'rastreando';
   const detectado = valido && !!vano;
@@ -578,6 +584,7 @@ export default function EscanerAR({ vehicle, initialPart, initialAction }: { veh
                   <Pressable key={action} accessibilityRole="button" style={styles.part}
                     onPress={() => {
                       controls.setMode('compact');
+                      cameraGuide.play(action);
                       void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
                     }}>
                     <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
@@ -706,7 +713,10 @@ export default function EscanerAR({ vehicle, initialPart, initialAction }: { veh
           <Text style={styles.editHint}>{mapTracking ? 'Arrastra o pellizca el mapa' : 'Vuelve a apuntar al motor'}</Text>
           <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
         </View>
-      ) : <ScannerControls controls={controls} status={status}>{panel}</ScannerControls>}
+      ) : (
+        <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
+          captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
+      )}
     </View>
   );
 }
