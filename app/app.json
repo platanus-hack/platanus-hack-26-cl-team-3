@@ -25,7 +25,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Capo AR usa la cámara para reconocer el capó abierto. Las imágenes se analizan en el teléfono.",
+          "cameraPermission": "Capo AR usa la cámara para leer la patente y reconocer el capó abierto. Las imágenes se analizan en el teléfono.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
