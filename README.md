@@ -1,7 +1,9 @@
 # capo-ar — Guía de tu auto en Realidad Aumentada
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
-> Estado: **concepto + plan de MVP** (hackathon). Aún no hay código.
+> Estado: **MVP inicial** (hackathon). La app (`app/`, Expo + React Native) solo abre la cámara con el aviso obligatorio; sin AR todavía.
+>
+> **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk`. Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
 
 ---
 

@@ -1,0 +1,6 @@
+# Config local con token personal del proxy de la hack: NO subir
+.claude/settings.local.json
+
+# APK generados (scripts/compilar-apk.sh)
+dist/
+*.apk
