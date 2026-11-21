@@ -4,8 +4,9 @@ The Android scanner uses Meta's [DINOv2 Small](https://huggingface.co/facebook/d
 under the [Apache 2.0 license](LICENSE.dinov2). The export stores the large weight
 tensors as Float16 and casts them to Float32 for inference. It accepts a normalized
 RGB tensor of shape `1 × 3 × 448 × 672` and returns `1 × 1536 × 384` normalized
-Float32 patch descriptors. The APK bundles the model and the Outback reference
-descriptors for offline use.
+Float32 patch descriptors. Attention processes at most 512 queries at a time
+against all keys and values to reduce the peak size of its score tensors. The APK
+bundles the model and the Outback reference descriptors for offline use.
 
 ## Prepare the model
 

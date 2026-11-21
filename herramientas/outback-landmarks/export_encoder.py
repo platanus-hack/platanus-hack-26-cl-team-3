@@ -12,6 +12,7 @@ from transformers import Dinov2Model
 IMAGE_HEIGHT = 448
 IMAGE_WIDTH = 672
 TOKEN_SHAPE = (1, 48 * 32, 384)
+QUERY_BLOCK_SIZE = 512
 
 
 class Encoder(torch.nn.Module):
@@ -37,6 +38,57 @@ def store_half_weights(model):
         )
         compressed_count += 1
     return compressed_count
+
+
+def tile_attention(graph):
+    """Bound the score tensor by splitting queries while keeping every key and value."""
+    token_count = 1 + TOKEN_SHAPE[1]
+    blocks = [(start, min(start + QUERY_BLOCK_SIZE, token_count))
+              for start in range(0, token_count, QUERY_BLOCK_SIZE)]
+    boundaries = sorted({boundary for block in blocks for boundary in block})
+    graph.initializer.extend([
+        numpy_helper.from_array(np.array([boundary], dtype=np.int64), name=f"query_boundary_{boundary}")
+        for boundary in boundaries
+    ])
+    graph.initializer.append(numpy_helper.from_array(np.array([2], dtype=np.int64), name="query_axis"))
+
+    original_nodes = {node.name: node for node in graph.node}
+    replaced = {}
+    for layer in range(12):
+        prefix = f"/model/encoder/layer.{layer}/attention/"
+        scores, scale, softmax, context = (original_nodes.get(prefix + name)
+                                           for name in ("MatMul", "Mul", "Softmax", "MatMul_1"))
+        if (any(node is None for node in (scores, scale, softmax, context))
+                or (scores.op_type, scale.op_type, softmax.op_type, context.op_type)
+                != ("MatMul", "Mul", "Softmax", "MatMul")
+                or scores.output[0] not in scale.input or scale.output[0] != softmax.input[0]
+                or softmax.output[0] != context.input[0]
+                or not any(attr.name == "axis" and attr.i == -1 for attr in softmax.attribute)):
+            raise ValueError(f"Unexpected DINOv2 attention graph in layer {layer}")
+        query, key = scores.input
+        factor = next(value for value in scale.input if value != scores.output[0])
+        value = context.input[1]
+        tiled_nodes = []
+        outputs = []
+        for start, end in blocks:
+            name = f"{prefix}query_{start}"
+            sliced, logits, scaled, weights, result = (
+                f"{name}/{suffix}" for suffix in ("slice", "logits", "scaled", "weights", "context")
+            )
+            tiled_nodes.extend([
+                helper.make_node("Slice", [query, f"query_boundary_{start}", f"query_boundary_{end}", "query_axis"], [sliced]),
+                helper.make_node("MatMul", [sliced, key], [logits]),
+                helper.make_node("Mul", [logits, factor], [scaled]),
+                helper.make_node("Softmax", [scaled], [weights], axis=-1),
+                helper.make_node("MatMul", [weights, value], [result]),
+            ])
+            outputs.append(result)
+        tiled_nodes.append(helper.make_node("Concat", outputs, list(context.output), axis=2))
+        replaced.update({scores.name: [], scale.name: [], softmax.name: [], context.name: tiled_nodes})
+
+    nodes = [output for node in graph.node for output in replaced.get(node.name, [node])]
+    graph.ClearField("node")
+    graph.node.extend(nodes)
 
 
 def verify_encoder(path, inputs, expected):
@@ -69,6 +121,7 @@ def export_encoder(source, destination, revision, license_path):
             output_names=["descriptors"], opset_version=17, dynamo=False,
         )
     graph = onnx.load(fp32_path)
+    tile_attention(graph.graph)
     compressed_count = store_half_weights(graph)
     if compressed_count == 0:
         raise ValueError("Encoder contains no Float16 weights")
@@ -76,7 +129,7 @@ def export_encoder(source, destination, revision, license_path):
         "source": f"https://huggingface.co/facebook/dinov2-small/tree/{revision}",
         "license": license_path.read_text(encoding="utf-8"),
         "license_spdx": "Apache-2.0",
-        "modifications": "Fixed-size normalized patch output, ONNX export, Float16 weight storage.",
+        "modifications": "Fixed-size normalized patch output, ONNX export, tiled attention, Float16 weight storage.",
     })
     onnx.checker.check_model(graph)
     onnx.save(graph, destination)
