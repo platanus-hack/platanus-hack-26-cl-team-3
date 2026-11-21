@@ -24,6 +24,7 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
     set(value) { field = value; invalidate() }
 
   private var faces: List<EngineFace> = emptyList()
+  private var modelHitFrame: ModelHitFrame? = null
   private var pressedPart: Int? = null
   private val faceFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
   private val faceEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -43,10 +44,11 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
   private val aroBorde = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3 * densidad; color = Color.rgb(255, 59, 59) }
   private val camino = Path()
 
-  fun actualizar(p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean, engineFaces: List<EngineFace>) {
+  fun actualizar(p: FloatArray?, b: BooleanArray?, estaAnclado: Boolean, engineFaces: List<EngineFace>, model: ModelHitFrame? = null) {
     puntos = p
     bordes = b
     anclado = estaAnclado
+    modelHitFrame = model
     faces = engineFaces
     invalidate()
   }
@@ -91,7 +93,7 @@ internal class CapaPoligono(context: Context, private val onPart: (Int) -> Unit)
     }
   }
   override fun onTouchEvent(event: MotionEvent): Boolean {
-    fun hit() = faces.findLast { it.contains(event.x, event.y) }?.part
+    fun hit() = modelHitFrame?.hit(event.x, event.y) ?: faces.findLast { it.contains(event.x, event.y) }?.part
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         pressedPart = hit()

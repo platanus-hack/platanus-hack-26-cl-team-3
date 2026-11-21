@@ -75,5 +75,13 @@ export function registrationCorners(bay: Vano): number[] {
 
 /** Native rows are height followed by alternating normalized u and v coordinates. */
 export function encodeVolumes(volumes: readonly Volume[]): number[][] {
-  return volumes.map(({ height, outline }) => [height, ...outline.flat()]);
+  return volumes.map(({ height, outline, follows }) => {
+    const row = [height, ...outline.flat()];
+    if (follows) {
+      const source = volumes.findIndex(({ part }) => part === follows);
+      if (source < 0) throw new Error(`Unknown refinement source: ${follows}`);
+      row.push(-1 - source);
+    }
+    return row;
+  });
 }

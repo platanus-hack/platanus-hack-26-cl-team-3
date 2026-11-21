@@ -15,6 +15,53 @@ class EngineRegistrationTest {
   private val corners = listOf(29f to 36f, 131f to 36f, 29f to 124f, 131f to 124f)
 
   @Test
+  fun rigidModelPreservesDepthScaleAndCatalogSelectionFromEitherSide() {
+    val reference = listOf(
+      EnginePoint(-1f, 0f, -1f), EnginePoint(1f, 0f, -1f),
+      EnginePoint(-1f, 0f, 1f), EnginePoint(1f, 0f, 1f),
+    )
+    val observed = reference.map { EnginePoint(it.x * .5f + 2, it.y + 3, it.z * .5f - 4) }
+    val row = listOf(.02, .1, .1, .9, .1, .9, .9, .1, .9)
+    val registration = checkNotNull(EngineMesh.create(observed, listOf(row, row)) { 4f })
+    val base = listOf(EnginePoint(-.4f, 0f, -.4f), EnginePoint(.4f, 0f, -.4f), EnginePoint(0f, 0f, .4f))
+    val layers = listOf(0f, .3f)
+    val triangles = layers.mapIndexed { index, height ->
+      val points = base.map { it + EnginePoint(0f, height, 0f) }
+      ModelTriangle(points[0], points[1], points[2], index, floatArrayOf(1f, 1f, 1f))
+    }
+    val model = OutbackModel(listOf(ModelPart("fuses", base[0]), ModelPart("washer", base[0] + EnginePoint(0f, .3f, 0f))),
+      reference, triangles, listOf(1f, 1f, 1f, 1f))
+    val placed = PlacedModel(model, registration, listOf("washer", "fuses"))
+    assertEquals(.15f, placed.centers.getValue(0).y - placed.centers.getValue(1).y, .0001f)
+    val above = EnginePoint(0f, 1f, 0f)
+    val below = EnginePoint(0f, -1f, 0f)
+    assertEquals(0, placed.pick(above, below))
+    assertEquals(1, placed.pick(below, above))
+    assertNull(placed.pick(above + EnginePoint(2f, 0f, 0f), below + EnginePoint(2f, 0f, 0f)))
+  }
+
+  @Test
+  fun attachmentFollowsObservedFaceEvenWhenListedBeforeIt() {
+    val corners = listOf(
+      EnginePoint(0f, 0f, -1f), EnginePoint(1f, 0f, -1f),
+      EnginePoint(0f, 1f, -1f), EnginePoint(1f, 1f, -1f),
+    )
+    val outline = listOf(.03, .2, .2, .5, .2, .5, .5, .2, .5)
+    val rows = listOf(outline + -2.0, outline, outline)
+    fun project(mesh: EngineMesh) = mesh.project { EngineScreenPoint(it.x, it.y, 1f) }
+      .filter { !it.side }.associate { it.part to it.points.first().x }
+    val original = project(checkNotNull(EngineMesh.create(corners, rows) { 1f }))
+    val shifted = project(checkNotNull(EngineMesh.create(corners, rows, { part, face ->
+      if (part == 1) face.map { it + EnginePoint(.12f, 0f, 0f) } else null
+    }) { 1f }))
+    for (part in rows.indices) {
+      val expected = if (part == 2) 0f else .12f
+      assertEquals(expected, shifted.getValue(part) - original.getValue(part), .0001f)
+    }
+    assertNull(EngineMesh.create(corners, listOf(outline + -3.0)) { 1f })
+  }
+
+  @Test
   fun expandedScanUsesTheMeasuredTiltBeyondTheImage() {
     val outline = listOf(EnginePoint(-1f, 0f, -1f), EnginePoint(1f, 0f, -2f), EnginePoint(1f, 1f, -2f))
     val result = checkNotNull(scanIntersections(outline, listOf(EnginePoint(-2f, 0f, -1f))))

@@ -1,3 +1,4 @@
+import { outbackVolumes } from './outback-volumes';
 import type { Vehicle } from '../vehicles';
 
 export const parts = {
@@ -10,6 +11,24 @@ export const parts = {
   brake_fluid: ["Depósito de líquido de frenos","Identifica el depósito y consulta en el manual cómo leer sus marcas de nivel."],
   battery: ["Batería","Ubicación de la batería de 12 V."],
   positive: ["Borne positivo","Terminal positivo de la batería."],
+  engine_cover: ["Cubierta del motor", "Cubierta central con el emblema Subaru sobre el motor bóxer de seis cilindros."],
+  intake_snorkel: ["Toma frontal de aire", "Conducto ancho que lleva aire desde el frente del auto hasta la caja del filtro."],
+  intake_hose: ["Manguito de admisión", "Tramo que une la salida de la caja del filtro con la admisión bajo la cubierta."],
+  abs_unit: ["Unidad hidráulica ABS", "Bloque hidráulico y bomba a los que llegan las tuberías rígidas de freno."],
+  left_strut_mount: ["Copela delantera izquierda", "Soporte superior de la suspensión izquierda del vehículo, junto al depósito de frenos."],
+  right_strut_mount: ["Copela delantera derecha", "Soporte superior de la suspensión derecha del vehículo, detrás del módulo ABS."],
+  radiator_cap: ["Tapa de presión del radiador", "Tapa metálica con advertencia junto al depósito de expansión. Ábrela solo con el motor completamente frío."],
+  upper_hose: ["Manguera superior del radiador", "Tramo visible de la manguera gruesa que llega al radiador por delante del motor."],
+  battery_hold_down: ["Abrazadera de la batería", "Barra transversal que sujeta la batería a su bandeja."],
+  hood_latch: ["Cierre del capó", "Mecanismo de enganche situado al centro del travesaño delantero."],
+  radiator_support: ["Cubierta del soporte del radiador", "Cubierta plástica del travesaño delantero, a un lado del cierre del capó."],
+  coolant_cap: ["Tapa del depósito de expansión", "Tapa amarilla del depósito translúcido, junto a la tapa metálica del radiador."],
+  brake_cap: ["Tapa del líquido de frenos", "Tapa amarilla del depósito de frenos, cerca del parabrisas."],
+  filter_outer_clip: ["Broche exterior del filtro de aire", "Cierre metálico de la carcasa del filtro, junto al guardabarros."],
+  filter_inner_clip: ["Broche interior del filtro de aire", "Cierre metálico de la carcasa del filtro más cercano al motor."],
+  negative: ["Borne negativo", "Terminal metálico sin cubierta roja, conectado al cable de masa de la batería."],
+  metal_pulley: ["Polea metálica de accesorios", "Cara metálica visible bajo el borde frontal de la cubierta, detrás de la manguera."],
+  dark_pulley: ["Polea negra de accesorios", "Cara oscura visible bajo la cubierta central, al lado opuesto de la manguera."],
 } as const;
 
 export type PartId = keyof typeof parts;
@@ -19,6 +38,7 @@ export type Volume = {
   part: PartId;
   outline: readonly Point[];
   height: number;
+  follows?: PartId;
 };
 
 export type EngineMap = {
@@ -45,17 +65,7 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
       battery: "Batería de 12 V delante de la caja de fusibles y junto a la boca del limpiaparabrisas. Manual, págs. 11-10 y 11-37.",
       positive: "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
     },
-    volumes: [
-      { part: 'fuses', outline: [[0.797,0.255],[0.928,0.245],[0.963,0.345],[0.933,0.398],[0.791,0.338]], height: 0.066 },
-      { part: 'washer', outline: [[0.949,0.542],[0.966,0.508],[0.987,0.508],[0.999,0.54],[0.994,0.586],[0.976,0.6],[0.957,0.576]], height: 0.055 },
-      { part: 'dipstick', outline: [[0.704,0.639],[0.719,0.63],[0.734,0.641],[0.738,0.677],[0.722,0.689],[0.707,0.681]], height: 0.026 },
-      { part: 'coolant', outline: [[0.719,0.71],[0.742,0.7],[0.798,0.718],[0.822,0.777],[0.803,0.816],[0.743,0.808],[0.719,0.776]], height: 0.055 },
-      { part: 'air_filter', outline: [[0.07,0.416],[0.162,0.409],[0.202,0.448],[0.177,0.555],[0.071,0.559],[0.043,0.517]], height: 0.075 },
-      { part: 'oil_cap', outline: [[0.75,0.629],[0.769,0.622],[0.792,0.635],[0.805,0.655],[0.795,0.683],[0.774,0.695],[0.753,0.681],[0.742,0.658]], height: 0.028 },
-      { part: 'brake_fluid', outline: [[0.709,0.119],[0.73,0.105],[0.764,0.117],[0.78,0.151],[0.774,0.187],[0.754,0.205],[0.725,0.193],[0.709,0.166]], height: 0.045 },
-      { part: 'battery', outline: [[0.821,0.487],[0.918,0.449],[0.957,0.517],[0.959,0.676],[0.922,0.716],[0.829,0.687],[0.812,0.624]], height: 0.078 },
-      { part: 'positive', outline: [[0.836,0.402],[0.866,0.389],[0.886,0.418],[0.891,0.46],[0.871,0.484],[0.842,0.472],[0.829,0.441]], height: 0.046 },
-    ],
+    volumes: outbackVolumes,
   },
   onix: {
     referenceVariant: "LTZ · 1.0 turbo · Brasil",
