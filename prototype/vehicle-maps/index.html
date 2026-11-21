@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es-CL">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CapoAR · Mapas de motor</title>
+  <link rel="stylesheet" href="viewer.css">
+  <script defer src="vehicles.js"></script>
+  <script defer src="viewer.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="brand">CapoAR</p>
+      <h1>Mapas de motor</h1>
+      <label for="vehicle">Vehículo</label>
+      <select id="vehicle"></select>
+    </header>
+    <div class="layout">
+      <section class="card" aria-label="Mapa giratorio">
+        <canvas id="scene" aria-label="Mapa 3D. Arrastra para girar o selecciona una pieza con los botones de abajo."></canvas>
+        <div class="controls">
+          <button id="angle" type="button">Vista oblicua</button>
+          <button id="top" type="button">Vista superior</button>
+        </div>
+        <div class="controls parts" id="parts" aria-label="Piezas"></div>
+      </section>
+      <section class="card detail">
+        <p class="variant" id="variant"></p>
+        <h2 id="vehicle-title"></h2>
+        <p id="coverage"></p>
+        <div class="selection" aria-live="polite">
+          <h3 id="part-title">Selecciona una pieza</h3>
+          <p id="part-detail">Toca un volumen en el mapa o usa la lista de piezas.</p>
+          <a id="fuses" target="_blank" rel="noopener" hidden>Consultar diagrama de fusibles</a>
+        </div>
+        <p id="note"></p>
+        <p class="sources">
+          <a id="manual" target="_blank" rel="noopener">Manual del propietario</a>
+          <a id="photo-link" target="_blank" rel="noopener" hidden>Ver foto del motor</a>
+          <a id="photo-source" target="_blank" rel="noopener" hidden>Fuente de la foto</a>
+        </p>
+      </section>
+    </div>
+    <p class="notice">Esta guía es informativa. Confirma siempre con el manual de tu vehículo antes de actuar.</p>
+  </main>
+</body>
+</html>
