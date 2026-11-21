@@ -8,6 +8,7 @@ internal data class EnginePoint(val x: Float, val y: Float, val z: Float) {
   operator fun minus(other: EnginePoint) = EnginePoint(x - other.x, y - other.y, z - other.z)
   operator fun times(scale: Float) = EnginePoint(x * scale, y * scale, z * scale)
   fun length() = sqrt(x * x + y * y + z * z)
+  fun dot(other: EnginePoint) = x * other.x + y * other.y + z * other.z
 
   fun cross(other: EnginePoint) = EnginePoint(
     y * other.z - z * other.y,
@@ -104,12 +105,14 @@ internal class EngineMesh private constructor(
       if (width !in .35f..2.8f || depth !in .15f..2.4f) return null
       val first = (backRight - backLeft).cross(frontLeft - backLeft)
       val second = (frontLeft - frontRight).cross(backRight - frontRight)
+      val firstArea = first.length()
+      val secondArea = second.length()
       // Check both halves so one misplaced corner cannot hide behind their average slope.
-      // World Y follows gravity and the two triangles must wind in the same direction.
-      if (first.y * second.y <= 0f || listOf(first, second).any { normal ->
-        val area = normal.length()
-        area < .01f || abs(normal.y) / area < .55f
-      }) return null
+      // World Y follows gravity. The two triangles must have consistent slopes and winding.
+      if (firstArea < .01f || secondArea < .01f || first.y * second.y <= 0f ||
+        abs(first.y) / firstArea < .55f || abs(second.y) / secondArea < .55f ||
+        first.dot(second) / (firstArea * secondArea) < .65f
+      ) return null
       val origin = (backLeft + backRight + frontLeft + frontRight) * .25f
       val volumes = rows.mapIndexed { part, row ->
         if (row.size < 7 || row.size % 2 != 1 || row.any { !it.isFinite() || it !in 0.0..1.0 }) return null
