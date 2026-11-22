@@ -1,6 +1,7 @@
+import { setAudioModeAsync } from 'expo-audio';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ProveedorAviso, useAviso } from '../aviso';
@@ -9,6 +10,8 @@ import { VehicleSelection } from '../plates/selection';
 import { useReducedMotion } from '../useReducedMotion';
 import { AgentSpeechProvider } from '../chat/AgentSpeech';
 import { color } from '../theme';
+
+if (Platform.OS === 'android') void setAudioModeAsync({ interruptionMode: 'mixWithOthers' }).catch(() => {});
 
 export default function Layout() {
   const reduceMotion = useReducedMotion();
