@@ -23,7 +23,15 @@ export async function handleConversations(
     if (typeof deviceId !== "string" || !UUID.test(deviceId)) return json(res, 400, { error: "Falta x-device-id" });
 
     if (pathname === "/api/conversations") {
-      if (req.method === "GET") return json(res, 200, { conversations: await store.list(deviceId, LIST_LIMIT) });
+      if (req.method === "GET") {
+        const cursor = new URL(req.url!, "http://localhost").searchParams.get("before");
+        const [updated_at, id, extra] = cursor?.split(",") ?? [];
+        if (cursor !== null && (!updated_at || !UUID.test(id ?? "") || extra !== undefined)) return json(res, 400, { error: "Cursor inválido" });
+        const rows = await store.list(deviceId, LIST_LIMIT + 1, cursor ? { updated_at, id } : undefined);
+        const conversations = rows.slice(0, LIST_LIMIT);
+        const last = conversations.at(-1);
+        return json(res, 200, { conversations, next: rows.length > LIST_LIMIT && last ? `${last.updated_at},${last.id}` : null });
+      }
       return json(res, 404, { error: "No encontrado" });
     }
 

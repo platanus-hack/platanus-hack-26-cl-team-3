@@ -28,7 +28,7 @@ export function createServer({
     if (req.method === "GET" && (pathname === "/api/vehicles" || pathname.startsWith("/api/vehicles/"))) {
       return handleVehicleLookup(res, pathname.slice("/api/vehicles/".length), vehicleDatabase);
     }
-    if (req.method === "POST" && pathname === "/api/chat") return void handleChat(req, res, adapter, heartbeatMs, { conversations, runlog });
+    if (req.method === "POST" && (pathname === "/api/chat" || pathname === "/api/chat/turn")) return void handleChat(req, res, adapter, heartbeatMs, { conversations, runlog });
     if (req.method === "POST" && pathname === "/api/locate") return void handleLocate(req, res, locator);
     if (req.method === "POST" && pathname === "/api/transcribe") return void handleTranscribe(req, res, transcriber);
     if (req.method === "POST" && pathname === "/api/transcribe/token") return void handleTranscribeToken(req, res, realtimeToken);

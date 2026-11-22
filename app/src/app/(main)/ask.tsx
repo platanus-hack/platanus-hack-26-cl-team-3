@@ -1,18 +1,18 @@
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cameraRoute } from '../../chat/camera';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
-import { runTurn } from '../../chat/client';
+import { activeTurn } from '../../chat/active-turn';
 import { Dictado } from '../../chat/Dictado';
 import type { AnthropicMessage } from '../../chat/contract';
-import { clear, conversationVehicle, load, save, setConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
+import { clear, current, snapshot, subscribe, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
 import { useVehicleSelection } from '../../plates/selection';
 import { vehicles } from '../../vehicles';
-import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../../chat/turn';
+import { DONE_REPLY, LOST_REPLY, THINKING } from '../../chat/turn';
 import { color, espacio, radio, tipo } from '../../theme';
 import { BotonIcono, Icono, Tarjeta } from '../../ui';
 
@@ -46,29 +46,24 @@ export default function Ask() {
   const busyRef = useRef(false);
   const [citation, setCitation] = useState<ViewCitation | null>(null);
 
-  useEffect(() => {
-    Promise.all([load(), conversationVehicle()]).then(([stored, vehicleId]) => {
-      setMessages((current) => current.length === 0 ? stored : current);
-      setStoredVehicle(vehicleId);
-      setLoaded(true);
-    });
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (openedCamera.current) {
-        openedCamera.current = false;
-        setReplies(true);
-        void load().then(setMessages);
-      }
-      if (openedHistory.current) {
-        openedHistory.current = false;
-        setReplies(false);
-        void load().then(setMessages);
-        void conversationVehicle().then(setStoredVehicle);
-      }
-    }, []),
-  );
+  useFocusEffect(useCallback(() => {
+    let focused = true;
+    setLoaded(false);
+    const refresh = () => {
+      void snapshot().then(state => {
+        if (!focused || !current(state)) return;
+        setMessages(state.messages);
+        setStoredVehicle(state.vehicle);
+        setLoaded(true);
+      }).catch(() => { if (focused) setError('No se pudo leer la conversación.'); });
+    };
+    const unsubscribe = subscribe(refresh);
+    refresh();
+    if (openedCamera.current || openedHistory.current) setReplies(openedCamera.current);
+    openedCamera.current = false;
+    openedHistory.current = false;
+    return () => { focused = false; unsubscribe(); };
+  }, []));
 
   const fresh = messages.length === 0 && question === null;
   const chatVehicleId = fresh ? selected.id : (storedVehicle ?? LEGACY_VEHICLE);
@@ -96,12 +91,7 @@ export default function Ask() {
     const text = (override ?? input).trim();
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
-    const previous = messages;
-    if (previous.length === 0) {
-      await setConversationVehicle(selected.id);
-      setStoredVehicle(selected.id);
-    }
-
+    if (!messages.length) setStoredVehicle(selected.id);
     setInput('');
     setReplies(false);
     setNote(null);
@@ -113,7 +103,7 @@ export default function Ask() {
     setStatus(THINKING);
     setBusy(true);
 
-    const result = await sendTurn(previous, text, runTurn, (progress) => {
+    const result = await activeTurn(text, selected.id, (progress) => {
       setLive(progress.parts);
       setLiveCards(progress.cards);
       setStatus(progress.status);
@@ -123,7 +113,6 @@ export default function Ask() {
       setInput(text);
     } else if ('messages' in result) {
       setMessages(result.messages);
-      void save(result.messages);
       if (result.truncated) setNote('La respuesta se cortó.');
     }
     setQuestion(null);
@@ -132,11 +121,11 @@ export default function Ask() {
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
-  }, [input, loaded, messages, selected.id]);
+  }, [input, loaded, messages.length, selected.id]);
 
   const reset = useCallback(() => {
     setMessages([]);
-    void clear();
+    void clear().catch(() => setError('No se pudo iniciar una nueva conversación.'));
     setStoredVehicle(null);
     setError(null);
     setNote(null);
@@ -224,7 +213,10 @@ export default function Ask() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } })}
+              onPress={() => {
+                openedCamera.current = true;
+                router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } });
+              }}
               disabled={busy || !loaded}
               accessibilityRole="button"
               accessibilityLabel="Hablar con la cámara"

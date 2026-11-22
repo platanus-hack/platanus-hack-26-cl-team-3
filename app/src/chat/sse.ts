@@ -14,6 +14,7 @@ export function toEvent(name: string, data: any): ChatEvent | null {
       return {
         type: 'done',
         messages: data.messages,
+        ...(data.replayed === true ? { replayed: true } : {}),
         ...(data.truncated === true ? { truncated: true } : {}),
         ...(typeof data.conversation_id === 'string' ? { conversationId: data.conversation_id } : {}),
       };

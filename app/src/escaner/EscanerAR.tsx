@@ -99,7 +99,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
-  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
+  const cameraGuide = useCameraGuide(vehicle?.id ?? 'outback', steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);

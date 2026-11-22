@@ -1,3 +1,4 @@
+import { ensureVehicleColumn } from "../db/sqlite";
 import type { DatabaseSync } from "node:sqlite";
 import type { LogCursor, Page, RunLogStore, ToolRunDetail, TurnDetail, TurnLog, TurnSummary } from "./store";
 
@@ -63,6 +64,7 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
     CREATE INDEX IF NOT EXISTS tool_runs_turn ON tool_runs (turn_id);
   `);
 
+  ensureVehicleColumn(db, "turns");
   const insertTurn = db.prepare(
     `INSERT INTO turns (id, conversation_id, device_id, vehicle_id, created_at, model, effort, mode, prompt_version, context_messages,
        question, answer, fresh, outcome, rounds, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, duration_ms)

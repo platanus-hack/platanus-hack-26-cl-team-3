@@ -48,10 +48,17 @@ export async function listConversations(): Promise<ConversationSummary[] | null>
   try {
     const device = await deviceId();
     if (!device) return null;
-    const res = await request('/api/conversations', { device });
-    if (!res.ok) return null;
-    const { conversations } = (await res.json()) as { conversations?: ConversationSummary[] };
-    return Array.isArray(conversations) ? conversations : null;
+    const items: ConversationSummary[] = [];
+    let cursor: string | null = null;
+    do {
+      const res = await request('/api/conversations' + (cursor ? `?before=${encodeURIComponent(cursor)}` : ''), { device });
+      if (!res.ok) return null;
+      const page = await res.json() as { conversations?: ConversationSummary[]; next?: string };
+      if (!Array.isArray(page.conversations)) return null;
+      items.push(...page.conversations);
+      cursor = page.next ?? null;
+    } while (cursor);
+    return items;
   } catch {
     return null;
   }

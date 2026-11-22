@@ -98,3 +98,18 @@ test("GET con :id inválido o inexistente da 404", async () => {
   assert.equal((await call("GET", "/api/conversations/abc", dev)).status, 404);
   assert.equal((await call("GET", `/api/conversations/${crypto.randomUUID()}`, dev)).status, 404);
 });
+
+test("cursor pages include older conversations with stable ordering at equal timestamps", async () => {
+  const dev = await device();
+  const ids = await Promise.all(Array.from({ length: 115 }, (_, i) => seed(dev, String(i))));
+  const all = [];
+  let next;
+  do {
+    const response = await call("GET", "/api/conversations" + (next ? `?before=${encodeURIComponent(next)}` : ""), dev);
+    const page = await response.json();
+    assert.ok(page.conversations.length <= 50);
+    all.push(...page.conversations.map((row: { id: string }) => row.id));
+    next = page.next;
+  } while (next);
+  assert.deepEqual(all.sort(), ids.sort());
+});

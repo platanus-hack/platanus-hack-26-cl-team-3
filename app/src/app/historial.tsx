@@ -24,11 +24,13 @@ export default function PantallaHistorial() {
   const abrir = async (id: string) => {
     if (abriendo) return;
     setAbriendo(true);
-    const mensajes = await open(id);
-    if (mensajes) router.back();
-    else {
-      setAbriendo(false);
+    try {
+      if (await open(id)) router.back();
+      else setFallo(true);
+    } catch {
       setFallo(true);
+    } finally {
+      setAbriendo(false);
     }
   };
 

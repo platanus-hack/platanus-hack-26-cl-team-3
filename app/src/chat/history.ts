@@ -1,11 +1,8 @@
+import { createHistory } from './session';
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
 import { fetchConversation, listConversations } from './remote-history';
-
-const KEY = 'capo-ar:chat-v1';
-const ID_KEY = 'capo-ar:chat-id:v1';
-const VEHICLE_KEY = 'capo-ar:chat-vehicle:v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
@@ -21,107 +18,49 @@ export function toCard(part: unknown, instruction: unknown, action?: unknown): V
   return { ...(action ? { action } : {}), part: part as PartId, instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
 }
 
-const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
-
-export async function load(): Promise<AnthropicMessage[]> {
-  try {
-    const raw = await (await storage()).getItem(KEY);
-    const v = raw ? JSON.parse(raw) : [];
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
+async function historyFile(slot: string) {
+  if (slot !== '1' && slot !== '2') throw new Error('Invalid history file');
+  const { File, Paths } = await import('expo-file-system');
+  return new File(Paths.document, `chat-history-${slot}.json`);
 }
 
-let generation = 0;
-
-export async function save(messages: AnthropicMessage[]): Promise<void> {
-  try {
-    await (await storage()).setItem(KEY, JSON.stringify(messages));
-  } catch {
-  }
-}
-
-export async function clear(): Promise<void> {
-  generation++;
-  try {
-    const store = await storage();
-    await store.removeItem(KEY);
-    await store.removeItem(ID_KEY);
-    await store.removeItem(VEHICLE_KEY);
-  } catch {
-  }
-}
-
-export async function open(id: string): Promise<AnthropicMessage[] | null> {
-  const conversation = await fetchConversation(id);
-  if (!conversation) return null;
-  const { messages, vehicle_id } = conversation;
-  generation++;
-  try {
-    const store = await storage();
-    await store.setItem(KEY, JSON.stringify(messages));
-    await store.setItem(ID_KEY, id);
-    if (vehicle_id) await store.setItem(VEHICLE_KEY, vehicle_id);
-    else await store.removeItem(VEHICLE_KEY);
-  } catch {
-  }
-  return messages;
-}
-
-export async function conversationVehicle(): Promise<string | null> {
-  try {
-    return await (await storage()).getItem(VEHICLE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export async function setConversationVehicle(id: string): Promise<void> {
-  try {
-    await (await storage()).setItem(VEHICLE_KEY, id);
-  } catch {
-  }
-}
-
-export async function currentConversation(): Promise<{ id: string | null; generation: number }> {
-  const at = generation;
-  try {
-    return { id: await (await storage()).getItem(ID_KEY), generation: at };
-  } catch {
-    return { id: null, generation: at };
-  }
-}
-
-export async function adoptConversation(id: string, at: number): Promise<void> {
-  if (at !== generation) return;
-  try {
-    await (await storage()).setItem(ID_KEY, id);
-  } catch {
-  }
-}
-
+const history = createHistory(
+  async () => (await import('@react-native-async-storage/async-storage')).default,
+  async () => (await import('expo')).uuid.v4(),
+  fetchConversation,
+  process.env.EXPO_OS === 'web' ? undefined : {
+    read: async slot => (await historyFile(slot)).text(),
+    write: async (slot, raw) => (await historyFile(slot)).write(raw),
+  },
+);
+export const { subscribe, current, snapshot, commit, clear, open } = history;
 export const list = listConversations;
 
 export function toView(messages: AnthropicMessage[]): Bubble[] {
   const out: Bubble[] = [];
-  for (const m of messages) {
+  for (const [index, m] of messages.entries()) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
     if (m.role === 'user') {
-      if (typeof m.content === 'string') out.push({ role: 'user', parts: [{ text: m.content, citations: [] }], cards: [] });
+      const text = typeof m.content === 'string' ? m.content : Array.isArray(m.content)
+        ? m.content.flatMap(b => b?.type === 'text' && typeof b.text === 'string' ? [b.text] : []).join('\n') : '';
+      if (text) out.push({ role: 'user', parts: [{ text, citations: [] }], cards: [] });
       continue;
     }
     const parts: ViewPart[] = [];
     const cards: ViewCard[] = [];
     if (Array.isArray(m.content)) {
       for (const b of m.content as any[]) {
+        if (!b) continue;
         if (b.type === 'tool_use' && b.name === 'show_in_camera') {
           const card = toCard(b.input?.part, b.input?.instruction, b.input?.action);
-          if (card) cards.push(card);
+          const next = messages[index + 1];
+          if (card && typeof b.id === 'string' && next?.role === 'user' && Array.isArray(next.content) &&
+            next.content.some(r => r?.type === 'tool_result' && r.tool_use_id === b.id && !r.is_error)) cards.push(card);
           continue;
         }
-        if (b.type !== 'text') continue;
-        const citations: ViewCitation[] = (b.citations ?? [])
-          .filter((c: any) => c.type === 'search_result_location')
+        if (b.type !== 'text' || typeof b.text !== 'string') continue;
+        const citations: ViewCitation[] = (Array.isArray(b.citations) ? b.citations : [])
+          .filter((c: any) => c?.type === 'search_result_location' && typeof c.source === 'string' && typeof c.cited_text === 'string' && (c.title == null || typeof c.title === 'string'))
           .map((c: any) => ({ title: c.title ?? '', source: c.source, cited_text: c.cited_text }));
         parts.push({ text: b.text, citations });
       }

@@ -5,9 +5,12 @@ const MAX_TITLE = 60;
 
 export function stripImages(messages: MessageParam[]): MessageParam[] {
   return messages.map((m) => {
-    if (m.role !== "user" || !Array.isArray(m.content)) return m;
-    if (!m.content.some((b) => b.type === "image")) return m;
-    return { ...m, content: m.content.map((b) => (b.type === "image" ? { ...PHOTO_PLACEHOLDER } : b)) };
+    if (m.role === "system" || !Array.isArray(m.content)) return m;
+    return { ...m, content: m.content.map(block => {
+      if (block.type === "image") return PHOTO_PLACEHOLDER;
+      if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+      return { ...block, content: block.content.map(item => item.type === "image" ? PHOTO_PLACEHOLDER : item) };
+    }) } as MessageParam;
   });
 }
 
