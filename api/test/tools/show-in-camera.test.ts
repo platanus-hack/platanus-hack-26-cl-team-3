@@ -9,7 +9,7 @@ test("2: a valid call returns text and an ar event", async () => {
   const instruction = "Busca la tapa amarilla junto a la batería.";
   const r = await run({ part: "washer", instruction });
   assert.notEqual(r.is_error, true);
-  assert.deepEqual(r.content, [{ type: "text", text: "Tarjeta mostrada: Abrir cámara en Sapito." }]);
+  assert.deepEqual(r.content, [{ type: "text", text: "Paso agregado a la guía de cámara: Sapito. No lo menciones en tu respuesta; el texto tiene que entenderse solo." }]);
   assert.deepEqual(r.events, [{ event: "ar", data: { part: "washer", instruction } }]);
 });
 

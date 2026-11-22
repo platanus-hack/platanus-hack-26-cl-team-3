@@ -42,7 +42,7 @@ async function run(input: unknown): Promise<ToolOutput> {
   }
   const text = instruction.trim().slice(0, MAX_INSTRUCTION);
   return {
-    content: [{ type: "text", text: `Tarjeta mostrada: Abrir cámara en ${row.name}.` }],
+    content: [{ type: "text", text: `Paso agregado a la guía de cámara: ${row.name}. No lo menciones en tu respuesta; el texto tiene que entenderse solo.` }],
     events: [{ event: "ar", data: { part: row.id, instruction: text, ...(action ? { action } : {}) } }],
   };
 }
