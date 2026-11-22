@@ -97,6 +97,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private var texturaAsignada = false
   private var profundidad = false
   private var ultimoEstado = ""
+  private var ultimoGiro: Int? = null // giro de la última captura, para que no salte cerca de la diagonal
 
   // Pedidos desde JS, atendidos en el hilo de OpenGL (donde vive el Frame de ARCore).
   private data class CaptureRequest(val includeMeasurements: Boolean, val promise: Promise)
@@ -653,7 +654,27 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   }
 
   /** Cuánto hay que girar (horario) la imagen del sensor para verla derecha en esta pantalla. */
+  /**
+   * Giro que deja derecha la imagen de la captura. Sale de la gravedad y no de la orientación de la pantalla: la app
+   * está fija en vertical, así que con el teléfono en horizontal la pantalla seguía diciendo «vertical» y el vano le
+   * llegaba girado 90° al detector y al registro de las piezas.
+   */
   private fun gradosImagen(frame: Frame): Int {
+    val pantalla = gradosPantalla(frame)
+    val camara = frame.camera
+    if (camara.trackingState != TrackingState.TRACKING) return pantalla.also { ultimoGiro = it }
+    // Un tramo de 10 cm hacia arriba, un metro delante de la cámara: de mundo a vista y de vista a imagen del sensor.
+    val base = camara.displayOrientedPose.transformPoint(floatArrayOf(0f, 0f, -1f))
+    val project = screenProjector(frame)
+    val a = project(base[0], base[1], base[2]) ?: return ultimoGiro ?: pantalla
+    val b = project(base[0], base[1] + .1f, base[2]) ?: return ultimoGiro ?: pantalla
+    val enImagen = FloatArray(4)
+    frame.transformCoordinates2d(Coordinates2d.VIEW, floatArrayOf(a.x, a.y, b.x, b.y), Coordinates2d.IMAGE_PIXELS, enImagen)
+    return uprightRotation(enImagen[2] - enImagen[0], enImagen[3] - enImagen[1], ultimoGiro ?: pantalla).also { ultimoGiro = it }
+  }
+
+  /** Giro según la orientación de la pantalla: sirve mientras ARCore no entrega la pose. */
+  private fun gradosPantalla(frame: Frame): Int {
     val src = floatArrayOf(0f, 0f, 1f, 0f)
     val dst = FloatArray(4)
     frame.transformCoordinates2d(Coordinates2d.IMAGE_NORMALIZED, src, Coordinates2d.VIEW_NORMALIZED, dst)
