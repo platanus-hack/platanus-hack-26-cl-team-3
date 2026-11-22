@@ -624,7 +624,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val id = ++contador
     val capture = pose?.let { Captura(it, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof) }
-    val matchModel = capture != null && hasDetailedModel
+    val matchModel = capture != null && (outbackParts.isNotEmpty() || (swiftParts.isNotEmpty() && prof != null))
     val matchSwift = swiftParts.isNotEmpty()
     if (capture != null) {
       capturas[id] = capture

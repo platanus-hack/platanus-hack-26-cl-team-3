@@ -178,11 +178,12 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
 
   const sesionActiva = estadoAR?.estado === 'rastreando' || estadoAR?.estado === 'sin-rastreo';
 
+  const swiftDepthUnavailable = !!swiftParts && sesionActiva && estadoAR?.profundidad === false;
   const awaitingVisual = vehicle?.id === 'outback' && anclaje?.mapPlaced && anclaje.metodo !== 'visual' && !anclaje.manual;
 
   // Bucle de detección: solo mientras NO está anclado (después, ARCore sostiene el polígono solo).
   useEffect(() => {
-    if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
+    if (!modeloListo || !sesionActiva || swiftDepthUnavailable || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
     const generation = registrationGeneration.current;
     const initialScan = (outbackParts || swiftParts) && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
     let vivo = true;
@@ -347,7 +348,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       vivo = false;
       releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, swiftParts, targetRevision]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, swiftParts, swiftDepthUnavailable, targetRevision]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
@@ -591,7 +592,10 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     engineHint = 'Vuelve a apuntar al motor';
   } else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
-  else if (swiftParts && !registrationCandidate) status = 'Apunta al depósito de frenos y a la batería. El anclaje requiere profundidad.';
+  else if (swiftDepthUnavailable) {
+    status = 'Profundidad no disponible';
+    engineHint = 'Este dispositivo no admite la profundidad necesaria para anclar el mapa del Swift.';
+  } else if (swiftParts && !registrationCandidate) status = 'Apunta al depósito de frenos y a la batería. El anclaje requiere profundidad.';
   else if ((outbackParts || swiftParts) && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
   else engineHint = 'Apunta la cámara al motor';
@@ -610,6 +614,13 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       <>
         <Encabezado cargando titulo="Preparando la realidad aumentada…" />
         <Detalle>Android pide instalar o actualizar «Servicios de Google Play para RA». Acéptalo y vuelve a la app.</Detalle>
+      </>
+    );
+  } else if (swiftDepthUnavailable) {
+    panel = (
+      <>
+        <Encabezado icono="information-outline" titulo="Profundidad no disponible" />
+        <Detalle>Para ubicar estas piezas del Swift se necesita un teléfono compatible con profundidad ARCore.</Detalle>
       </>
     );
   } else if (!modeloListo || !sesionActiva) {
