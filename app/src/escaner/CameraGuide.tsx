@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FuseLinks } from '../chat/FuseLinks';
+import { fuseGuideFor } from '../fusibles/guides';
 import { runTurn } from '../chat/client';
 import { conversationVehicle, load, save, toView, selectConversationVehicle, type ViewFuse, type ViewCard, type ViewCitation } from '../chat/history';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING, type TurnOptions } from '../chat/turn';
@@ -21,7 +22,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const [caption, setCaption] = useState<Caption>({ text: initialSteps[initialStep]?.instruction ?? '', citations: [], pensando: false });
   const [fuses, setFuses] = useState<ViewFuse[]>([]);
   useEffect(() => {
-    if (vehicleId !== 'outback') return;
+    if (!fuseGuideFor(vehicleId)) return;
     let active = true;
     void withChatTurn(async () => {
       if (((await conversationVehicle()) ?? 'outback') !== vehicleId) return;
@@ -117,7 +118,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const toggleFocus = useCallback((part: PartId) => setFocus((f) => (f === part ? null : part)), []);
 
   return {
-    steps: guide.steps, index: guide.index, current, stepKey: guide.key, fuses, caption, busy, playing, focus, finished, refilling,
+    vehicleId, steps: guide.steps, index: guide.index, current, stepKey: guide.key, fuses, caption, busy, playing, focus, finished, refilling,
     resetCaption, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
@@ -125,7 +126,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGuide> }) {
   const vivo = useVivo();
   const { current, caption, busy, playing, focus, finished, done, lost, clearFocus } = guide;
-  const links = <FuseLinks fuses={guide.fuses} disabled={busy} />;
+  const links = <FuseLinks vehicleId={guide.vehicleId} fuses={guide.fuses} disabled={busy} />;
   if (!current && vivo) return <TarjetaVivo vivo={vivo} caption={caption}>{links}</TarjetaVivo>;
   if (!current) return caption.text || guide.fuses.length ? <LiveCaptions text={caption.text} citations={caption.citations}>{links}</LiveCaptions> : null;
   const botones = (

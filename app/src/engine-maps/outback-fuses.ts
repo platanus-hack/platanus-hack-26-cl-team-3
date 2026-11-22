@@ -1,22 +1,14 @@
+import type { FuseSlot } from '../fusibles/types';
+
 /** 2016 Legacy/Outback North American owner's manual MSA5M1603C, pp. 12-10 to 12-13. */
 export const outbackFuseManualUrl = 'https://techinfo.subaru.com/stis/doc/ownerManual/MSA5M1603CSTIS101515.pdf';
 
-export type FuseBox = 'engine' | 'cabin';
-export type OutbackFuse = {
-  box: FuseBox;
-  number: number;
-  amps: number | null;
-  label: string;
-  description: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+export type FuseBox = 'motor' | 'cabina';
+export type OutbackFuse = FuseSlot & { box: FuseBox };
 
-export const outbackFuseGuide = {
-  engine: { width: 1100, height: 800, page: 531, diagram: 'C00292', pages: '12-12–12-13' },
-  cabin: { width: 1100, height: 800, page: 529, diagram: 'C00247', pages: '12-10–12-11' },
+export const outbackFuseBoxes = {
+  motor: { width: 1100, height: 800, page: 531, diagram: 'C00292', pages: '12-12–12-13' },
+  cabina: { width: 1100, height: 800, page: 529, diagram: 'C00247', pages: '12-10–12-11' },
 } as const;
 
 // One row per numbered position in the manufacturer's table. Coordinates are diagram pixels.
@@ -105,7 +97,7 @@ const cabinEntries: readonly Entry[] = [
 ];
 
 function slots(box: FuseBox, entries: readonly Entry[], pixelWidth: number, pixelHeight: number): OutbackFuse[] {
-  const { width, height } = outbackFuseGuide[box];
+  const { width, height } = outbackFuseBoxes[box];
   return entries.map(([amps, label, description, left, top], i) => ({
     box, number: i + 1, amps, label, description, x: left / width, y: top / height,
     width: pixelWidth / width, height: pixelHeight / height,
@@ -113,8 +105,8 @@ function slots(box: FuseBox, entries: readonly Entry[], pixelWidth: number, pixe
 }
 
 export const outbackFuses: readonly OutbackFuse[] = [
-  ...slots('engine', engineEntries, 46, 83),
-  ...slots('cabin', cabinEntries, 133, 51),
+  ...slots('motor', engineEntries, 46, 83),
+  ...slots('cabina', cabinEntries, 133, 51),
 ];
 
 function normalize(text: string) {

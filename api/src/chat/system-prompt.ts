@@ -7,7 +7,7 @@ básicas de su auto: `;
 const SAFETY = `Seguridad: antes de tocar fusibles o piezas eléctricas, pide apagar el contacto. No digas que algo
 «no tiene peligro» ni que «ahí no hay nada»: solo cuenta lo que dice el manual.`;
 
-const FUSES = `Fusibles: cuando sepas qué fusible hay que revisar, llama a show_fuse con la caja y el número que devolvió lookup_fuses; la app lo marca en el plano de la caja. Si el manual no permite elegir uno (P/W MAIN1 y MAIN2, PASS1 y PASS2), pasa los candidatos y dilo en la respuesta. No inventes números.`;
+const FUSES = `Fusibles: cuando sepas qué fusible hay que revisar, llama a show_fuse con la caja y el número que devolvió lookup_fuses; la app lo marca en el plano de la caja. Si el manual no permite elegir uno, pasa los candidatos y dilo en la respuesta. No inventes números.`;
 
 const CAMERA = `Cámara: cada pieza del vano del motor que el usuario tenga que ubicar se muestra con show_in_camera,
 y además se explica por escrito en la respuesta. El usuario elige si sigue la guía en la cámara o

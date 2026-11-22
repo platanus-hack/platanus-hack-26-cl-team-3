@@ -1,9 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { showFuse } from "../../src/tools/show-fuse";
-import { FUSES } from "../../src/tools/fuse-table";
+import outbackTable from "../../src/data/fuses/outback.json";
+import type { FuseTable } from "../../src/tools/fuse-table";
 
-const { run } = showFuse;
+const table: FuseTable = outbackTable;
+const FUSES = table.fuses;
+const { run } = showFuse(table);
 const real = FUSES.find((f) => f.box === "motor" && f.amps !== null)!;
 const other = FUSES.find((f) => f.box === "motor" && f.amps !== null && f.number !== real.number)!;
 
@@ -12,7 +15,7 @@ test("un número válido devuelve texto y evento fuse", async () => {
   assert.notEqual(r.is_error, true);
   assert.deepEqual(r.events, [{ event: "fuse", data: { box: "motor", numbers: [real.number], instruction: "Revisa este fusible." } }]);
   const text = (r.content[0] as { text: string }).text;
-  assert.ok(text.includes(`caja del motor, fusible ${real.number} (${real.circuit}, ${real.amps} A)`), text);
+  assert.ok(text.includes(`caja de fusibles del motor, fusible ${real.number} (${real.circuit}, ${real.amps} A)`), text);
 });
 
 test("dos candidatos van en un solo evento", async () => {
@@ -45,4 +48,11 @@ test("errores: no hay evento", async () => {
     assert.equal(r.is_error, true, JSON.stringify(input));
     assert.equal(r.events, undefined);
   }
+});
+
+test("las cajas del enum salen de la tabla del auto", () => {
+  const def = showFuse(table).definition;
+  assert.deepEqual((def.input_schema.properties as any).box.enum, ["cabina", "motor"]);
+  const other: FuseTable = { ...table, boxes: { frente: table.boxes.cabina }, fuses: [] };
+  assert.deepEqual((showFuse(other).definition.input_schema.properties as any).box.enum, ["frente"]);
 });

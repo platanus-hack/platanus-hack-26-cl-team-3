@@ -1,5 +1,7 @@
 import outbackParts from "../data/parts/outback.json";
 import swiftParts from "../data/parts/swift.json";
+import outbackFuses from "../data/fuses/outback.json";
+import type { FuseTable } from "../tools/fuse-table";
 
 export interface PartRow {
   id: string;
@@ -16,7 +18,7 @@ export interface VehicleProfile {
   partsTitle: string;
   sources: string;
   actions: (part: string) => string[];
-  fuses: boolean;
+  fuses: FuseTable | null;
   manual: boolean;
 }
 
@@ -45,7 +47,7 @@ lo que dice el manual, sin agregar pasos que no estén."`,
     ...(part === "washer" ? ["refill"] : []),
     ...(OUTBACK_OPENING.has(part) ? ["open"] : []),
   ],
-  fuses: true,
+  fuses: outbackFuses,
   manual: true,
 };
 
@@ -58,7 +60,7 @@ const swift: VehicleProfile = {
   sources:
     "Fuentes: solo lo que devuelva lookup_parts, que son fichas de Hoodini sin manual verificado. No tienes manual ni tabla de fusibles de este auto. Si te piden un dato que no está en las fichas (capacidades, tipos de líquido, fusibles, presiones), di «No tengo ese dato verificado para el Swift» y sugiere el manual del propietario o un mecánico. No completes datos de memoria.",
   actions: () => ["highlight", "lift"],
-  fuses: false,
+  fuses: null,
   manual: false,
 };
 
@@ -73,7 +75,7 @@ export const genericProfile = (id: string): VehicleProfile => ({
   sources:
     "No tienes información verificada de este auto. Dilo de entrada: Hoodini todavía no tiene datos de este modelo. Sugiere el manual del propietario o un mecánico y no des datos de memoria.",
   actions: () => [],
-  fuses: false,
+  fuses: null,
   manual: false,
 });
 

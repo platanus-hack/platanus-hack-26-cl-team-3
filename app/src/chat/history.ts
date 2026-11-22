@@ -1,4 +1,4 @@
-import { outbackFuses } from '../engine-maps/outback-fuses';
+import { fuseGuides } from '../fusibles/guides';
 import { withChatTurn } from './turn-queue';
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
@@ -12,7 +12,7 @@ const VEHICLE_KEY = 'capo-ar:chat-vehicle:v1';
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
 export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction };
-export type ViewFuse = { box: 'cabin' | 'engine'; numbers: number[]; instruction: string };
+export type ViewFuse = { box: string; numbers: number[]; instruction: string };
 export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[]; fuses: ViewFuse[] };
 
 const MAX_INSTRUCTION = 200;
@@ -25,13 +25,12 @@ export function toCard(part: unknown, instruction: unknown, action?: unknown): V
 }
 
 export function toFuse(box: unknown, numbers: unknown, instruction: unknown): ViewFuse | null {
-  const mapped = box === 'cabina' ? 'cabin' : box === 'motor' ? 'engine' : null;
-  if (!mapped) return null;
+  if (typeof box !== 'string') return null;
   if (!Array.isArray(numbers) || numbers.length === 0 || !numbers.every(Number.isInteger)) return null;
   if (numbers.length > 4 || new Set(numbers).size !== numbers.length ||
-      !numbers.every(number => outbackFuses.some(slot => slot.box === mapped && slot.number === number && slot.amps !== null))) return null;
+      !numbers.every(number => Object.values(fuseGuides).some(guide => guide.slots.some(slot => slot.box === box && slot.number === number && slot.amps !== null)))) return null;
   if (typeof instruction !== 'string' || instruction.trim() === '') return null;
-  return { box: mapped, numbers: numbers as number[], instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
+  return { box, numbers: numbers as number[], instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
 }
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
