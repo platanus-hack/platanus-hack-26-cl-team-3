@@ -32,6 +32,15 @@ test('switching vehicles restores local legacy messages and the server conversat
   assert.equal(data.get(messages), '[]');
   await select('outback');
   assert.equal(data.get(messages), legacy);
+  await selectConversationVehicle('outback', storage, { messages: '[]', id: '' });
+  const archived = JSON.parse(data.get('capo-ar:local-history:v1')!);
+  assert.equal(archived.length, 1);
+  assert.equal(archived[0].vehicle_id, 'outback');
+  assert.deepEqual(JSON.parse(data.get(archived[0].id)!).messages, JSON.parse(legacy));
+  assert.equal(data.get(messages), '[]');
+  assert.equal(data.get(id), '');
+  await selectConversationVehicle('outback', storage, { messages: '[]', id: '' });
+  assert.equal(JSON.parse(data.get('capo-ar:local-history:v1')!).length, 1);
 });
 
 test('a scanner turn waits for text history to finish saving and recovers after a failed turn', async () => {

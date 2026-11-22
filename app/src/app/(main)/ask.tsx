@@ -75,7 +75,7 @@ export default function Ask() {
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    Promise.all([load(), conversationVehicle()]).then(([stored, vehicleId]) => {
+    withChatTurn(() => Promise.all([load(), conversationVehicle()])).then(([stored, vehicleId]) => {
       if (!active || busyRef.current) return;
       setMessages(stored);
       setStoredVehicle(vehicleId);

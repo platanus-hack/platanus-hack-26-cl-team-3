@@ -68,7 +68,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   children: ReactNode;
   top?: ReactNode;
   captions?: ReactNode;
-  conversation?: { enabled: boolean; toggle: () => void };
+  conversation?: { enabled: boolean; ended: boolean; error: string; toggle: () => void };
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
@@ -78,6 +78,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   const { vehicleId, instruction, part } = useLocalSearchParams<{vehicleId?: string; instruction?: string; part?: string}>();
   const { vehicle: selected } = useVehicleSelection();
   const vehicle = selected.id === vehicleId ? selected : vehicles.find((option) => option.id === vehicleId);
+  const guideInstruction = step?.instruction ?? (conversation?.ended ? undefined : instruction);
   const guidePart = part && Object.hasOwn(parts, part) ? part as PartId : undefined;
   return (
     <>
@@ -93,7 +94,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
           {expanded && (
             <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
               {debug && vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
-              {(step?.instruction ?? instruction) && <GuideBanner part={step?.part ?? guidePart} instruction={step?.instruction ?? instruction ?? ''} />}
+              {guideInstruction && <GuideBanner part={step?.part ?? guidePart} instruction={guideInstruction} />}
               {children}
               <View style={estilos.options}>
                 <Pressable accessibilityRole="switch" accessibilityState={{checked: debug}} onPress={toggleDebug}
@@ -114,8 +115,9 @@ export function ScannerControls({ controls, status, children, top, captions, ste
             </ScrollView>
           )}
           {!expanded && captions}
+          {!!conversation?.error && <Text accessibilityLiveRegion="polite" style={tipo.nota}>{conversation.error}</Text>}
           {conversation && (
-            <Boton texto={conversation.enabled ? 'Terminar conversación' : 'Empezar conversación'}
+            <Boton texto={conversation.enabled ? 'Terminar conversación' : conversation.ended ? 'Empezar nueva conversación' : 'Empezar conversación'}
               icono={conversation.enabled ? 'phone-hangup-outline' : 'message-processing-outline'}
               variante={conversation.enabled ? 'secundario' : 'primario'}
               onPress={() => { setMode('compact'); conversation.toggle(); }} />
