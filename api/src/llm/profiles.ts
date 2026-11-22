@@ -1,7 +1,9 @@
 import type { Profile } from "../chat/contract";
 
 export const profiles: Profile[] = [
-  { id: "opus", name: "Claude Opus 5.5", model: "anthropic/claude-opus-5.5", isDefault: true },
+  { id: "sonnet", name: "Claude Sonnet 5.5", model: "claude-sonnet-5-5", isDefault: true },
+  { id: "opus", name: "Claude Opus 5.5", model: "claude-opus-5-5" },
+  { id: "haiku", name: "Claude Haiku 5.5", model: "claude-haiku-5-5" },
 ];
 
 export function resolveProfile(id: unknown): Profile | undefined {

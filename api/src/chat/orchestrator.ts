@@ -14,6 +14,21 @@ export interface AdapterArgs {
 
 export type Adapter = (args: AdapterArgs) => AsyncGenerator<ChatEvent, Message>;
 
+export interface ToolRunReport {
+  round: number;
+  tool_use_id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  duration_ms: number;
+}
+
+export interface TurnLogger {
+  onRound(message: Message): void;
+  onTool(run: ToolRunReport): void;
+}
+
 export interface TurnArgs {
   messages: MessageParam[];
   profile: Profile;
@@ -21,6 +36,7 @@ export interface TurnArgs {
   tools: ToolRegistry;
   system?: string;
   signal?: AbortSignal;
+  log?: TurnLogger;
 }
 
 const MAX_ROUNDS = 6;
@@ -36,7 +52,7 @@ interface ToolRun {
   events: ChatEvent[];
 }
 
-async function runTool(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolRun> {
+async function execute(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolRun> {
   const tool = tools[use.name];
   if (!tool) return { result: errorResult(use.id, `Herramienta desconocida: ${use.name}`), events: [] };
   try {
@@ -48,6 +64,21 @@ async function runTool(tools: ToolRegistry, use: ToolUseBlock): Promise<ToolRun>
     console.error(e);
     return { result: errorResult(use.id, "Error al ejecutar la herramienta."), events: [] };
   }
+}
+
+async function runTool(tools: ToolRegistry, use: ToolUseBlock, n: number, log?: TurnLogger): Promise<ToolRun> {
+  const started = Date.now();
+  const run = await execute(tools, use);
+  log?.onTool({
+    round: n,
+    tool_use_id: use.id,
+    name: use.name,
+    input: use.input,
+    output: run.result.content,
+    is_error: run.result.is_error === true,
+    duration_ms: Date.now() - started,
+  });
+  return run;
 }
 
 async function* round(
@@ -69,7 +100,7 @@ async function* round(
   }
 }
 
-export async function* runTurn({ messages, profile, adapter, tools, system = SYSTEM_PROMPT, signal }: TurnArgs): AsyncGenerator<ChatEvent> {
+export async function* runTurn({ messages, profile, adapter, tools, system = SYSTEM_PROMPT, signal, log }: TurnArgs): AsyncGenerator<ChatEvent> {
   const history = [...messages];
   const fresh: MessageParam[] = [];
   const definitions = Object.values(tools).map((t) => t.definition);
@@ -90,6 +121,7 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
       }
       offset += r.blocks;
       const { message } = r;
+      log?.onRound(message);
 
       if (message.stop_reason === "refusal") {
         yield error("refusal", "No pude responder. Revisa el manual o consulta a un mecánico.");
@@ -112,7 +144,7 @@ export async function* runTurn({ messages, profile, adapter, tools, system = SYS
         return;
       }
 
-      const runs = await Promise.all(uses.map((u) => runTool(tools, u)));
+      const runs = await Promise.all(uses.map((u) => runTool(tools, u, n + 1, log)));
       for (const r of runs) yield* r.events;
       const user: MessageParam = { role: "user", content: runs.map((r) => r.result) };
       history.push(user);

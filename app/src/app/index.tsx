@@ -38,7 +38,10 @@ export default function Menu() {
             <Text style={tipo.subtitulo}>Tu guía bajo el capó</Text>
           </View>
         </View>
-        <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+        <View style={styles.acciones}>
+          <BotonIcono icono="cog-outline" etiqueta="Ajustes del asistente" onPress={() => router.push('/ajustes')} />
+          <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+        </View>
       </View>
 
       <Pressable
@@ -147,10 +150,10 @@ export default function Menu() {
         accessibilityRole="button"
         style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
       >
-        <Icono nombre="book-open-variant" tam={26} tono={color.acento} />
+        <Icono nombre="message-text-outline" tam={26} tono={color.acento} />
         <View style={styles.flex}>
-          <Text style={styles.secundariaTitulo}>Manual del Subaru Outback 2016</Text>
-          <Text style={tipo.nota}>Consulta el manual del motor 3.6R.</Text>
+          <Text style={styles.secundariaTitulo}>Pregúntale al asistente</Text>
+          <Text style={tipo.nota}>Responde con el manual de tu Outback 3.6R.</Text>
         </View>
         <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>
@@ -184,6 +187,7 @@ const styles = StyleSheet.create({
   raiz: { flex: 1, backgroundColor: color.fondo },
   contenido: { paddingHorizontal: espacio.xl },
   flex: { flex: 1 },
+  acciones: { flexDirection: 'row', gap: espacio.s },
   cabecera: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: espacio.xl },
   marca: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   logo: {

@@ -1,5 +1,6 @@
 import { useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { GuiaAR } from '../../modules/capo-ar';
 import { color, espacio } from '../theme';
@@ -15,14 +16,19 @@ const ARROW_BOTTOM = 0.6;
 const PILL_OFFSET = 28;
 const PILL_HEIGHT = 36;
 const PILL_HALF_WIDTH = 80;
+const HINT_TOP = 64;
 
 export function PartGuide({
   part,
+  name,
   active,
   onFound,
+  hidden,
   ref,
 }: {
   part: number;
+  name?: string;
+  hidden: boolean;
   active: boolean;
   onFound: () => void;
   ref?: Ref<PartGuideRef>;
@@ -47,7 +53,7 @@ export function PartGuide({
   );
 
   const { width, height } = size;
-  const ready = active && event !== null && width > 0 && height > 0;
+  const ready = !hidden && active && event !== null && width > 0 && height > 0;
 
   return (
     <View
@@ -56,7 +62,20 @@ export function PartGuide({
       onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
       {ready && !event.visible && <Arrow event={event} width={width} height={height} />}
+      {ready && !event.visible && name && <CameraHint text="Sigue la flecha hasta" strong={name} />}
       {ready && event.visible && <Pill event={event} width={width} height={height} found={found} />}
+    </View>
+  );
+}
+
+export function CameraHint({ text, strong }: { text: string; strong?: string }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View pointerEvents="none" style={[styles.hint, { top: insets.top + HINT_TOP }]}>
+      <Text style={styles.hintText} numberOfLines={2} accessibilityLiveRegion="polite">
+        {text}
+        {strong && <Text style={styles.hintStrong}> {strong}</Text>}
+      </Text>
     </View>
   );
 }
@@ -115,4 +134,15 @@ const styles = StyleSheet.create({
     borderRadius: PILL_HEIGHT / 2,
   },
   pillText: { fontSize: 15, fontWeight: '700' },
+  hint: {
+    position: 'absolute',
+    alignSelf: 'center',
+    maxWidth: '86%',
+    paddingHorizontal: espacio.m,
+    paddingVertical: espacio.s,
+    borderRadius: PILL_HEIGHT / 2,
+    backgroundColor: color.velo,
+  },
+  hintText: { color: color.texto, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  hintStrong: { color: color.acento, fontWeight: '800' },
 });

@@ -1,14 +1,17 @@
 // Piezas compartidas por los dos escáneres (con AR y sin AR).
 import { File } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
-import type { ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CONFIANZA_MIN } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
 import { useVehicleSelection } from '../plates/selection';
+import { GuideBanner } from './GuideBanner';
+import { parts, type PartId } from '../engine-maps/catalog';
 import { vehicles } from '../vehicles';
 
 // La detección sale del propio contorno (umbrales en detector/vano.ts). El puntaje «capó abierto» de CLIP quedó solo
@@ -38,37 +41,88 @@ export class PuntajeCapo {
   }
 }
 
-export function BarraSuperior({ debug, alCambiarDebug }: { debug: boolean; alCambiarDebug: () => void }) {
+const SONNET_KEY = 'capo-ar:anclaje-sonnet:v1';
+
+export function useScannerControls(hasError: boolean) {
+  type Mode = 'compact' | 'details' | 'hidden';
+  const [view, setView] = useState<{ mode: Mode; hasError: boolean }>({ mode: 'compact', hasError });
+  const [diagnostics, setDiagnostics] = useState(false);
+  const [sonnetAnchor, setSonnetAnchor] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(SONNET_KEY).then((value) => setSonnetAnchor(value === '1')).catch(() => {});
+  }, []);
+  const mode = hasError === view.hasError ? view.mode : 'compact';
+  const setMode = (mode: Mode) => setView({ mode, hasError });
+  return { mode, setMode, hasError, debug: diagnostics && mode !== 'hidden', toggleDebug: () => setDiagnostics(value => !value),
+    sonnetAnchor,
+    toggleSonnetAnchor: () => setSonnetAnchor((value) => {
+      AsyncStorage.setItem(SONNET_KEY, value ? '0' : '1').catch(() => {});
+      return !value;
+    }),
+  };
+}
+
+export function ScannerControls({ controls, status, children, top, captions, step }: {
+  controls: ReturnType<typeof useScannerControls>;
+  status: string;
+  children: ReactNode;
+  top?: ReactNode;
+  captions?: ReactNode;
+  step?: { part: PartId; instruction: string };
+}) {
   const insets = useSafeAreaInsets();
-  // Vehículo elegido en el menú (llega como parámetro de la ruta /escanear).
-  const { vehicleId } = useLocalSearchParams<{ vehicleId?: string }>();
+  const { mode, setMode, debug, toggleDebug, hasError, sonnetAnchor, toggleSonnetAnchor } = controls;
+  const expanded = mode === 'details';
+  const hidden = mode === 'hidden';
+  const { vehicleId, instruction, part } = useLocalSearchParams<{vehicleId?: string; instruction?: string; part?: string}>();
   const { vehicle: selected } = useVehicleSelection();
   const vehicle = selected.id === vehicleId ? selected : vehicles.find((option) => option.id === vehicleId);
+  const guidePart = part && Object.hasOwn(parts, part) ? part as PartId : undefined;
   return (
-    <View style={[estilos.barra, { paddingTop: insets.top + espacio.s }]}>
-      <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
-      <View style={estilos.scanTitle}>
-        <Text style={estilos.barraTitulo}>Escanear capó</Text>
-        {vehicle && (
-          <Text style={estilos.scanVehicle} numberOfLines={1}>
-            {vehicle.name} {vehicle.year} · {vehicle.engine}
-          </Text>
-        )}
+    <>
+      <View pointerEvents="box-none" style={[estilos.barra, { paddingTop: insets.top + espacio.s }]}>
+        <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
+        {top && <View pointerEvents="box-none" style={estilos.barraCentro}>{top}</View>}
+        <BotonIcono icono={hidden ? 'eye-off-outline' : 'eye-outline'}
+          etiqueta={hidden ? 'Mostrar controles' : 'Ocultar controles'}
+          onPress={() => setMode(hidden ? 'compact' : 'hidden')} />
       </View>
-      <View style={estilos.fila}>
-        <Pressable
-          onPress={alCambiarDebug}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: debug }}
-          accessibilityLabel="Modo debug"
-          style={[estilos.chip, debug && estilos.chipActivo]}
-        >
-          <Icono nombre="bug-outline" tam={16} tono={debug ? color.acentoTexto : color.texto} />
-          <Text style={[estilos.chipTexto, debug && { color: color.acentoTexto }]}>Debug</Text>
-        </Pressable>
-        <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
-      </View>
-    </View>
+      {!hidden && (
+        <View pointerEvents="box-none" style={[estilos.dock, { bottom: insets.bottom + espacio.m }]}>
+          {expanded && (
+            <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
+              {vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
+              {(step?.instruction ?? instruction) && <GuideBanner part={step?.part ?? guidePart} instruction={step?.instruction ?? instruction ?? ''} />}
+              {children}
+              <View style={estilos.options}>
+                <Pressable accessibilityRole="switch" accessibilityState={{checked: debug}} onPress={toggleDebug}
+                  style={[estilos.chip, debug && estilos.chipActivo]}>
+                  <Icono nombre="bug-outline" tam={16} tono={debug ? color.acentoTexto : color.texto} />
+                  <Text style={[estilos.chipTexto, debug && {color: color.acentoTexto}]}>Diagnóstico</Text>
+                </Pressable>
+                <Pressable accessibilityRole="switch" accessibilityState={{checked: sonnetAnchor}} onPress={toggleSonnetAnchor}
+                  style={[estilos.chip, sonnetAnchor && estilos.chipActivo]}>
+                  <Icono nombre="creation" tam={16} tono={sonnetAnchor ? color.acentoTexto : color.texto} />
+                  <Text style={[estilos.chipTexto, sonnetAnchor && {color: color.acentoTexto}]}>Anclaje con Sonnet</Text>
+                </Pressable>
+                <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+              </View>
+              {sonnetAnchor && (
+                <Text style={[tipo.nota, estilos.panelDetalle]}>Experimental. Envía el recorte del motor al servidor para ubicar las piezas.</Text>
+              )}
+            </ScrollView>
+          )}
+          {!expanded && captions}
+          <Pressable accessibilityRole="button" accessibilityState={{expanded}}
+            accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
+            onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
+            <Icono nombre={hasError ? 'alert-circle-outline' : instruction ? 'message-text-outline' : 'line-scan'} tam={18} tono={hasError ? color.peligro : color.acento} />
+            <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
+            <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
+          </Pressable>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -100,12 +154,6 @@ export function PantallaPermiso({ puedePreguntar, pedir }: { puedePreguntar: boo
       </View>
     </View>
   );
-}
-
-/** Panel inferior translúcido. */
-export function Panel({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets();
-  return <View style={[estilos.panel, { marginBottom: insets.bottom + espacio.l }]}>{children}</View>;
 }
 
 export function Encabezado({ icono, tono, titulo, cargando }: { icono?: NombreIcono; tono?: string; titulo: string; cargando?: boolean }) {
@@ -166,9 +214,7 @@ export const estilos = StyleSheet.create({
     paddingHorizontal: espacio.l,
     paddingBottom: espacio.s,
   },
-  scanTitle: { flex: 1, alignItems: 'center', paddingHorizontal: espacio.s },
-  scanVehicle: { color: color.texto, fontSize: 13, textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
-  barraTitulo: { color: color.texto, fontSize: 17, fontWeight: '700', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6 },
+  barraCentro: { flex: 1, alignItems: 'flex-end', paddingHorizontal: espacio.s },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -182,17 +228,13 @@ export const estilos = StyleSheet.create({
   },
   chipActivo: { backgroundColor: color.acento, borderColor: color.acento },
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
-  panel: {
-    position: 'absolute',
-    left: espacio.l,
-    right: espacio.l,
-    bottom: 0,
-    backgroundColor: color.velo,
-    borderRadius: radio.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    padding: espacio.l,
-  },
+  dock: { position: 'absolute', left: espacio.l, right: espacio.l, maxHeight: '55%', gap: espacio.s },
+  status: { alignSelf: 'center', maxWidth: '100%', minHeight: 44, borderRadius: 24, paddingHorizontal: espacio.l,
+    flexDirection: 'row', alignItems: 'center', gap: espacio.s, backgroundColor: color.velo },
+  statusText: { color: color.texto, fontSize: 14, fontWeight: '700', flexShrink: 1 },
+  panel: { flexShrink: 1, backgroundColor: color.velo, borderRadius: radio.xl },
+  details: { padding: espacio.l },
+  options: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: espacio.s, marginTop: espacio.m },
   fila: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   panelTitulo: { fontSize: 18, fontWeight: '800', color: color.texto, flexShrink: 1 },
   panelDetalle: { marginTop: espacio.s },

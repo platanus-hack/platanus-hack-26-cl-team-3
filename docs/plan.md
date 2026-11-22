@@ -20,7 +20,7 @@ Le cuentas la falla, la cámara resalta la pieza real y la deja anclada en 3D, o
 | 5 | Lo ancla en 3D | Hecho, sin probar en el teléfono | El anclaje funcionó sobre el auto. El escaneo por varias vistas, que arma el vano cuando no cabe en el cuadro, solo se verificó compilando | A |
 | 6 | Ubica cada pieza | A medias | Plantilla del catálogo más un ajuste por apariencia que corre en el teléfono, solo para el Outback (PR #21). Sin error medido en cm sobre el auto (#17) | A, E |
 | 7 | Resalta solo esa pieza | A medias | Chips por pieza y prisma elegido en ámbar, dibujados con Canvas. Una flecha lleva hasta la pieza y avisa al encontrarla (fase C, sin probar en el teléfono). No oscurece el resto ni sigue el contorno real | B, F, A |
-| 8 | Guía el paso y vuelve al chat | A medias | La cámara muestra la instrucción y «Volver al chat», y el chat ofrece «Listo, ¿qué sigue?». Los procedimientos por pasos no existen | G |
+| 8 | Guía el paso y vuelve al chat | Hecho, sin probar en el teléfono | La cámara muestra la respuesta como subtítulos de dos líneas, con contador de pasos. «Listo» avanza de pieza y «No lo encuentro» pide una pista sin salir del video. Los pasos los arma el modelo; los procedimientos del manual siguen sin existir | G, A |
 
 Aparte: el auto se elige a mano entre 8 modelos (J) y el chat no ve la cámara (H). Las luces del tablero y las ampolletas (F4 y F5 del README) siguen sin empezar y este plan no las cubre.
 
@@ -46,7 +46,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 
 ## Fases
 
-**Modelo de visión (decidido el 21-11-2026): Claude Sonnet 5.5**, por OpenRouter como el chat. Lo usan E y J, con una llamada por foto. El vano y el anclaje siguen en el teléfono: el detector corre sin red cada 2,5 s y ARCore sostiene los puntos en cada cuadro, algo que un modelo en la nube no puede hacer.
+**Modelo de visión (decidido el 21-11-2026): Claude Sonnet 5.5**, por la API de Anthropic como el chat. Lo usan E y J, con una llamada por foto. El vano y el anclaje siguen en el teléfono: el detector corre sin red cada 2,5 s y ARCore sostiene los puntos en cada cuadro, algo que un modelo en la nube no puede hacer.
 
 ### Guía visual (el foco)
 
@@ -94,7 +94,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Listo cuando:** la demo corre de punta a punta sin tocar el menú.
 - **No cubre:** el chat sigue sin ver la cámara (H).
 
-**G · Datos con cita** — parte hoy; falta descargar el PDF.
+**G · Datos con cita** — `buscar_manual` y `leer_manual` listas en una PR a `dev`, con el manual de terceros; falta preparar el índice en el servidor (ver [`specs/manual/`](specs/manual/README.md)). Quedan los fusibles con página y los procedimientos por pasos.
 - `buscar_manual` sobre el PDF oficial (fuera del repo, regla 7); fusibles verificados con su página; procedimientos como pasos con pieza y página.
 - **Zona:** `api/src/data/` y `api/src/tools/`.
 - **Listo cuando:** «¿dónde está el sapito?» responde con la página del manual.
@@ -142,7 +142,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 ## Sin verificar
 
 - El error real en cm sobre el auto.
-- Qué tan bien devuelve Sonnet 5.5 puntos y contornos sobre una foto del vano, y el id del modelo en OpenRouter. Se prueba con las fotos de `docs/evidence/android-engine-maps/` antes de construir E.
+- Qué tan bien devuelve Sonnet 5.5 puntos y contornos sobre una foto del vano. Se prueba con las fotos de `docs/evidence/android-engine-maps/` antes de construir E.
 - Si Gemini Live sostiene la marca al moverse.
 - Que el Canvas de hoy vaya un cuadro atrás de la cámara: es lo esperable por cómo se dibuja, no está medido.
 - La hora de entrega: no está en el repo, así que el orden no está ajustado a un plazo.

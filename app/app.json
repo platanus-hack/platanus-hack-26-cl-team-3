@@ -2,8 +2,8 @@
   "expo": {
     "name": "Capo AR",
     "slug": "capo-ar",
-    "version": "0.10.0",
-    "orientation": "portrait",
+    "version": "0.8.0",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0E1116",
@@ -12,11 +12,10 @@
     },
     "android": {
       "package": "com.capoar.app",
-      "versionCode": 13,
+      "versionCode": 10,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#080E18",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
@@ -31,15 +30,16 @@
           "barcodeScannerEnabled": false
         }
       ],
-      [
-        "expo-image-picker",
-        {
-          "microphonePermission": false
-        }
-      ],
       "expo-router",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Capo AR usa el micrófono para dictar tus preguntas al chat. El audio se envía a ElevenLabs para transcribirlo.",
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"

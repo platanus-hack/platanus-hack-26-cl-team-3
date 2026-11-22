@@ -8,12 +8,25 @@ export const color = {
   textoSuave: '#9AA4B2',
   textoTenue: '#6B7584',
   acento: '#FFB020',
+  acentoPresionado: '#E39A12',
   acentoTexto: '#1A1300',
   acentoSuave: 'rgba(255, 176, 32, 0.14)',
   exito: '#3DDC84',
   exitoSuave: 'rgba(61, 220, 132, 0.16)',
   peligro: '#FF6B6B',
   velo: 'rgba(10, 12, 16, 0.72)',
+} as const;
+
+export const video = {
+  panel: '#192228',
+  control: '#26343d',
+  borde: '#51616b',
+  presionado: '#12685e',
+  texto: '#edf2f4',
+  textoSuave: '#cbd7dc',
+  paso: '#ffe79e',
+  radio: 6,
+  espacio: 8,
 } as const;
 
 export const espacio = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;

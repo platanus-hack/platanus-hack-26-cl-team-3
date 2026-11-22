@@ -1,19 +1,31 @@
 import { fetch } from 'expo/fetch';
 
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
+import { cargarAjustes } from '../ajustes';
+import { adoptConversation, currentConversation } from './history';
+import { deviceId } from './remote-history';
 import { splitEvents } from './sse';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
 
-const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
+export const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
+
+export const tokenHeaders = (): Record<string, string> => (CHAT_TOKEN ? { 'x-chat-token': CHAT_TOKEN } : {});
 
 const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error', code, message });
 
-export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): AsyncGenerator<ChatEvent> {
-  if (!API_URL) {
-    yield failure('config', 'Falta EXPO_PUBLIC_API_URL en app/.env.local.');
-    return;
-  }
+export async function* runTurn({
+  messages,
+  mode,
+  signal,
+}: {
+  messages: AnthropicMessage[];
+  mode?: 'vivo';
+  signal?: AbortSignal;
+}): AsyncGenerator<ChatEvent> {
+  const { modelo, esfuerzo } = await cargarAjustes();
+  const device = await deviceId();
+  const { id: conversationId, generation } = await currentConversation();
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {
@@ -21,14 +33,18 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
       headers: {
         'content-type': 'application/json',
         accept: 'text/event-stream',
-        ...(CHAT_TOKEN ? { 'x-chat-token': CHAT_TOKEN } : {}),
+        ...tokenHeaders(),
+        ...(device ? { 'x-device-id': device } : {}),
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
+      signal,
     });
   } catch {
+    if (signal?.aborted) return;
     yield failure('network', 'No me pude conectar con el servidor. Revisa tu conexión.');
     return;
   }
+  if (signal?.aborted) return;
   if (!res.ok || !res.body) {
     const message = await res
       .json()
@@ -50,9 +66,10 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
       buffer = rest;
       for (const event of events) {
         if (event.type === 'done' || event.type === 'error') finished = true;
+        if (event.type === 'done' && event.conversationId) await adoptConversation(event.conversationId, generation);
         yield event;
       }
     }
   } catch {}
-  if (!finished) yield failure('network', 'La respuesta se cortó. Inténtalo de nuevo.');
+  if (!finished && !signal?.aborted) yield failure('network', 'La respuesta se cortó. Inténtalo de nuevo.');
 }

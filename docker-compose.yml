@@ -30,10 +30,16 @@ services:
     restart: unless-stopped
     environment:
       PRT_SEED_PATH: /app/prt-seed/vehicles.sqlite
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      LOGS_TOKEN: ${LOGS_TOKEN}
+      HISTORIAL_DB: /app/historial/historial.sqlite
+      MANUAL_INDEX: /app/.manual/outback-2016.json
     volumes:
       - ${PRT_DATA_DIR:-./api/data}:/app/data:ro
       - prt-seed:/app/prt-seed:ro
+      - historial:/app/historial
+      - ${MANUAL_DIR:-./api/.manual}:/app/.manual:ro
     networks: [proxy]
     labels:
       - "traefik.enable=true"
@@ -50,3 +56,4 @@ networks:
 
 volumes:
   prt-seed:
+  historial:

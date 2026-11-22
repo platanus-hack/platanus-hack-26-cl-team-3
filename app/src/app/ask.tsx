@@ -1,23 +1,20 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cameraRoute } from '../chat/camera';
+import { CHAT_VEHICLE_ID, cameraRoute } from '../chat/camera';
+import { CitationModal } from '../chat/CitationModal';
+import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
 import { runTurn } from '../chat/client';
+import { Dictado } from '../chat/Dictado';
 import type { AnthropicMessage } from '../chat/contract';
-import { clear, load, save, toCard, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
-import { parts as catalogParts } from '../engine-maps/catalog';
+import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
+import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
 import { color, espacio, radio, tipo } from '../theme';
-import { BotonIcono, Boton, Icono, Tarjeta } from '../ui';
+import { BotonIcono, Icono, Tarjeta } from '../ui';
 
-const TOOL_STATUS: Record<string, string> = {
-  lookup_fuses: 'Revisando la tabla de fusibles…',
-  lookup_parts: 'Buscando la pieza…',
-  show_in_camera: 'Preparando la cámara…',
-};
-const DEFAULT_TOOL_STATUS = 'Consultando el manual…';
-const QUICK_REPLIES = ['Listo, ¿qué sigue?', 'No lo encuentro'];
+const QUICK_REPLIES = [DONE_REPLY, LOST_REPLY];
 
 export default function Ask() {
   const insets = useSafeAreaInsets();
@@ -28,8 +25,10 @@ export default function Ask() {
   const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
   const [replies, setReplies] = useState(false);
   const openedCamera = useRef(false);
+  const openedHistory = useRef(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dictationError, setDictationError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -49,13 +48,24 @@ export default function Ask() {
       if (openedCamera.current) {
         openedCamera.current = false;
         setReplies(true);
+        void load().then(setMessages);
+      }
+      if (openedHistory.current) {
+        openedHistory.current = false;
+        setReplies(false);
+        void load().then(setMessages);
       }
     }, []),
   );
 
-  const openCamera = useCallback((card: ViewCard) => {
+  const openCamera = useCallback((card: ViewCard, cards: ViewCard[]) => {
     openedCamera.current = true;
-    router.push(cameraRoute(card));
+    router.push(cameraRoute(card, cards));
+  }, []);
+
+  const openHistory = useCallback(() => {
+    openedHistory.current = true;
+    router.push('/historial');
   }, []);
 
   const bubbles = useMemo(() => {
@@ -69,74 +79,38 @@ export default function Ask() {
     const text = (override ?? input).trim();
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
-    const userMessage: AnthropicMessage = { role: 'user', content: text };
     const previous = messages;
-    const parts: ViewPart[] = [];
-    const cards: ViewCard[] = [];
-    let breakNext = false;
 
     setInput('');
     setReplies(false);
     setNote(null);
     setError(null);
+    setDictationError(null);
     setQuestion(text);
     setLive([]);
     setLiveCards([]);
-    setStatus('Pensando…');
+    setStatus(THINKING);
     setBusy(true);
 
-    try {
-      for await (const ev of runTurn({ messages: [...previous, userMessage] })) {
-        if (ev.type === 'tool') {
-          setStatus(TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS);
-          breakNext = true;
-        } else if (ev.type === 'ar') {
-          const card = toCard(ev.part, ev.instruction);
-          if (card) {
-            cards.push(card);
-            setLiveCards([...cards]);
-          }
-        } else if (ev.type === 'text') {
-          setStatus(null);
-          if (!parts[ev.block]) {
-            const first = parts.some(Boolean);
-            parts[ev.block] = { text: '', citations: [], ...(breakNext && first ? { breakBefore: true } : {}) };
-            breakNext = false;
-          }
-          parts[ev.block] = { ...parts[ev.block], text: parts[ev.block].text + ev.text };
-          setLive(parts.filter(Boolean));
-        } else if (ev.type === 'citation') {
-          parts[ev.block] ??= { text: '', citations: [] };
-          const { title, source, cited_text } = ev;
-          parts[ev.block] = { ...parts[ev.block], citations: [...parts[ev.block].citations, { title, source, cited_text }] };
-          setLive(parts.filter(Boolean));
-        } else if (ev.type === 'done') {
-          const updated = [...previous, userMessage, ...ev.messages];
-          setMessages(updated);
-          void save(updated);
-          if (ev.truncated) setNote('La respuesta se cortó.');
-          setQuestion(null);
-          setLive([]);
-          setLiveCards([]);
-        } else {
-          setError(ev.message);
-          setInput(text);
-          setQuestion(null);
-          setLive([]);
-          setLiveCards([]);
-        }
-      }
-    } catch {
-      setError('Error inesperado.');
+    const result = await sendTurn(previous, text, runTurn, (progress) => {
+      setLive(progress.parts);
+      setLiveCards(progress.cards);
+      setStatus(progress.status);
+    });
+    if ('error' in result) {
+      setError(result.error);
       setInput(text);
-      setQuestion(null);
-      setLive([]);
-      setLiveCards([]);
-    } finally {
-      setStatus(null);
-      busyRef.current = false;
-      setBusy(false);
+    } else if ('messages' in result) {
+      setMessages(result.messages);
+      void save(result.messages);
+      if (result.truncated) setNote('La respuesta se cortó.');
     }
+    setQuestion(null);
+    setLive([]);
+    setLiveCards([]);
+    setStatus(null);
+    busyRef.current = false;
+    setBusy(false);
   }, [input, loaded, messages]);
 
   const reset = useCallback(() => {
@@ -151,17 +125,12 @@ export default function Ask() {
     <KeyboardAvoidingView style={styles.root} behavior="padding">
       <View style={[styles.bar, { paddingTop: insets.top + espacio.s }]}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
-        <Text style={styles.title}>Manual del Subaru Outback 2016 · 3.6R</Text>
-        <Pressable
-          onPress={reset}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy }}
-          style={[styles.newChat, busy && { opacity: 0.4 }]}
-        >
-          <Icono nombre="square-edit-outline" tam={18} tono={color.textoSuave} />
-          <Text style={styles.newText}>Nueva conversación</Text>
-        </Pressable>
+        <View style={styles.flex}>
+          <Text style={styles.title}>Asistente</Text>
+          <Text style={styles.subtitleBar}>Subaru Outback 2016, motor 3.6R</Text>
+        </View>
+        <BotonIcono icono="history" etiqueta="Conversaciones anteriores" onPress={openHistory} deshabilitado={busy} />
+        <BotonIcono icono="square-edit-outline" etiqueta="Nueva conversación" onPress={reset} deshabilitado={busy} />
       </View>
 
       <ScrollView
@@ -188,21 +157,13 @@ export default function Ask() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + espacio.s }]}>
         {error && <Text style={styles.error}>{error}</Text>}
+        {dictationError && <Text style={styles.error}>{dictationError}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
         {note && !status && <Text style={styles.status}>{note}</Text>}
         {replies && (
           <View style={styles.replies}>
             {QUICK_REPLIES.map((reply) => (
-              <Pressable
-                key={reply}
-                onPress={() => void send(reply)}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                style={[styles.reply, busy && { opacity: 0.4 }]}
-              >
-                <Text style={styles.replyText}>{reply}</Text>
-              </Pressable>
+              <ChoiceButton compacto key={reply} texto={reply} deshabilitado={busy} onPress={() => void send(reply)} />
             ))}
           </View>
         )}
@@ -219,27 +180,36 @@ export default function Ask() {
             returnKeyType="send"
             onSubmitEditing={() => void send()}
           />
-          <Pressable
-            onPress={() => void send()}
-            disabled={busy || !loaded || !input.trim()}
-            accessibilityRole="button"
-            accessibilityLabel="Enviar"
-            style={[styles.send, (busy || !loaded || !input.trim()) && { opacity: 0.4 }]}
-          >
-            <Icono nombre="send" tam={22} tono={color.acentoTexto} />
-          </Pressable>
+          <Dictado
+            deshabilitado={busy || !loaded}
+            onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
+            onError={(message) => setDictationError(message || null)}
+          />
+          {input.trim() ? (
+            <Pressable
+              onPress={() => void send()}
+              disabled={busy || !loaded}
+              accessibilityRole="button"
+              accessibilityLabel="Enviar"
+              style={[styles.send, (busy || !loaded) && { opacity: 0.4 }]}
+            >
+              <Icono nombre="send" tam={22} tono={color.acentoTexto} />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: CHAT_VEHICLE_ID, vivo: '1' } })}
+              disabled={busy || !loaded}
+              accessibilityRole="button"
+              accessibilityLabel="Hablar con la cámara"
+              style={[styles.send, styles.video, (busy || !loaded) && { opacity: 0.4 }]}
+            >
+              <Icono nombre="video" tam={22} tono={color.textoSuave} />
+            </Pressable>
+          )}
         </View>
       </View>
 
-      <Modal visible={citation !== null} transparent animationType="fade" onRequestClose={() => setCitation(null)}>
-        <View style={styles.overlay}>
-          <Tarjeta estilo={styles.modal}>
-            <Text style={styles.modalTitle}>{citation?.title}</Text>
-            <Text style={[tipo.cuerpo, { marginTop: espacio.m }]}>{citation?.cited_text}</Text>
-            <Boton texto="Cerrar" variante="secundario" onPress={() => setCitation(null)} estilo={{ marginTop: espacio.l }} />
-          </Tarjeta>
-        </View>
-      </Modal>
+      <CitationModal citation={citation} onClose={() => setCitation(null)} />
     </KeyboardAvoidingView>
   );
 }
@@ -253,14 +223,14 @@ function BubbleView({
   bubble: Bubble;
   streaming: boolean;
   onCitation: (c: ViewCitation) => void;
-  onCamera: (card: ViewCard) => void;
+  onCamera: (card: ViewCard, cards: ViewCard[]) => void;
 }) {
   const mine = bubble.role === 'user';
   const uncited =
     !mine && !streaming && bubble.parts.some((p) => p.text.trim()) && bubble.parts.every((p) => p.citations.length === 0);
   let n = 0;
-  return (
-    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant]}>
+  const text = (
+    <>
       <Text style={[tipo.cuerpo, mine && { color: color.acentoTexto }]}>
         {bubble.parts.map((p, i) => (
           <Text key={i}>
@@ -274,17 +244,18 @@ function BubbleView({
         ))}
       </Text>
       {uncited && <Text style={styles.uncited}>Sin cita del manual</Text>}
-      {bubble.cards.map((card, i) => (
-        <View key={i} style={styles.card}>
-          <Boton
-            texto={`Abrir cámara: ${catalogParts[card.part][0]}`}
-            icono="camera"
-            onPress={() => onCamera(card)}
-            estilo={{ paddingHorizontal: espacio.m }}
-          />
-          <Text style={styles.cardNote}>{card.instruction}</Text>
-        </View>
-      ))}
+    </>
+  );
+  const guided = !mine && bubble.cards.length > 0;
+  return (
+    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant, guided && styles.bubbleGuide]}>
+      {guided ? (
+        <GuideChoice cards={bubble.cards} disabled={streaming} onCamera={onCamera}>
+          {text}
+        </GuideChoice>
+      ) : (
+        text
+      )}
     </View>
   );
 }
@@ -301,46 +272,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.borde,
   },
-  title: { flex: 1, fontSize: 17, fontWeight: '700', color: color.texto },
-  newChat: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
-  newText: { fontSize: 12, color: color.textoSuave, fontWeight: '600' },
+  title: { fontSize: 17, fontWeight: '700', color: color.texto },
+  subtitleBar: { fontSize: 12, color: color.textoSuave },
   list: { padding: espacio.l, gap: espacio.m },
   empty: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   bubble: { maxWidth: '88%', borderRadius: radio.l, paddingVertical: espacio.m, paddingHorizontal: espacio.l },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: color.acento },
   bubbleAssistant: { alignSelf: 'flex-start', backgroundColor: color.superficie, borderWidth: 1, borderColor: color.borde },
   uncited: { fontSize: 12, color: color.textoTenue, marginTop: espacio.xs },
-  card: { marginTop: espacio.m, gap: espacio.s },
-  cardNote: { fontSize: 12, color: color.textoSuave, lineHeight: 17 },
+  bubbleGuide: { alignSelf: 'stretch', maxWidth: '100%' },
   replies: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginBottom: espacio.s },
-  reply: {
-    paddingVertical: espacio.s,
-    paddingHorizontal: espacio.m,
-    borderRadius: radio.l,
-    backgroundColor: color.superficieAlta,
-    borderWidth: 1,
-    borderColor: color.borde,
-  },
-  replyText: { fontSize: 13, fontWeight: '600', color: color.texto },
   chip: { color: color.acento, fontWeight: '800' },
   footer: { paddingHorizontal: espacio.l, paddingTop: espacio.s, borderTopWidth: 1, borderTopColor: color.borde, backgroundColor: color.fondo },
   status: { fontSize: 13, color: color.textoSuave, marginBottom: espacio.s },
   error: { fontSize: 13, color: color.peligro, marginBottom: espacio.s },
-  row: { flexDirection: 'row', alignItems: 'flex-end', gap: espacio.s },
-  input: {
-    flex: 1,
-    maxHeight: 120,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 48,
     backgroundColor: color.superficie,
     borderWidth: 1,
     borderColor: color.borde,
     borderRadius: radio.m,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
     paddingHorizontal: espacio.l,
     paddingVertical: espacio.m,
     fontSize: 15,
     color: color.texto,
   },
-  send: { width: 48, height: 48, borderRadius: radio.m, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
-  overlay: { flex: 1, backgroundColor: color.velo, justifyContent: 'center', padding: espacio.xl },
-  modal: { backgroundColor: color.superficieAlta },
-  modalTitle: { fontSize: 15, fontWeight: '700', color: color.texto },
+  send: { width: 40, height: 40, borderRadius: 20, margin: 4, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
+  video: { backgroundColor: 'transparent' },
 });

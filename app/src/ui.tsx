@@ -42,14 +42,26 @@ export function Boton({
   );
 }
 
-export function BotonIcono({ icono, onPress, etiqueta }: { icono: NombreIcono; onPress: () => void; etiqueta: string }) {
+export function BotonIcono({
+  icono,
+  onPress,
+  etiqueta,
+  deshabilitado,
+}: {
+  icono: NombreIcono;
+  onPress: () => void;
+  etiqueta: string;
+  deshabilitado?: boolean;
+}) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={etiqueta}
+      accessibilityState={deshabilitado === undefined ? undefined : { disabled: deshabilitado }}
+      disabled={deshabilitado}
       hitSlop={8}
-      style={({ pressed }) => [styles.botonIcono, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.botonIcono, pressed && { opacity: 0.7 }, deshabilitado && { opacity: 0.4 }]}
     >
       <Icono nombre={icono} tam={22} />
     </Pressable>

@@ -9,12 +9,12 @@ import kotlin.math.min
 internal data class EngineImagePoint(val x: Float, val y: Float)
 
 internal class EngineCaptureIntrinsics(
-  private val width: Int,
-  private val height: Int,
-  private val fx: Float,
-  private val fy: Float,
-  private val cx: Float,
-  private val cy: Float,
+  val width: Int,
+  val height: Int,
+  val fx: Float,
+  val fy: Float,
+  val cx: Float,
+  val cy: Float,
 ) {
   fun ray(point: EngineImagePoint) = EnginePoint(
     (point.x * width - cx) / fx,

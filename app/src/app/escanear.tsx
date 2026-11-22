@@ -1,14 +1,14 @@
 import { useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { arDisponible, VistaAR } from '../../modules/capo-ar';
 import EscanerAR from '../escaner/EscanerAR';
 import EscanerCamara from '../escaner/EscanerCamara';
 import { estilos, PantallaPermiso } from '../escaner/comun';
-import { GuideBanner } from '../escaner/GuideBanner';
+import { readGuide } from '../chat/camera';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { color, espacio, tipo } from '../theme';
 import { Boton, Icono } from '../ui';
@@ -32,8 +32,10 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => Pro
 
 /** Con ARCore: escáner que ancla el contorno al auto. Sin ARCore: escáner de fotos (el contorno no queda fijo). */
 export default function Escanear() {
-  const { vehicleId, part, instruction } = useLocalSearchParams<{ vehicleId?: string; part?: string; instruction?: string }>();
-  const insets = useSafeAreaInsets();
+  const { vehicleId, part, action, instruction, steps, step, vivo } = useLocalSearchParams<{
+    vehicleId?: string; part?: string; action?: string; instruction?: string; steps?: string; step?: string; vivo?: string;
+  }>();
+  const guide = readGuide({ part, instruction, action, steps, step });
   const guidePart = part && Object.hasOwn(parts, part) ? (part as PartId) : undefined;
   const vehicle = vehicles.find(option => option.id === vehicleId);
   const [permiso, pedirPermiso] = useCameraPermissions();
@@ -49,18 +51,5 @@ export default function Escanear() {
 
   if (!permiso || conAR === null) return <View style={estilos.raiz} />;
   if (!permiso.granted) return <PantallaPermiso puedePreguntar={permiso.canAskAgain} pedir={pedirPermiso} />;
-  const scanner = conAR ? <EscanerAR key={vehicle?.id} vehicle={vehicle} initialPart={guidePart} /> : <EscanerCamara />;
-  if (!instruction) return scanner;
-  return (
-    <View style={estilos.raiz}>
-      {scanner}
-      <View pointerEvents="box-none" style={[styles.guide, { top: insets.top + espacio.s * 2 + 42 + espacio.s }]}>
-        <GuideBanner part={guidePart} instruction={instruction} />
-      </View>
-    </View>
-  );
+  return conAR ? <EscanerAR key={JSON.stringify([vehicle?.id, guidePart, action, vivo])} vehicle={vehicle} initialPart={guidePart} steps={guide.steps} initialStep={guide.step} vivo={vivo === '1'} /> : <EscanerCamara />;
 }
-
-const styles = StyleSheet.create({
-  guide: { position: 'absolute', left: espacio.l, right: espacio.l, zIndex: 3 },
-});
