@@ -30,6 +30,42 @@ export interface ToolRunLog {
   duration_ms: number;
 }
 
+export interface LogCursor {
+  created_at: string;
+  id: string;
+}
+
+export interface TurnSummary {
+  id: string;
+  conversation_id: string | null;
+  created_at: string;
+  outcome: string;
+}
+
+export interface ToolRunDetail {
+  id: number;
+  round: number;
+  tool_use_id: string;
+  name: string;
+  input: unknown;
+  output: unknown;
+  is_error: boolean;
+  duration_ms: number;
+}
+
+export type TurnDetail = Omit<TurnLog, "fresh"> & { messages: unknown; tools: ToolRunDetail[] };
+
+export interface Page<T> {
+  items: T[];
+  next: LogCursor | null;
+}
+
 export interface RunLogStore {
   saveTurn(turn: TurnLog, tools: ToolRunLog[]): void;
+  listTurns(limit: number, cursor: LogCursor | null): Page<TurnSummary>;
+  conversationTurns(
+    turnId: string,
+    limit: number,
+    cursor: LogCursor | null,
+  ): (Page<TurnDetail> & { conversation_id: string | null }) | null;
 }

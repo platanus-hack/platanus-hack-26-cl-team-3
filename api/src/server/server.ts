@@ -4,6 +4,7 @@ import type { Locator } from "../locate/contract";
 import { handleLocate } from "../locate/handler";
 import { handleConversations } from "../conversations/handler";
 import type { ConversationStore } from "../conversations/store";
+import { handleLogs } from "../runlog/handler";
 import type { RunLogStore } from "../runlog/store";
 import { handleChat } from "./chat-handler";
 import { handleTranscribe } from "../transcribe/handler";
@@ -32,6 +33,7 @@ export function createServer({
     if (pathname === "/api/devices" || pathname === "/api/conversations" || pathname.startsWith("/api/conversations/")) {
       return void handleConversations(req, res, pathname, conversations);
     }
+    if (pathname === "/api/logs/turns" || pathname.startsWith("/api/logs/turns/")) return handleLogs(req, res, pathname, runlog);
     json(res, 404, { error: "No encontrado" });
   });
 }

@@ -1,5 +1,27 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { RunLogStore } from "./store";
+import type { LogCursor, Page, RunLogStore, ToolRunDetail, TurnDetail, TurnLog, TurnSummary } from "./store";
+
+type ToolRow = Omit<ToolRunDetail, "input" | "output" | "is_error"> & {
+  turn_id: string;
+  input: string;
+  output: string | null;
+  is_error: number;
+};
+
+function parseJson(text: string | null): unknown {
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function pageOf<T extends { created_at: string; id: string }>(rows: T[], limit: number): Page<T> {
+  const items = rows.slice(0, limit);
+  const last = items[items.length - 1];
+  return { items, next: rows.length > limit && last ? { created_at: last.created_at, id: last.id } : null };
+}
 
 export function sqliteRunLog(db: DatabaseSync): RunLogStore {
   db.exec(`
@@ -25,6 +47,7 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
       duration_ms INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS turns_conversation_created ON turns (conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS turns_created ON turns (created_at, id);
     CREATE TABLE IF NOT EXISTS tool_runs (
       id INTEGER PRIMARY KEY,
       turn_id TEXT NOT NULL REFERENCES turns(id),
@@ -49,7 +72,55 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
+  const summaryColumns = "id, conversation_id, created_at, outcome";
+  const listFirst = db.prepare(`SELECT ${summaryColumns} FROM turns ORDER BY created_at DESC, id DESC LIMIT ?`);
+  const listAfter = db.prepare(
+    `SELECT ${summaryColumns} FROM turns WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`,
+  );
+  const findTurn = db.prepare("SELECT * FROM turns WHERE id = ?");
+  const conversationFirst = db.prepare(
+    "SELECT * FROM turns WHERE conversation_id = ? ORDER BY created_at ASC, id ASC LIMIT ?",
+  );
+  const conversationAfter = db.prepare(
+    "SELECT * FROM turns WHERE conversation_id = ? AND (created_at, id) > (?, ?) ORDER BY created_at ASC, id ASC LIMIT ?",
+  );
+
+  function withTools(rows: (TurnLog & { id: string })[]): TurnDetail[] {
+    const byTurn = new Map<string, ToolRunDetail[]>();
+    if (rows.length > 0) {
+      const marks = rows.map(() => "?").join(", ");
+      const tools = db
+        .prepare(`SELECT * FROM tool_runs WHERE turn_id IN (${marks}) ORDER BY round ASC, id ASC`)
+        .all(...rows.map((r) => r.id)) as unknown as ToolRow[];
+      for (const { turn_id, ...t } of tools) {
+        const list = byTurn.get(turn_id) ?? [];
+        list.push({ ...t, input: parseJson(t.input), output: parseJson(t.output), is_error: t.is_error === 1 });
+        byTurn.set(turn_id, list);
+      }
+    }
+    return rows.map(({ fresh, ...turn }) => ({ ...turn, messages: parseJson(fresh), tools: byTurn.get(turn.id) ?? [] }));
+  }
+
   return {
+    listTurns(limit, cursor) {
+      const rows = (cursor
+        ? listAfter.all(cursor.created_at, cursor.id, limit + 1)
+        : listFirst.all(limit + 1)) as unknown as TurnSummary[];
+      return pageOf(rows, limit);
+    },
+    conversationTurns(turnId, limit, cursor) {
+      const turn = findTurn.get(turnId) as unknown as TurnLog | undefined;
+      if (!turn) return null;
+      let rows: TurnLog[];
+      if (turn.conversation_id === null) rows = cursor ? [] : [turn];
+      else {
+        rows = (cursor
+          ? conversationAfter.all(turn.conversation_id, cursor.created_at, cursor.id, limit + 1)
+          : conversationFirst.all(turn.conversation_id, limit + 1)) as unknown as TurnLog[];
+      }
+      const page = pageOf(rows, limit);
+      return { conversation_id: turn.conversation_id, items: withTools(page.items), next: page.next };
+    },
     saveTurn(t, tools) {
       db.exec("BEGIN");
       try {
