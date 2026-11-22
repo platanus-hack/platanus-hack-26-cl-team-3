@@ -160,5 +160,78 @@
     "name": "Polea negra de accesorios",
     "detail": "Cara oscura visible bajo la cubierta central, al lado opuesto de la manguera.",
     "source": "The Car Guide · Subaru Outback 3.6R Limited 2016 · Michel Deslauriers"
+  },
+  {
+    "id": "battery_terminal",
+    "name": "Terminal de batería",
+    "detail": "Conexión metálica visible. Comprueba la polaridad en las marcas de la batería.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "terminal_boot",
+    "name": "Cubierta del terminal",
+    "detail": "Protector del terminal en la parte superior de la batería.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "valve_cover",
+    "name": "Tapa de válvulas",
+    "detail": "Parte superior del motor junto al punto de llenado de aceite.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "wiring_harness",
+    "name": "Mazo de cables",
+    "detail": "Conjunto de cables con una funda protectora.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "steering_fluid",
+    "name": "Depósito de dirección hidráulica",
+    "detail": "Depósito de líquido de la dirección asistida.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "steering_cap",
+    "name": "Tapa de dirección hidráulica",
+    "detail": "Tapa del depósito de líquido de dirección.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "ram700"
+    ]
+  },
+  {
+    "id": "cowl_panel",
+    "name": "Panel bajo el parabrisas",
+    "detail": "Panel transversal en el borde trasero del vano.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "swift",
+      "ram700"
+    ]
+  },
+  {
+    "id": "intake_resonator",
+    "name": "Resonador de admisión",
+    "detail": "Cámara frontal unida al conducto de admisión.",
+    "source": "Vehicle-specific engine map",
+    "vehicles": [
+      "swift"
+    ]
   }
 ]
