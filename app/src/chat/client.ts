@@ -2,6 +2,8 @@ import { fetch } from 'expo/fetch';
 
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
 import { cargarAjustes } from '../ajustes';
+import { adoptConversation, currentConversation } from './history';
+import { deviceId } from './remote-history';
 import { splitEvents } from './sse';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
@@ -22,6 +24,8 @@ export async function* runTurn({
   signal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
   const { modelo, esfuerzo } = await cargarAjustes();
+  const device = await deviceId();
+  const { id: conversationId, generation } = await currentConversation();
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {
@@ -30,8 +34,9 @@ export async function* runTurn({
         'content-type': 'application/json',
         accept: 'text/event-stream',
         ...tokenHeaders(),
+        ...(device ? { 'x-device-id': device } : {}),
       },
-      body: JSON.stringify({ messages, profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ messages, ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
       signal,
     });
   } catch {
@@ -61,6 +66,7 @@ export async function* runTurn({
       buffer = rest;
       for (const event of events) {
         if (event.type === 'done' || event.type === 'error') finished = true;
+        if (event.type === 'done' && event.conversationId) await adoptConversation(event.conversationId, generation);
         yield event;
       }
     }

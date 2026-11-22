@@ -23,5 +23,5 @@ export type ChatEvent =
   | { event: "text"; data: { block: number; text: string } }
   | { event: "citation"; data: { block: number; title: string; source: string; cited_text: string } }
   | { event: "ar"; data: { part: string; instruction: string; action?: "highlight" | "lift" | "refill" | "open" } }
-  | { event: "done"; data: { messages: MessageParam[]; truncated?: true } }
+  | { event: "done"; data: { messages: MessageParam[]; truncated?: true; conversation_id?: string; turn_id?: string } }
   | { event: "error"; data: { code: ErrorCode; message: string } };

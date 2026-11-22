@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Adapter } from "../chat/orchestrator";
 import { ProviderError } from "./errors";
 
-const MAX_TOKENS = 4096;
+const MAX_TOKENS = 64000;
 
 let client: Anthropic | undefined;
 
