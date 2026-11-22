@@ -3,7 +3,7 @@
     "name": "Capo AR",
     "slug": "capo-ar",
     "version": "0.8.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0E1116",

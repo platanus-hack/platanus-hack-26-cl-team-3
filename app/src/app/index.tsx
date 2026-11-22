@@ -38,7 +38,10 @@ export default function Menu() {
             <Text style={tipo.subtitulo}>Tu guía bajo el capó</Text>
           </View>
         </View>
-        <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+        <View style={styles.acciones}>
+          <BotonIcono icono="cog-outline" etiqueta="Ajustes del asistente" onPress={() => router.push('/ajustes')} />
+          <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
+        </View>
       </View>
 
       <Pressable
@@ -171,6 +174,7 @@ const styles = StyleSheet.create({
   raiz: { flex: 1, backgroundColor: color.fondo },
   contenido: { paddingHorizontal: espacio.xl },
   flex: { flex: 1 },
+  acciones: { flexDirection: 'row', gap: espacio.s },
   cabecera: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: espacio.xl },
   marca: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   logo: {

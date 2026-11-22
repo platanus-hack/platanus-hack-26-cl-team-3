@@ -71,6 +71,27 @@ test("7: non-array messages, assistant last, >200 messages or unknown profile re
   assert.equal((await post(null, "{no json")).status, 400);
 });
 
+test("effort: valid reaches the adapter in the profile, invalid responds 400, haiku resolves", async () => {
+  const seen: { model: string; effort?: string }[] = [];
+  const spy: Adapter = async function* ({ profile }) {
+    seen.push({ model: profile.model, effort: profile.effort });
+    return { stop_reason: "end_turn", content: [{ type: "text", text: "hola" }] } as Message;
+  };
+  const s = createServer({ adapter: spy });
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(s.address() as AddressInfo).port}/api/chat`;
+  const send = (body: unknown) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  try {
+    await (await send({ ...userMsg, profile_id: "haiku", effort: "max" })).text();
+    await (await send(userMsg)).text();
+    assert.deepEqual(seen[0], { model: "claude-haiku-5-5", effort: "max" });
+    assert.equal(seen[1].effort, undefined);
+    assert.equal((await send({ ...userMsg, effort: "ultra" })).status, 400);
+  } finally {
+    await new Promise((r) => s.close(r));
+  }
+});
+
 test("happy path: SSE with done", async () => {
   const r = await post({ messages: [{ role: "user", content: "hola" }] });
   assert.equal(r.status, 200);
