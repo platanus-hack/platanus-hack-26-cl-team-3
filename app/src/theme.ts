@@ -8,6 +8,7 @@ export const color = {
   textoSuave: '#9AA4B2',
   textoTenue: '#6B7584',
   acento: '#FFB020',
+  acentoPresionado: '#E39A12',
   acentoTexto: '#1A1300',
   acentoSuave: 'rgba(255, 176, 32, 0.14)',
   exito: '#3DDC84',

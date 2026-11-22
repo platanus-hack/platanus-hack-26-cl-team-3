@@ -23,6 +23,10 @@ export type CapturaAR = {
   profundidad: boolean; // el teléfono tiene la API de profundidad de ARCore
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
   visualOutline?: number[];
+  captureReference?: string;
+  visualReferenceCorners?: number[];
+  previousVisualOutlines?: Record<string, number[]>;
+  visualLandmarks?: number;
   registeredOutline?: number[];
   landmarkGainPx?: number;
   registrationMeasurements: boolean; // Enough dense pixels or local hits to attempt map placement
@@ -76,6 +80,7 @@ export type VistaARRef = {
   mostrarVista(esquinas: number[], bordes: boolean[], grados: number): Promise<void>;
   /** Ancla las esquinas en el espacio usando la pose de la cámara de la captura `id`. */
   fijar(id: number, esquinas: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[], allowVisual?: boolean): Promise<ResultadoFijar>;
+  placeInitial?(id: number, outline: number[], registration: number[], volumes: number[][], observedCenters?: PartCenter[], allowVisual?: boolean): Promise<ResultadoFijar>;
   soltar(): Promise<void>;
   pulso(): Promise<void>;
   playPartAction(id: string, action: "highlight" | "lift" | "refill"): Promise<void>;
@@ -106,6 +111,7 @@ export type VistaARProps = ViewProps & {
   editingMap?: boolean;
   outbackParts?: string[];
   selectedPart?: number;
+  focusedPart?: string | null;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;
   onGuia?: (e: NativeSyntheticEvent<GuiaAR>) => void;
