@@ -23,7 +23,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
   part?: PartId;
   children?: ReactNode;
 }) {
-  const { estado, nivel, cerrando, parcial, pregunta, error, silenciado, alternarSilencio } = vivo;
+  const { estado, nivel, cerrando, parcial, pregunta, error, silenciado, alternarSilencio, hablando: asistenteHabla, callar } = vivo;
   const [open, setOpen] = useState(false);
   const chunk = useCaptionChunk(caption.text);
   const pensando = estado === 'escuchando' && caption.pensando;
@@ -31,25 +31,35 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
   const transcribiendo = estado === 'transcribiendo';
   const guia = !error && !hablando && !transcribiendo && !pensando;
   const citation = guia ? (caption.citations.at(-1) ?? null) : null;
+  const respondiendo = asistenteHabla && !error && !hablando && !transcribiendo;
   const label = citation ? sourceLabel(citation.title) || citation.source : '';
 
   return (
     <View style={styles.fila}>
-      <View style={styles.tarjeta}>
+      <Pressable
+        style={styles.tarjeta}
+        disabled={!respondiendo}
+        accessible={respondiendo}
+        onPress={callar}
+        accessibilityRole={respondiendo ? 'button' : undefined}
+        accessibilityLabel={respondiendo ? 'Callar al asistente' : undefined}
+      >
         <View style={styles.cabecera}>
           <View style={styles.izquierda}>
             {pensando || transcribiendo ? (
               <ActivityIndicator size="small" color={color.acento} />
             ) : estado === 'silenciado' ? (
               <View style={[styles.punto, { backgroundColor: color.textoTenue }]} />
+            ) : respondiendo ? (
+              <Icono nombre="volume-high" tam={16} tono={color.acento} />
             ) : hablando ? null : (
               <PuntoRespira />
             )}
-            {estado !== 'silenciado' && !pensando && !transcribiendo && (
+            {estado !== 'silenciado' && !pensando && !transcribiendo && !respondiendo && (
               <Barras nivel={nivel} tono={hablando ? (cerrando ? 'plano' : 'activo') : 'reposo'} />
             )}
             <Text style={styles.etiqueta} numberOfLines={1}>
-              {pensando ? caption.text : etiqueta(estado, cerrando)}
+              {pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
             </Text>
           </View>
           {guia && (
@@ -80,7 +90,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
         {guia && children}
         {hablando && cerrando && <BarraCierre />}
         <CitationModal citation={open ? citation : null} onClose={() => setOpen(false)} />
-      </View>
+      </Pressable>
       <Pressable
         onPress={alternarSilencio}
         accessibilityRole="button"

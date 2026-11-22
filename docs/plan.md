@@ -104,7 +104,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Zona:** `app/src/chat/`, un botón en `escanear.tsx` y el contrato del chat.
 
 **I · Voz** — vale más después de D.
-- Dictado y lectura en voz alta sobre los mismos eventos del chat. El servidor no cambia.
+- Dictado y lectura en voz alta sobre los mismos eventos del chat. La voz pasa por el servidor (`GET /api/speak`), porque la key de ElevenLabs vive ahí: ver [`specs/voz-asistente/`](specs/voz-asistente/README.md).
 - **Zona:** `app/src/chat/` y `ask.tsx`.
 - **No cubre:** conversación continua como la de Gemini Live.
 

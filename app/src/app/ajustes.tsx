@@ -71,6 +71,26 @@ export default function PantallaAjustes() {
               trackColor={{ true: color.acento, false: color.borde }}
             />
           </View>
+
+          <Text style={[tipo.seccion, styles.separado]}>Voz del asistente</Text>
+          <View style={styles.opcion}>
+            <Text style={[tipo.nota, styles.flex]}>Leer respuestas en el modo vivo (experimental)</Text>
+            <Switch
+              value={ajustes.vozVivo}
+              onValueChange={(v) => cambiar({ vozVivo: v })}
+              accessibilityLabel="Leer respuestas en el modo vivo"
+              trackColor={{ true: color.acento, false: color.borde }}
+            />
+          </View>
+          <View style={styles.opcion}>
+            <Text style={[tipo.nota, styles.flex]}>Leer respuestas en el chat (experimental)</Text>
+            <Switch
+              value={ajustes.vozChat}
+              onValueChange={(v) => cambiar({ vozChat: v })}
+              accessibilityLabel="Leer respuestas en el chat"
+              trackColor={{ true: color.acento, false: color.borde }}
+            />
+          </View>
         </ScrollView>
       )}
     </View>

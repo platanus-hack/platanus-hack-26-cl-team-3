@@ -21,12 +21,13 @@ const aNivel = (db: number) => Math.min(1, Math.max(0, (db - DB_SILENCIO) / (DB_
 
 type Opciones = {
   silenciado: boolean;
+  pausado?: boolean;
   onInicio: () => void;
   onFrase: (texto: string) => void;
   onError: (mensaje: string) => void;
 };
 
-export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opciones): {
+export function useEscuchaViva({ silenciado, pausado = false, onInicio, onFrase, onError }: Opciones): {
   estado: EstadoEscucha;
   nivel: number;
   cerrando: boolean;
@@ -40,6 +41,11 @@ export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opcio
     onBuffer: (buffer) => alBuffer.current?.(buffer),
   });
   const [vad] = useState(() => crearVad());
+  const pausadoRef = useRef(pausado);
+
+  useEffect(() => {
+    pausadoRef.current = pausado;
+  }, [pausado]);
   const [oyendo, setOyendo] = useState(false);
   const [huboVoz, setHuboVoz] = useState(false);
   const [parcial, setParcial] = useState('');
@@ -68,6 +74,7 @@ export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opcio
     let acumulado: Uint8Array[] = [];
     let acumuladoBytes = 0;
     let ultimoNivel = 0;
+    let enPausa = false;
 
     const enviar = (ws: WebSocket, audio: string) =>
       ws.send(JSON.stringify({ message_type: 'input_audio_chunk', audio_base_64: audio, commit: false, sample_rate: tasa }));
@@ -152,6 +159,23 @@ export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opcio
         void conectar();
       }
       const bytes = new Uint8Array(buffer.data);
+      if (pausadoRef.current) {
+        if (!enPausa) {
+          enPausa = true;
+          oyendoRef.current = false;
+          setOyendo(false);
+          setNivel(0);
+          marcarVoz(false);
+          setParcial('');
+        }
+        return mandarAudio(new Uint8Array(bytes.length));
+      }
+      if (enPausa) {
+        enPausa = false;
+        vad.reiniciar();
+        marcarVoz(false);
+        setParcial('');
+      }
       const db = dbDe(new Int16Array(buffer.data, 0, bytes.length >> 1));
       const ahora = Date.now();
       const evento = vad.push(db, ahora);
