@@ -1,6 +1,8 @@
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { espacio } from '../theme';
+import { fuseRoute } from './camera';
 import { ChoiceButton } from './GuideChoice';
 import type { ViewFuse } from './history';
 
@@ -9,26 +11,34 @@ const BOX_LABEL = { cabin: 'caja de la cabina', engine: 'caja del motor' } as co
 export function FuseLinks({
   fuses,
   disabled,
-  onOpen,
+  browse = false,
 }: {
   fuses: ViewFuse[];
   disabled: boolean;
-  onOpen: (box: ViewFuse['box'], number: number) => void;
+  browse?: boolean;
 }) {
+  const seen = new Set<string>();
+  const targets = fuses.flatMap(({ box, numbers }) => numbers.map(number => ({ box, number })))
+    .filter(({ box, number }) => {
+      const key = box + number;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  if (!targets.length) return browse ? <ChoiceButton compacto icono="fuse" texto="Ver fusibles por circuito"
+    deshabilitado={disabled} onPress={() => router.push('/outback-fuses')} /> : null;
   return (
     <View style={styles.list}>
-      {fuses.flatMap((fuse) =>
-        fuse.numbers.map((number) => (
+      {targets.map(({ box, number }) => (
           <ChoiceButton
             compacto
-            key={`${fuse.box}-${number}`}
+            key={`${box}-${number}`}
             icono="fuse"
-            texto={`Ver fusible ${number} · ${BOX_LABEL[fuse.box]}`}
+            texto={`Ver fusible ${number} · ${BOX_LABEL[box]}`}
             deshabilitado={disabled}
-            onPress={() => onOpen(fuse.box, number)}
+            onPress={() => router.push(fuseRoute(box, number))}
           />
-        )),
-      )}
+        ))}
     </View>
   );
 }

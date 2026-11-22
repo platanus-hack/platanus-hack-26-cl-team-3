@@ -51,7 +51,7 @@ export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: 
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
 
-  const guide = useCameraGuide([], 0, () => {});
+  const guide = useCameraGuide([], 0, () => {}, vehicleId);
   const conversation = useScannerConversation(initialLive, activa, guide, vehicleId);
   const pendingFrame = useRef<((uri: string, bay: Vano) => Promise<void>) | null>(null);
   const captureBay = () => new Promise<string | null>(resolve => {

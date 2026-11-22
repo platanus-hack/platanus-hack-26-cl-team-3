@@ -1,3 +1,4 @@
+import { outbackFuses } from '../engine-maps/outback-fuses';
 import { withChatTurn } from './turn-queue';
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
@@ -27,6 +28,8 @@ export function toFuse(box: unknown, numbers: unknown, instruction: unknown): Vi
   const mapped = box === 'cabina' ? 'cabin' : box === 'motor' ? 'engine' : null;
   if (!mapped) return null;
   if (!Array.isArray(numbers) || numbers.length === 0 || !numbers.every(Number.isInteger)) return null;
+  if (numbers.length > 4 || new Set(numbers).size !== numbers.length ||
+      !numbers.every(number => outbackFuses.some(slot => slot.box === mapped && slot.number === number && slot.amps !== null))) return null;
   if (typeof instruction !== 'string' || instruction.trim() === '') return null;
   return { box: mapped, numbers: numbers as number[], instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
 }
@@ -123,6 +126,8 @@ export async function adoptConversation(id: string, at: number): Promise<void> {
 export const list = listConversations;
 
 export function toView(messages: AnthropicMessage[]): Bubble[] {
+  const rejected = new Set(messages.flatMap(message => message.role === 'user' && Array.isArray(message.content)
+    ? message.content.filter(block => block.type === 'tool_result' && block.is_error).map(block => block.tool_use_id) : []));
   const out: Bubble[] = [];
   for (const m of messages) {
     if (m.role === 'user') {
@@ -139,7 +144,7 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
           if (card) cards.push(card);
           continue;
         }
-        if (b.type === 'tool_use' && b.name === 'show_fuse') {
+        if (b.type === 'tool_use' && b.name === 'show_fuse' && !rejected.has(b.id)) {
           const fuse = toFuse(b.input?.box, b.input?.numbers, b.input?.instruction);
           if (fuse) fuses.push(fuse);
           continue;

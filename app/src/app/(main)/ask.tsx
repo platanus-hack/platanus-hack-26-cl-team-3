@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cameraRoute, fuseRoute } from '../../chat/camera';
+import { cameraRoute } from '../../chat/camera';
 import { FuseLinks } from '../../chat/FuseLinks';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
@@ -82,10 +82,6 @@ export default function Ask() {
     openedCamera.current = true;
     router.push(cameraRoute(card, cards, chatVehicleId));
   }, [chatVehicleId]);
-
-  const openFuse = useCallback((box: ViewFuse['box'], number: number) => {
-    router.push(fuseRoute(box, number));
-  }, []);
 
   const openHistory = useCallback(() => {
     openedHistory.current = true;
@@ -190,7 +186,6 @@ export default function Ask() {
             showFuses={chatVehicleId === 'outback'}
             onCitation={setCitation}
             onCamera={openCamera}
-            onFuse={openFuse}
           />
         ))}
       </ScrollView>
@@ -260,14 +255,12 @@ function BubbleView({
   showFuses,
   onCitation,
   onCamera,
-  onFuse,
 }: {
   bubble: Bubble;
   streaming: boolean;
   showFuses: boolean;
   onCitation: (c: ViewCitation) => void;
   onCamera: (card: ViewCard, cards: ViewCard[]) => void;
-  onFuse: (box: ViewFuse['box'], number: number) => void;
 }) {
   const mine = bubble.role === 'user';
   const uncited =
@@ -301,7 +294,7 @@ function BubbleView({
         text
       )}
       {!mine && showFuses && bubble.fuses.length > 0 && (
-        <FuseLinks fuses={bubble.fuses} disabled={streaming} onOpen={onFuse} />
+        <FuseLinks fuses={bubble.fuses} disabled={streaming} />
       )}
     </View>
   );
