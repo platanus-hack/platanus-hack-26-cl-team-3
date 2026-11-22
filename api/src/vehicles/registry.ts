@@ -1,6 +1,7 @@
 import outbackParts from "../data/parts/outback.json";
 import swiftParts from "../data/parts/swift.json";
 import outbackFuses from "../data/fuses/outback.json";
+import swiftFuses from "../data/fuses/swift.json";
 import type { FuseTable } from "../tools/fuse-table";
 
 export interface PartRow {
@@ -58,9 +59,9 @@ const swift: VehicleProfile = {
   partsSource: "piezas://swift-2017-1.2/vano",
   partsTitle: "Piezas del vano del motor",
   sources:
-    "Fuentes: solo lo que devuelva lookup_parts, que son fichas de Hoodini sin manual verificado. No tienes manual ni tabla de fusibles de este auto. Si te piden un dato que no está en las fichas (capacidades, tipos de líquido, fusibles, presiones), di «No tengo ese dato verificado para el Swift» y sugiere el manual del propietario o un mecánico. No completes datos de memoria.",
+    "Fuentes: solo lo que devuelvan lookup_parts y lookup_fuses. lookup_parts son fichas de Hoodini sin manual verificado; lookup_fuses es la tabla del manual del propietario del Swift, base edición Myanmar (copia de terceros). No tienes el manual completo de este auto. Fusibles: usa solo lo que devuelva lookup_fuses y no completes amperajes ni circuitos de memoria. Las posiciones marcadas «según versión» dependen del equipamiento del auto: dilo en la respuesta y pide confirmarlo con la etiqueta del reverso de la tapa de la caja de fusibles. Si te piden un dato que no está en las fichas ni en la tabla (capacidades, tipos de líquido, presiones), di «No tengo ese dato verificado para el Swift» y sugiere el manual del propietario o un mecánico. No completes datos de memoria.",
   actions: () => ["highlight", "lift"],
-  fuses: null,
+  fuses: swiftFuses,
   manual: false,
 };
 
