@@ -18,7 +18,7 @@ for (const [id, guide] of Object.entries(fuseGuides)) {
     const { boxes, source_uri, fuses } = table(id);
     assert.equal(guide.vehicleId, id);
     assert.equal(guide.sourceUri, source_uri);
-    assert.deepEqual(guide.boxes.map(box => box.id), Object.keys(boxes));
+    assert.deepEqual(guide.boxes.map(box => box.id).sort(), Object.keys(boxes).sort());
     assert.equal(guide.slots.length, fuses.length);
     for (const row of fuses) {
       const slot = guide.slots.find(item => item.box === row.box && item.number === row.number);

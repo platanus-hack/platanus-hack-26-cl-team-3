@@ -1,7 +1,8 @@
 import { outbackFuseGuide } from './outback';
+import { swiftFuseGuide } from './swift';
 import type { FuseGuide, FuseSlot } from './types';
 
-export const fuseGuides: Record<string, FuseGuide> = { outback: outbackFuseGuide };
+export const fuseGuides: Record<string, FuseGuide> = { outback: outbackFuseGuide, swift: swiftFuseGuide };
 
 export const fuseGuideFor = (vehicleId?: string): FuseGuide | undefined =>
   vehicleId && Object.hasOwn(fuseGuides, vehicleId) ? fuseGuides[vehicleId] : undefined;
