@@ -27,8 +27,6 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     timer.current = setTimeout(() => setPlaying(null), inspectionSeconds[action] * 1000);
   }, []);
 
-  useEffect(() => setFocus(null), [guide.key, guide.index]);
-
   const ask = async (text: string, keepGuide = false) => {
     setBusy(true);
     setCaption({ text: THINKING, citations: [] });
@@ -39,7 +37,10 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
       spoke ||= said.trim() !== '';
       setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations) });
       if (keepGuide || progress.cards.length === 0) return;
-      if (replaced.length === 0) onStep(progress.cards[0]);
+      if (replaced.length === 0) {
+        setFocus(null);
+        onStep(progress.cards[0]);
+      }
       setGuide((g) => ({ steps: progress.cards, index: replaced.length ? g.index : 0, key: replaced.length ? g.key : g.key + 1 }));
       replaced = progress.cards;
     });

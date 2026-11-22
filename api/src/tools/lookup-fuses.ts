@@ -9,7 +9,7 @@ interface FuseRow {
   circuit: string;
   part_id: string;
   source: string;
-  page: number | null;
+  page: number;
 }
 
 const FUSES: FuseRow[] = rows;
@@ -19,9 +19,9 @@ const SOURCE = "fusibles://outback-2016-3.6r/cabina";
 const definition: ToolDefinition = {
   name: "lookup_fuses",
   description:
-    "Devuelve filas de la tabla de fusibles del auto (caja, número, amperaje, circuito). " +
-    "Los circuitos usan la sigla del manual: P/W = alzavidrios (power window), R.LH / R.RH = trasera izquierda / derecha, " +
-    "PASS = pasajero, MAIN = principal. Filtra por circuito con esa sigla (p. ej. 'P/W') o por número exacto de fusible (p. ej. '24').",
+    "Look up the six cabin power-window (alzavidrios) circuits in the 2016 North American Subaru Outback owner's manual. " +
+    "Filter by a circuit substring such as P/W or an exact fuse number. R.LH and R.RH mean rear left and rear right. " +
+    "PASS and MAIN each identify two circuits. Do not infer a unique front-door fuse from those labels.",
   input_schema: {
     type: "object",
     properties: { filter: { type: "string" } },
@@ -43,12 +43,13 @@ async function run(input: unknown): Promise<ToolOutput> {
   if (matches.length === 0) {
     return { content: [{ type: "text", text: "Sin resultados en la tabla de fusibles." }] };
   }
+  const pages = [...new Set(matches.map((f) => f.page))].join(" y ");
   return {
     content: [
       {
         type: "search_result",
         source: SOURCE,
-        title: `Tabla de fusibles — caja de la cabina (fuente: ${[...new Set(matches.map((f) => f.source))].join("; ")})`,
+        title: `Caja de fusibles de la cabina — ${matches[0].source}, PDF ${pages}`,
         content: matches.map((f) => ({ type: "text", text: rowToText(f) })),
         citations: { enabled: true },
       },

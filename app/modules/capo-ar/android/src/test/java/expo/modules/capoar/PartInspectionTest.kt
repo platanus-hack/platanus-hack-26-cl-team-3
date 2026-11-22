@@ -43,6 +43,32 @@ class PartInspectionTest {
     assertNull(part.frame(InspectionAction.REFILL,10f))
   }
 
+  @Test fun openingMovesOnlyTheRemovableLidAndReseatsIt() {
+    val fuses = inspection("fuses")
+    val closed = fuses.frame(InspectionAction.OPEN, 0f)!!
+    val open = fuses.frame(InspectionAction.OPEN, 3f)!!
+    assertEquals(closed.surface[0].a, open.surface[0].a)
+    assertTrue(open.surface[1].a.y > closed.surface[1].a.y + .10f)
+    val closing = fuses.frame(InspectionAction.OPEN, 5.9f)!!
+    assertEquals(closed.surface.map { it.a }, closing.surface.map { it.a })
+    assertNull(fuses.frame(InspectionAction.OPEN, 6f))
+    assertNull(InspectionAction.resolve("battery", "open"))
+    assertEquals(InspectionAction.OPEN, InspectionAction.resolve("brake_fluid", "open"))
+  }
+
+  @Test fun openingHingedBootExposesHardwareAndDipstickLeavesItsGuideFixed() {
+    val terminal = inspection("positive")
+    val shut = terminal.frame(InspectionAction.OPEN, 0f)!!
+    val folded = terminal.frame(InspectionAction.OPEN, 3f)!!
+    assertTrue(folded.surface.size > shut.surface.size)
+    assertNotEquals(shut.surface[0].c, folded.surface[0].c)
+    val gauge = inspection("dipstick")
+    val pulled = gauge.frame(InspectionAction.OPEN, 3f)!!
+    assertEquals(vertices[0], pulled.surface[0].a)
+    assertTrue(pulled.surface[1].a.y > cap.a.y)
+    assertEquals(4, pulled.surface.size)
+  }
+
   @Test fun aSealedNeckOpensAndItsLiquidSurfaceRises() {
     val top = listOf(origin, origin + EnginePoint(.04f,0f,0f), origin + EnginePoint(0f,0f,.04f))
     val base = top.map { it + EnginePoint(0f,-.1f,0f) }

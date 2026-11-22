@@ -11,6 +11,7 @@
  *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas.
  *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -517,7 +518,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
-  sonnetAnchorRef.current = controls.sonnetAnchor;
+  useEffect(() => { sonnetAnchorRef.current = controls.sonnetAnchor; }, [controls.sonnetAnchor]);
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, focus } = cameraGuide;
@@ -639,6 +640,10 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                   </Pressable>
                 ))}
               </ScrollView>
+            )}
+            {outbackParts && selected === 'fuses' && (
+              <Boton texto="Ver fusibles por circuito" icono="fuse" variante="secundario"
+                onPress={() => router.push('/outback-fuses')} />
             )}
             {fuseLink && (
               <Pressable

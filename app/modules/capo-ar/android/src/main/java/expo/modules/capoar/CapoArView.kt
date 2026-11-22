@@ -55,7 +55,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val onGuia by EventDispatcher<Map<String, Any>>()
   @Volatile internal var guidePart = -1
   @Volatile internal var focusedPart: String? = null
-  private data class Inspection(val model: PlacedModel, val part: Int, val action: InspectionAction, val start: Long)
+  private data class Inspection(val model: PlacedModel, val part: Int, val movingPart: Int, val action: InspectionAction, val start: Long)
   private var inspection: Inspection? = null
 
   fun playPartAction(id: String, actionName: String) {
@@ -63,8 +63,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     gl.queueEvent {
       val model = placedEngine?.model ?: return@queueEvent
       val index = outbackParts.indexOf(id)
-      if (index == guidePart && index in model.inspections) {
-        inspection = Inspection(model, index, action, android.os.SystemClock.elapsedRealtimeNanos())
+      val movingPart = if (action == InspectionAction.OPEN && id == "brake_fluid") outbackParts.indexOf("brake_cap") else index
+      if (index == guidePart && movingPart in model.inspections) {
+        inspection = Inspection(model, index, movingPart, action, android.os.SystemClock.elapsedRealtimeNanos())
       }
     }
   }
@@ -454,7 +455,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val request = inspection
     val animation = if (request != null && engine?.model === request.model && request.part == guidePart) {
       val elapsed = (android.os.SystemClock.elapsedRealtimeNanos() - request.start) / 1e9f
-      request.model.inspections[request.part]?.frame(request.action, elapsed)
+      request.model.inspections[request.movingPart]?.frame(request.action, elapsed)
     } else null
     if (animation == null) inspection = null
     val hitFrame = if (engine?.model != null) {
@@ -462,7 +463,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val (offset, scale) = engine.alignment
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
-      modelRenderer.draw(engine.model, mvp, guidePart, animation, focusedPart?.let(outbackParts::indexOf) ?: -1)
+      val selectedPart = animation?.index ?: guidePart
+      val focus = focusedPart?.let(outbackParts::indexOf) ?: -1
+      val effectiveFocus = if (focus >= 0 && focus == guidePart) selectedPart else focus
+      modelRenderer.draw(engine.model, mvp, selectedPart, animation, effectiveFocus)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
     } else null
     val faces = if (hitFrame == null && engine != null && projector != null) {
@@ -865,7 +869,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val currentInspection = inspection
     val replacement = placement?.model
     if (currentInspection != null && currentInspection.model === placedEngine?.model && replacement != null &&
-      currentInspection.part == guidePart && currentInspection.part in replacement.inspections) {
+      currentInspection.part == guidePart && currentInspection.movingPart in replacement.inspections) {
       inspection = currentInspection.copy(model = replacement)
     }
     placedEngine?.anchor?.detach()
@@ -946,7 +950,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private fun emitGuide(frame: Frame, engine: PlacedEngine, animation: InspectionFrame?) {
     val part = guidePart
     if (part < 0 || frame.timestamp - lastGuideNs < GUIDE_INTERVAL_NS) return
-    val center = animation?.takeIf { it.index == part }?.center ?: engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
+    val center = animation?.center ?: engine.model?.centers?.get(part) ?: engine.mesh.center(part) ?: return
     val local = engine.alignment.apply(center)
     val world = engine.anchor.pose.transformPoint(floatArrayOf(local.x, local.y, local.z))
     val view = FloatArray(16)
