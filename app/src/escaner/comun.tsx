@@ -116,19 +116,27 @@ export function ScannerControls({ controls, status, children, top, captions, ste
           )}
           {!expanded && captions}
           {!!conversation?.error && <Text accessibilityLiveRegion="polite" style={tipo.nota}>{conversation.error}</Text>}
-          {conversation && (
-            <Boton texto={conversation.enabled ? 'Terminar conversación' : conversation.ended ? 'Empezar nueva conversación' : 'Empezar conversación'}
-              icono={conversation.enabled ? 'phone-hangup-outline' : 'message-processing-outline'}
-              variante={conversation.enabled ? 'secundario' : 'primario'}
+          {conversation && !conversation.enabled && (
+            <Boton texto={conversation.ended ? 'Empezar nueva conversación' : 'Empezar conversación'}
+              icono="message-processing-outline"
               onPress={() => { setMode('compact'); conversation.toggle(); }} />
           )}
-          <Pressable accessibilityRole="button" accessibilityState={{expanded}}
-            accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
-            onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
-            <Icono nombre={hasError ? 'alert-circle-outline' : instruction ? 'message-text-outline' : 'line-scan'} tam={18} tono={hasError ? color.peligro : color.acento} />
-            <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
-            <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
-          </Pressable>
+          <View pointerEvents="box-none" style={conversation?.enabled && estilos.liveFooter}>
+            {conversation?.enabled && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Terminar conversación"
+                onPress={() => { setMode('compact'); conversation.toggle(); }}
+                style={({ pressed }) => [estilos.hangUp, pressed && { opacity: 0.75 }]}>
+                <Icono nombre="phone-hangup" tam={24} tono={color.peligro} />
+              </Pressable>
+            )}
+            <Pressable accessibilityRole="button" accessibilityState={{expanded}}
+              accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
+              onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
+              <Icono nombre={hasError ? 'alert-circle-outline' : instruction ? 'message-text-outline' : 'line-scan'} tam={18} tono={hasError ? color.peligro : color.acento} />
+              <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
+              <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
+            </Pressable>
+          </View>
         </View>
       )}
     </>
@@ -238,6 +246,9 @@ export const estilos = StyleSheet.create({
   chipActivo: { backgroundColor: color.acento, borderColor: color.acento },
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
   dock: { position: 'absolute', left: espacio.l, right: espacio.l, maxHeight: '55%', gap: espacio.s },
+  liveFooter: { justifyContent: 'center', minHeight: 48, paddingHorizontal: 48 + espacio.s },
+  hangUp: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, borderRadius: 24,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.velo },
   status: { alignSelf: 'center', maxWidth: '100%', minHeight: 44, borderRadius: 24, paddingHorizontal: espacio.l,
     flexDirection: 'row', alignItems: 'center', gap: espacio.s, backgroundColor: color.velo },
   statusText: { color: color.texto, fontSize: 14, fontWeight: '700', flexShrink: 1 },
