@@ -648,7 +648,6 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     panel = (
       <>
         <Encabezado cargando titulo={modeloListo ? 'Iniciando la cámara AR…' : 'Preparando el reconocimiento…'} />
-        <Detalle>{modeloListo ? 'Un momento.' : 'La primera vez tarda unos segundos.'}</Detalle>
       </>
     );
   } else if (anclaje) {
@@ -664,16 +663,16 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           {recalibrando
             ? 'Mantén el teléfono quieto apuntando al motor.'
             : !rastreando || (anclaje.mapPlaced && !mapTracking)
-              ? 'Vuelve a apuntar al motor y muévete despacio para recuperar el seguimiento.'
+              ? 'Vuelve a encuadrar el motor despacio.'
               : anclaje.partial
-                ? 'Mapa aproximado. Recorre el vano despacio para ajustar las piezas con una vista más amplia.'
+                ? 'Mapa aproximado. Recorre el motor despacio.'
               : corrido
-                ? 'El anclaje parece corrido respecto de lo que veo ahora. Ponte frente al auto, apunta al vano completo y toca Recalibrar.'
+                ? 'Encuadra todo el motor y toca Recalibrar.'
               : mapTracking
-                ? 'Toca una pieza del motor. Si el mapa se corre, ponte frente al auto y toca Recalibrar.'
+                ? 'Toca una pieza para verla.'
                 : map
-                  ? 'Faltan medidas para colocar las piezas. Muévete despacio, apunta al vano completo y toca Recalibrar.'
-                  : 'Recorre el motor. El contorno se mantiene sobre el vano.'}
+                  ? 'Encuadra todo el motor y toca Recalibrar.'
+                  : 'Recorre el motor despacio.'}
         </Detalle>
         {mapTracking && map && (
           <>
@@ -760,26 +759,26 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         <Encabezado
           icono={detectado ? 'vector-polygon' : 'line-scan'}
           tono={tono}
-          titulo={detectado ? 'Vano del motor detectado' : 'Buscando el vano del motor'}
+          titulo={detectado ? 'Motor detectado' : 'Buscando el motor'}
         />
         <Detalle>
           {!rastreando
-            ? 'Mueve el teléfono despacio unos segundos para que la realidad aumentada reconozca el entorno.'
+            ? 'Mueve el teléfono despacio.'
             : !detectado
-              ? 'Párate frente al parachoques y apunta hacia abajo para que se vea el vano completo.'
-              : map ? 'Alineando el mapa con la parte visible del vano…'
+              ? 'Encuadra todo el motor desde el frente.'
+              : map ? 'Alineando el mapa…'
               : escaneo && escaneo.vistas >= 2 && !escaneo.estable
-                ? `Escaneando el vano: recórrelo despacio con el teléfono, de un lado al otro (${escaneo.vistas} vistas). Se fija solo cuando el contorno deja de cambiar.`
+                ? 'Recorre el motor de lado a lado.'
               : vano?.cortado
-                ? 'El vano no cabe completo en la imagen: recórrelo despacio de un lado al otro para escanearlo, o aléjate un poco.'
+                ? 'Aléjate hasta ver todo el motor.'
                 : ultima?.profundidad && ultima.puntos < CONTOUR_AUTO_DEPTH_POINTS
-                  ? 'Párate frente al auto y muévete despacio para que la cámara mida el vano.'
-                  : `Desde el frente, mantén el teléfono quieto: se fija solo (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
+                  ? 'Muévete despacio frente al motor.'
+                  : `Mantén el teléfono quieto (${Math.min(estables, ESTABLES_PARA_FIJAR)}/${ESTABLES_PARA_FIJAR}).`}
         </Detalle>
         {aviso && <Text style={styles.aviso}>{aviso}</Text>}
-        {leCuesta && <Text style={styles.aviso}>¿Le cuesta encontrarlo? Mantén presionado sobre el motor en la imagen.</Text>}
-        {motorMarcado && !detectado && <Text style={tipo.nota}>Motor marcado: la búsqueda se centra en ese punto.</Text>}
-        <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
+        {leCuesta && <Text style={styles.aviso}>Mantén pulsado el motor en la pantalla.</Text>}
+        {motorMarcado && !detectado && <Text style={tipo.nota}>Motor marcado.</Text>}
+        {debug && <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />}
         <View style={estilos.botones}>
           <Boton
             texto={fijando ? 'Fijando…' : 'Fijar ahora'}
