@@ -1,23 +1,19 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cameraRoute } from '../chat/camera';
+import { CitationModal } from '../chat/CitationModal';
 import { runTurn } from '../chat/client';
 import type { AnthropicMessage } from '../chat/contract';
-import { clear, load, save, toCard, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
+import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
+import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
 import { parts as catalogParts } from '../engine-maps/catalog';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Boton, Icono, Tarjeta } from '../ui';
 
-const TOOL_STATUS: Record<string, string> = {
-  lookup_fuses: 'Revisando la tabla de fusibles…',
-  lookup_parts: 'Buscando la pieza…',
-  show_in_camera: 'Preparando la cámara…',
-};
-const DEFAULT_TOOL_STATUS = 'Consultando el manual…';
-const QUICK_REPLIES = ['Listo, ¿qué sigue?', 'No lo encuentro'];
+const QUICK_REPLIES = [DONE_REPLY, LOST_REPLY];
 
 export default function Ask() {
   const insets = useSafeAreaInsets();
@@ -49,13 +45,14 @@ export default function Ask() {
       if (openedCamera.current) {
         openedCamera.current = false;
         setReplies(true);
+        void load().then(setMessages);
       }
     }, []),
   );
 
-  const openCamera = useCallback((card: ViewCard) => {
+  const openCamera = useCallback((card: ViewCard, cards: ViewCard[]) => {
     openedCamera.current = true;
-    router.push(cameraRoute(card));
+    router.push(cameraRoute(card, cards));
   }, []);
 
   const bubbles = useMemo(() => {
@@ -69,11 +66,7 @@ export default function Ask() {
     const text = (override ?? input).trim();
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
-    const userMessage: AnthropicMessage = { role: 'user', content: text };
     const previous = messages;
-    const parts: ViewPart[] = [];
-    const cards: ViewCard[] = [];
-    let breakNext = false;
 
     setInput('');
     setReplies(false);
@@ -82,61 +75,28 @@ export default function Ask() {
     setQuestion(text);
     setLive([]);
     setLiveCards([]);
-    setStatus('Pensando…');
+    setStatus(THINKING);
     setBusy(true);
 
-    try {
-      for await (const ev of runTurn({ messages: [...previous, userMessage] })) {
-        if (ev.type === 'tool') {
-          setStatus(TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS);
-          breakNext = true;
-        } else if (ev.type === 'ar') {
-          const card = toCard(ev.part, ev.instruction, ev.action);
-          if (card) {
-            cards.push(card);
-            setLiveCards([...cards]);
-          }
-        } else if (ev.type === 'text') {
-          setStatus(null);
-          if (!parts[ev.block]) {
-            const first = parts.some(Boolean);
-            parts[ev.block] = { text: '', citations: [], ...(breakNext && first ? { breakBefore: true } : {}) };
-            breakNext = false;
-          }
-          parts[ev.block] = { ...parts[ev.block], text: parts[ev.block].text + ev.text };
-          setLive(parts.filter(Boolean));
-        } else if (ev.type === 'citation') {
-          parts[ev.block] ??= { text: '', citations: [] };
-          const { title, source, cited_text } = ev;
-          parts[ev.block] = { ...parts[ev.block], citations: [...parts[ev.block].citations, { title, source, cited_text }] };
-          setLive(parts.filter(Boolean));
-        } else if (ev.type === 'done') {
-          const updated = [...previous, userMessage, ...ev.messages];
-          setMessages(updated);
-          void save(updated);
-          if (ev.truncated) setNote('La respuesta se cortó.');
-          setQuestion(null);
-          setLive([]);
-          setLiveCards([]);
-        } else {
-          setError(ev.message);
-          setInput(text);
-          setQuestion(null);
-          setLive([]);
-          setLiveCards([]);
-        }
-      }
-    } catch {
-      setError('Error inesperado.');
+    const result = await sendTurn(previous, text, runTurn, (progress) => {
+      setLive(progress.parts);
+      setLiveCards(progress.cards);
+      setStatus(progress.status);
+    });
+    if ('error' in result) {
+      setError(result.error);
       setInput(text);
-      setQuestion(null);
-      setLive([]);
-      setLiveCards([]);
-    } finally {
-      setStatus(null);
-      busyRef.current = false;
-      setBusy(false);
+    } else {
+      setMessages(result.messages);
+      void save(result.messages);
+      if (result.truncated) setNote('La respuesta se cortó.');
     }
+    setQuestion(null);
+    setLive([]);
+    setLiveCards([]);
+    setStatus(null);
+    busyRef.current = false;
+    setBusy(false);
   }, [input, loaded, messages]);
 
   const reset = useCallback(() => {
@@ -231,15 +191,7 @@ export default function Ask() {
         </View>
       </View>
 
-      <Modal visible={citation !== null} transparent animationType="fade" onRequestClose={() => setCitation(null)}>
-        <View style={styles.overlay}>
-          <Tarjeta estilo={styles.modal}>
-            <Text style={styles.modalTitle}>{citation?.title}</Text>
-            <Text style={[tipo.cuerpo, { marginTop: espacio.m }]}>{citation?.cited_text}</Text>
-            <Boton texto="Cerrar" variante="secundario" onPress={() => setCitation(null)} estilo={{ marginTop: espacio.l }} />
-          </Tarjeta>
-        </View>
-      </Modal>
+      <CitationModal citation={citation} onClose={() => setCitation(null)} />
     </KeyboardAvoidingView>
   );
 }
@@ -253,7 +205,7 @@ function BubbleView({
   bubble: Bubble;
   streaming: boolean;
   onCitation: (c: ViewCitation) => void;
-  onCamera: (card: ViewCard) => void;
+  onCamera: (card: ViewCard, cards: ViewCard[]) => void;
 }) {
   const mine = bubble.role === 'user';
   const uncited =
@@ -279,7 +231,7 @@ function BubbleView({
           <Boton
             texto={`Abrir cámara: ${catalogParts[card.part][0]}`}
             icono="camera"
-            onPress={() => onCamera(card)}
+            onPress={() => onCamera(card, bubble.cards)}
             estilo={{ paddingHorizontal: espacio.m }}
           />
           <Text style={styles.cardNote}>{card.instruction}</Text>
@@ -340,7 +292,4 @@ const styles = StyleSheet.create({
     color: color.texto,
   },
   send: { width: 48, height: 48, borderRadius: radio.m, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
-  overlay: { flex: 1, backgroundColor: color.velo, justifyContent: 'center', padding: espacio.xl },
-  modal: { backgroundColor: color.superficieAlta },
-  modalTitle: { fontSize: 15, fontWeight: '700', color: color.texto },
 });

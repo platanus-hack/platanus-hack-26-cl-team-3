@@ -110,24 +110,31 @@ internal class ModelRenderer {
       attribute(color,3,3)
       attribute(part,1,6)
     }
-    fun scene() {
+    fun pass(geometry: () -> Unit) {
+      GL.glEnable(GL.GL_DEPTH_TEST); GL.glDepthFunc(GL.GL_LESS); GL.glDepthMask(true); GL.glDisable(GL.GL_BLEND)
+      GL.glColorMask(false,false,false,false)
+      geometry()
+      GL.glColorMask(true,true,true,true); GL.glDepthFunc(GL.GL_EQUAL); GL.glDepthMask(false)
+      GL.glEnable(GL.GL_BLEND); GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
+      geometry()
+    }
+    val range = animation?.let { ranges[it.index] }
+    val total = model.triangles.size * 3
+    pass {
       bind(vertices)
-      val range = animation?.let { ranges[it.index] }
-      val total = model.triangles.size * 3
       if (range == null) GL.glDrawArrays(GL.GL_TRIANGLES,0,total)
       else {
         GL.glDrawArrays(GL.GL_TRIANGLES,0,range.first)
         GL.glDrawArrays(GL.GL_TRIANGLES,range.last+1,total-range.last-1)
+      }
+    }
+    if (range != null) {
+      GL.glDepthMask(true); GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
+      pass {
         bind(checkNotNull(moving))
         GL.glDrawArrays(GL.GL_TRIANGLES,0,count*3)
       }
     }
-    GL.glEnable(GL.GL_DEPTH_TEST); GL.glDepthFunc(GL.GL_LESS); GL.glDepthMask(true)
-    GL.glColorMask(false,false,false,false)
-    scene()
-    GL.glColorMask(true,true,true,true); GL.glDepthFunc(GL.GL_EQUAL); GL.glDepthMask(false)
-    GL.glEnable(GL.GL_BLEND); GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
-    scene()
     GL.glDisable(GL.GL_BLEND); GL.glDepthMask(true); GL.glDepthFunc(GL.GL_LESS); GL.glDisable(GL.GL_DEPTH_TEST)
     GL.glDisableVertexAttribArray(position); GL.glDisableVertexAttribArray(color); GL.glDisableVertexAttribArray(part)
   }

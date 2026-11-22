@@ -22,6 +22,14 @@ class PartInspectionTest {
     assertNull(InspectionAction.resolve("fuses","refill"))
   }
 
+  @Test fun inspectionPreservesTheVisibleGuidePointAndTheOriginalLiftPivot() {
+    val guide = origin + EnginePoint(0f,.04f,0f)
+    val part = InspectionPart(ModelPart("battery",origin,guide), 3, listOf(neck,cap)) { it }
+    assertEquals(guide,part.frame(InspectionAction.HIGHLIGHT,.5f)!!.center)
+    val lifted = part.frame(InspectionAction.LIFT,2.8f)!!
+    assertTrue(lifted.center.y > lifted.surface.first().a.y + .04f)
+  }
+
   @Test fun refillOpensTheCapBeforePouringAndRestoresTheRegisteredCenter() {
     val part = inspection("washer")
     val before = part.frame(InspectionAction.REFILL,3.11f)!!
