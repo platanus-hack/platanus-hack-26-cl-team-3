@@ -1,0 +1,7 @@
+Kia Rio IV 2023, G4LC 1.4 MPI — MANN-FILTER W 7023
+
+MANN-FILTER lists this aftermarket replacement for the 1368 cc G4LC applications starting in 2017. Check the engine code and installed filter before applying to a specific vehicle. The supplier catalog and dimensional photograph give a 66 mm outer diameter, 77 mm overall height, 55/65 mm inner/outer seal diameters and M20 x 1.5 thread.
+https://www.mann-filter.com/en/catalog/search-results/product.html/w7023_mann-filter.html
+https://s7g10.scene7.com/is/image/mannhummel/W_7023-dim
+
+The GLB uses metres. The enclosing diameter and height and gasket diameters are modeled from the supplier dimensions. The casing exterior and rolled lip are axisymmetric approximations from its photograph. The blue circle is a measurement aid for the nominal mount thread. The gasket profile height and fillets are illustrative. The mounting face, inlet holes, threads, filter media and valve internals are omitted. The inspection animation is an arbitrary tilt. Vehicle installation, physical inspection, depth and AR registration remain unverified.

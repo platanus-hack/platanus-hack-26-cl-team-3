@@ -1,0 +1,14 @@
+Chevrolet Onix Plus MY2023 | Brazil | 1.0 L3 turbo | engine-bay fuse F48
+
+GM identifies F48 as the 10 A fan-relay fuse of the underhood fuse block. The table footnote identifies MICRO2 as its form factor. The Canadian, Chilean and Brazilian layouts have not been assumed interchangeable. Consult the vehicle label for equipment-specific differences.
+GM Brazil MY23 owner's manual, printed pp. 165–166, 188–191
+https://meu.chevrolet.com.br/content/dam/gmownercenter/gmsa/gmbr/dynamic/manuals/2023/chevrolet/OnixPlus/pt/om_ng-chevrolet_Onix_my23-pt_BR.pdf
+
+The component study follows Littelfuse's 327-series orthographic front, side and top views, including the external blades, upper lip, top contact footprints and red housing. Overall published width, depth and height are 9.1 mm maximum, 3.8 mm and 15.3 mm. The blades extend 7.4 mm and have a nominal 2.8 x 0.8 mm section. Secondary outline proportions are scaled from the drawing. The supplier installed in any particular car is unverified. The model omits internal elements, surface markings, mold detail and the fuse block. Its turntable illustrates the exterior only. The model has no calibrated vehicle-space pose.
+Littelfuse 327 32 V MICRO2 datasheet, revised July 1, 2024, p. 2
+https://www.littelfuse.com/assetdocs/littelfuse-datasheet-327-micro2?assetguid=a43b3ed7-5f7d-40ea-888f-4a2d42aeebe8
+Manufacturer sheet retrieved from DigiKey
+https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6469/032707.5YX2S_Qualitrics_Datasheet.pdf
+
+Verification
+Blender 5.1.2 reimported six mesh objects. The rotation channel changes across sampled frames. Exported dimensions matched the drawing within 0.025 mm. The PNG was rendered from the reimported GLB and inspected independently at 720 x 720.

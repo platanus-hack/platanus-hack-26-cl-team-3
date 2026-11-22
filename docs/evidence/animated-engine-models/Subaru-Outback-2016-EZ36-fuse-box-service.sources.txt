@@ -1,0 +1,12 @@
+Subaru Outback 2016 3.6R EZ36 — engine fuse box service assembly
+
+CapoAR local Android reference. The housing and lid come directly from the indexed triangles in primitives 0 and 1. The pivot is the local registration center for fuses. The lid translates and tilts as a removable cover. Translation and rotation sample the native smoothstep path at 60 Hz. The tray appears during the open interval. Native tray mapping, finishes and block geometry are preserved. The 38 positions (33 occupied) and 16 relays describe the documented local tray layout. Position numbers follow the order in the source layout. This is an illustrative application reference, without measured travel or proof of interchange between vehicle markets. The PNG is a deterministic render of the same triangles.
+
+Source files and SHA-256
+app/modules/capo-ar/android/src/main/assets/engine-models/outback-ez36.glb  76d3de8e9848272a5d0a65ec5cc9fe433897b565481bd0c71f44087032e0d5c0
+app/modules/capo-ar/android/src/main/assets/engine-models/outback-registration.json  11674d42d3a2ae81f86d09cd29a50748cb127196fb379b65e32c67cd3edf8586
+app/modules/capo-ar/android/src/main/assets/engine-models/outback-fuse-tray.json  5e347cf9213c9eee301605a93dd9d74630f4712c75b46a8cf901157e6c26abcd
+app/modules/capo-ar/android/src/main/java/expo/modules/capoar/OutbackModel.kt  3d0f71ce13f48ce2dce80f9f31f70db7f66acd0bd94130fb9a243acd5afda1dc
+app/modules/capo-ar/android/src/main/java/expo/modules/capoar/ServiceOpening.kt  7ea8896ed7d796f4860e673ee3e74f90f71cfd9ed992b437a5567a2455e07af8
+app/modules/capo-ar/android/src/main/java/expo/modules/capoar/PartInspection.kt  e789714d8dd2a2d3a972e0d15c8c6233a35b3625b841aa1883be037720aaa7ad
+app/modules/capo-ar/android/src/main/java/expo/modules/capoar/FuseTray.kt  f9538ad5fc036c6b9af2e4be0f4a4d0932094745577c7460244b8148afe34197
