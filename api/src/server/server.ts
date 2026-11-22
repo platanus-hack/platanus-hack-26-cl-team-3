@@ -7,15 +7,16 @@ import type { ConversationStore } from "../conversations/store";
 import { handleLogs } from "../runlog/handler";
 import type { RunLogStore } from "../runlog/store";
 import { handleChat } from "./chat-handler";
-import { handleTranscribe } from "../transcribe/handler";
+import { handleTranscribe, handleTranscribeToken } from "../transcribe/handler";
 import type { Transcriber } from "../transcribe/handler";
+import type { RealtimeTokenProvider } from "../transcribe/realtime-token";
 import { json } from "./responses";
 import { defaultVehicleDatabase, handleVehicleLookup } from "./vehicle-lookup";
 
 export function createServer({
-  adapter, locator, heartbeatMs, transcriber, vehicleDatabase = defaultVehicleDatabase,
+  adapter, locator, heartbeatMs, transcriber, realtimeToken, vehicleDatabase = defaultVehicleDatabase,
   conversations = null, runlog = null,
-}: { adapter?: Adapter; locator?: Locator; heartbeatMs?: number; transcriber?: Transcriber; vehicleDatabase?: string; conversations?: ConversationStore | null; runlog?: RunLogStore | null } = {}): http.Server {
+}: { adapter?: Adapter; locator?: Locator; heartbeatMs?: number; transcriber?: Transcriber; realtimeToken?: RealtimeTokenProvider; vehicleDatabase?: string; conversations?: ConversationStore | null; runlog?: RunLogStore | null } = {}): http.Server {
   return http.createServer((req, res) => {
     let pathname: string;
     try {
@@ -30,6 +31,7 @@ export function createServer({
     if (req.method === "POST" && pathname === "/api/chat") return void handleChat(req, res, adapter, heartbeatMs, { conversations, runlog });
     if (req.method === "POST" && pathname === "/api/locate") return void handleLocate(req, res, locator);
     if (req.method === "POST" && pathname === "/api/transcribe") return void handleTranscribe(req, res, transcriber);
+    if (req.method === "POST" && pathname === "/api/transcribe/token") return void handleTranscribeToken(req, res, realtimeToken);
     if (pathname === "/api/devices" || pathname === "/api/conversations" || pathname.startsWith("/api/conversations/")) {
       return void handleConversations(req, res, pathname, conversations);
     }

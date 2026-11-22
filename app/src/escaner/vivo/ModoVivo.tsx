@@ -75,7 +75,7 @@ export function useModoVivo({
     [capturarVano, preguntar],
   );
 
-  const { estado, nivel, cerrando } = useEscuchaViva({
+  const { estado, nivel, cerrando, parcial } = useEscuchaViva({
     silenciado: silenciado || !activo,
     onInicio,
     onFrase: (t) => void onFrase(t),
@@ -86,6 +86,7 @@ export function useModoVivo({
     estado,
     nivel,
     cerrando,
+    parcial,
     pregunta,
     error,
     silenciado: silenciado && activo,

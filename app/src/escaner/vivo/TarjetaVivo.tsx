@@ -17,14 +17,13 @@ const BARRA_MAX = 16;
 
 type Caption = { text: string; citations: ViewCitation[]; pensando: boolean };
 
-export function TarjetaVivo({ vivo, caption, part, parcial = '', children }: {
+export function TarjetaVivo({ vivo, caption, part, children }: {
   vivo: ModoVivoEstado;
   caption: Caption;
   part?: PartId;
-  parcial?: string;
   children?: ReactNode;
 }) {
-  const { estado, nivel, cerrando, pregunta, error, silenciado, alternarSilencio } = vivo;
+  const { estado, nivel, cerrando, parcial, pregunta, error, silenciado, alternarSilencio } = vivo;
   const [open, setOpen] = useState(false);
   const chunk = useCaptionChunk(caption.text);
   const pensando = estado === 'escuchando' && caption.pensando;

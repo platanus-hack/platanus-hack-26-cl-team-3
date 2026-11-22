@@ -3,6 +3,8 @@ import { BodyTooLarge, readRaw } from "../server/chat-handler";
 import { json } from "../server/responses";
 import { elevenlabsTranscriber } from "./elevenlabs";
 import { TranscribeError } from "./errors";
+import { elevenlabsRealtimeToken } from "./realtime-token";
+import type { RealtimeTokenProvider } from "./realtime-token";
 
 export type Transcriber = (audio: Buffer, contentType: string) => Promise<string>;
 
@@ -34,6 +36,22 @@ export async function handleTranscribe(
   if (audio.length === 0) return json(res, 400, { error: "El audio está vacío." });
   try {
     json(res, 200, { text: await transcriber(audio, contentType) });
+  } catch (e) {
+    if (!(e instanceof TranscribeError)) console.error(e);
+    const [status, error] = FAILURES[e instanceof TranscribeError ? e.kind : "upstream"];
+    json(res, status, { error });
+  }
+}
+
+export async function handleTranscribeToken(
+  req: IncomingMessage,
+  res: ServerResponse,
+  provider: RealtimeTokenProvider = elevenlabsRealtimeToken,
+): Promise<void> {
+  const chatToken = process.env.CHAT_TOKEN;
+  if (chatToken && req.headers["x-chat-token"] !== chatToken) return json(res, 401, { error: "No autorizado." });
+  try {
+    json(res, 200, { token: await provider() });
   } catch (e) {
     if (!(e instanceof TranscribeError)) console.error(e);
     const [status, error] = FAILURES[e instanceof TranscribeError ? e.kind : "upstream"];
