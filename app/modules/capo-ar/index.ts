@@ -24,6 +24,7 @@ export type CapturaAR = {
   puntos: number; // puntos válidos del mapa de profundidad completo de ese cuadro (0 si aún no hay)
   visualOutline?: number[];
   captureReference?: string;
+  camaraRef?: number[]; // x, y, z (m) de la cámara en esa referencia de ARCore, para medir cuánto se movió el usuario
   visualReferenceCorners?: number[];
   previousVisualOutlines?: Record<string, number[]>;
   visualLandmarks?: number;
