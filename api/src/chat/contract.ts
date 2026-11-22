@@ -2,7 +2,8 @@ import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 
 export type ErrorCode = "refusal" | "provider" | "credit" | "limit" | "internal";
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORTS)[number];
 
 export interface Profile {
   id: string;

@@ -81,10 +81,11 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     void ask(current ? `${LOST_REPLY}: ${parts[current.part][0]}` : LOST_REPLY, true);
   };
   const clearFocus = useCallback(() => setFocus(null), []);
+  const toggleFocus = useCallback((part: PartId) => setFocus((f) => (f === part ? null : part)), []);
 
   return {
     steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, finished, refilling,
-    play, stop, done, lost, clearFocus, ask,
+    play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
 

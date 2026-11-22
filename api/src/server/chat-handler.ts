@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
-import type { Profile } from "../chat/contract";
+import { EFFORTS, type Effort, type Profile } from "../chat/contract";
 import { runTurn } from "../chat/orchestrator";
 import { SYSTEM_PROMPT, VIVO_PROMPT } from "../chat/system-prompt";
 import type { Adapter } from "../chat/orchestrator";
@@ -40,13 +40,15 @@ export function readRaw(req: IncomingMessage, max: number): Promise<Buffer> {
 
 export function validate(body: unknown): Validation {
   if (body === null || typeof body !== "object") return { error: "Cuerpo inválido" };
-  const { messages, profile_id, mode } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown };
+  const { messages, profile_id, mode, effort } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown; effort?: unknown };
   if (!Array.isArray(messages)) return { error: "Falta `messages` (array)" };
   if (messages.length > MAX_MESSAGES) return { error: "La conversación está muy larga. Toca «Nueva conversación»." };
   const last = messages.at(-1) as { role?: unknown } | undefined;
   if (!last || last.role !== "user") return { error: "El último mensaje debe ser role: user" };
-  const profile = resolveProfile(profile_id);
-  if (!profile) return { error: "profile_id no existe" };
+  const base = resolveProfile(profile_id);
+  if (!base) return { error: "profile_id no existe" };
+  if (effort !== undefined && !EFFORTS.includes(effort as Effort)) return { error: "effort no existe" };
+  const profile = effort === undefined ? base : { ...base, effort: effort as Effort };
   if (mode !== undefined && mode !== "vivo") return { error: "mode no existe" };
   const system = mode === "vivo" ? `${SYSTEM_PROMPT}\n\n${VIVO_PROMPT}` : SYSTEM_PROMPT;
   return { profile, messages: messages as MessageParam[], system };

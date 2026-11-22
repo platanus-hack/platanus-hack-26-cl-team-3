@@ -1,6 +1,7 @@
 import { fetch } from 'expo/fetch';
 
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
+import { cargarAjustes } from '../ajustes';
 import { splitEvents } from './sse';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
@@ -20,6 +21,7 @@ export async function* runTurn({
   mode?: 'vivo';
   signal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
+  const { modelo, esfuerzo } = await cargarAjustes();
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {
@@ -29,7 +31,7 @@ export async function* runTurn({
         accept: 'text/event-stream',
         ...tokenHeaders(),
       },
-      body: JSON.stringify({ messages, ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ messages, profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
       signal,
     });
   } catch {

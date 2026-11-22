@@ -4,6 +4,7 @@ COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 ENV NODE_ENV=production
+RUN mkdir -p /app/historial && chown node:node /app/historial
 USER node
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
