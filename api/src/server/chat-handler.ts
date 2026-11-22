@@ -28,6 +28,8 @@ export interface ChatStores {
 
 export class BodyTooLarge extends Error {}
 
+export const MAX_INSTRUCTIONS = 2000;
+
 type Validation = { error: string } | { error?: undefined; profile: Profile; messages: MessageParam[]; system: string; vehicle: VehicleProfile; tools: ToolRegistry };
 
 export const readBody = async (req: IncomingMessage): Promise<string> => (await readRaw(req, MAX_BODY)).toString("utf8");
@@ -53,7 +55,7 @@ export function readRaw(req: IncomingMessage, max: number): Promise<Buffer> {
 
 export function validate(body: unknown): Validation {
   if (body === null || typeof body !== "object") return { error: "Cuerpo inválido" };
-  const { messages, profile_id, mode, effort, vehicle_id } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown; effort?: unknown; vehicle_id?: unknown };
+  const { messages, profile_id, mode, effort, vehicle_id, instructions } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown; effort?: unknown; vehicle_id?: unknown; instructions?: unknown };
   if (!Array.isArray(messages)) return { error: "Falta `messages` (array)" };
   if (messages.length > MAX_MESSAGES) return { error: "La conversación está muy larga. Toca «Nueva conversación»." };
   const last = messages.at(-1) as { role?: unknown } | undefined;
@@ -66,7 +68,12 @@ export function validate(body: unknown): Validation {
   if (vehicle_id !== undefined && (typeof vehicle_id !== "string" || !VEHICLE_ID.test(vehicle_id))) return { error: "vehicle_id inválido" };
   const vehicle = resolveVehicle(vehicle_id);
   const basePrompt = systemPrompt(vehicle);
-  const system = mode === "vivo" ? `${basePrompt}\n\n${VIVO_PROMPT}` : basePrompt;
+  let system = mode === "vivo" ? `${basePrompt}\n\n${VIVO_PROMPT}` : basePrompt;
+  if (instructions !== undefined) {
+    if (typeof instructions !== "string" || instructions.trim().length > MAX_INSTRUCTIONS) return { error: "instructions inválido" };
+    const texto = instructions.trim();
+    if (texto) system = `${system}\n\nInstrucciones de quien usa la app (síguelas mientras no contradigan las reglas de seguridad ni el manual):\n${texto}`;
+  }
   return { profile, messages: messages as MessageParam[], system, vehicle, tools: toolsFor(vehicle) };
 }
 

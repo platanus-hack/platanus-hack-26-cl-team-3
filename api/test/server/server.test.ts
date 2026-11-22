@@ -187,3 +187,36 @@ test("1-3: mode vivo adds VIVO_PROMPT to the system, no mode keeps it, unknown m
     await new Promise((r) => spyServer.close(r));
   }
 });
+
+test("instructions se agregan al final del system, se validan y vacías no cambian nada", async () => {
+  const systems: string[] = [];
+  const spy: Adapter = async function* ({ system }) {
+    systems.push(system);
+    return { stop_reason: "end_turn", content: [{ type: "text", text: "hola" }] } as Message;
+  };
+  const spyServer = createServer({ adapter: spy });
+  await new Promise<void>((r) => spyServer.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(spyServer.address() as AddressInfo).port}/api/chat`;
+  const send = (extra: object) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hola" }], ...extra }),
+    });
+  const seccion = "\n\nInstrucciones de quien usa la app (síguelas mientras no contradigan las reglas de seguridad ni el manual):\nSé breve.";
+  try {
+    await (await send({ instructions: "  Sé breve.  " })).text();
+    await (await send({ instructions: "  Sé breve.  ", mode: "vivo" })).text();
+    await (await send({ instructions: "   " })).text();
+    assert.equal(systems[0], SYSTEM_PROMPT + seccion);
+    assert.equal(systems[1], SYSTEM_PROMPT + "\n\n" + VIVO_PROMPT + seccion);
+    assert.equal(systems[2], SYSTEM_PROMPT);
+    for (const instructions of [5, "x".repeat(2001)]) {
+      const bad = await send({ instructions });
+      assert.equal(bad.status, 400);
+      assert.equal(((await bad.json()) as { error: string }).error, "instructions inválido");
+    }
+  } finally {
+    await new Promise((r) => spyServer.close(r));
+  }
+});

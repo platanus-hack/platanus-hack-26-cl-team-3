@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cargarAjustes, ESFUERZOS, guardarAjustes, MODELOS, type Ajustes } from '../ajustes';
+import { cargarAjustes, ESFUERZOS, guardarAjustes, MAX_INSTRUCCIONES, MODELOS, type Ajustes } from '../ajustes';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Icono } from '../ui';
 
@@ -91,6 +91,20 @@ export default function PantallaAjustes() {
               trackColor={{ true: color.acento, false: color.borde }}
             />
           </View>
+
+          <Text style={[tipo.seccion, styles.separado]}>Instrucciones del asistente</Text>
+          <TextInput
+            style={[styles.opcion, styles.instrucciones]}
+            value={ajustes.instrucciones}
+            onChangeText={(t) => cambiar({ instrucciones: t })}
+            maxLength={MAX_INSTRUCCIONES}
+            multiline
+            placeholder="Sin instrucciones extra"
+            placeholderTextColor={color.textoTenue}
+            textAlignVertical="top"
+            accessibilityLabel="Instrucciones del asistente"
+          />
+          <Text style={tipo.nota}>Se suman a las reglas del asistente en el chat y el modo vivo. Déjalo vacío para no agregar nada.</Text>
         </ScrollView>
       )}
     </View>
@@ -123,5 +137,6 @@ const styles = StyleSheet.create({
     borderColor: color.borde,
   },
   opcionActiva: { borderColor: color.acento, backgroundColor: color.acentoSuave },
+  instrucciones: { minHeight: 120, fontSize: 15, color: color.texto },
   opcionNombre: { fontSize: 16, fontWeight: '600', color: color.texto },
 });
