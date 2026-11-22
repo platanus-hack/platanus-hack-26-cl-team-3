@@ -1,6 +1,6 @@
 # Animated engine bay references
 
-Open a GLB in a glTF animation viewer and select a named inspection clip. In each clip one component lifts from the reference and returns. These review assets use illustration or photograph coordinates and approximate inspection distances. Mechanical disassembly paths, concealed components and physical registration require additional source geometry.
+Open a GLB in a glTF animation viewer and select a named inspection clip. Each clip moves one component for inspection and returns it to its starting position. These review assets use illustration or photograph coordinates and approximate inspection distances. Mechanical disassembly paths, concealed components and physical registration require additional source geometry.
 
 | Model | Animated parts |
 | --- | ---: |
