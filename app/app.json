@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Capo AR",
+    "name": "Hoodini",
     "slug": "capo-ar",
     "version": "0.8.0",
     "orientation": "default",
@@ -24,7 +24,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Capo AR usa la cámara para leer la patente, reconocer el capó abierto e identificar testigos del tablero. Las imágenes se analizan en el teléfono.",
+          "cameraPermission": "Hoodini usa la cámara para leer la patente, reconocer el capó abierto e identificar testigos del tablero. Las imágenes se analizan en el teléfono.",
           "microphonePermission": false,
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
@@ -36,7 +36,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Capo AR usa el micrófono para dictar tus preguntas al chat. El audio se envía a ElevenLabs para transcribirlo.",
+          "microphonePermission": "Hoodini usa el micrófono para dictar tus preguntas al chat. El audio se envía a ElevenLabs para transcribirlo.",
           "enableBackgroundPlayback": false
         }
       ]

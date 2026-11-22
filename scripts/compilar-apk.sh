@@ -48,6 +48,10 @@ else
   echo "AVISO: no hay cgroup de usuario con límite de memoria; se compila sin él (solo con los topes de Gradle)." >&2
 fi
 export CMAKE_BUILD_PARALLEL_LEVEL=1
+# Qué APK es: el commit y la rama quedan en el código de la app (app/src/buildActual.ts los muestra en el menú). En el CI
+# vienen de GITHUB_SHA y GITHUB_REF_NAME; en local, de git.
+export EXPO_PUBLIC_BUILD_SHA="${GITHUB_SHA:-$(git -C "$RAIZ" rev-parse HEAD 2>/dev/null || true)}"
+export EXPO_PUBLIC_BUILD_BRANCH="${GITHUB_REF_NAME:-$(git -C "$RAIZ" branch --show-current 2>/dev/null || true)}"
 
 "$RAIZ/scripts/preparar-modelo-vano.sh"   # modelo del vano del motor (CLIPSeg + decodificador propio)
 "$RAIZ/scripts/prepare-outback-landmark-model.sh"

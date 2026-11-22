@@ -1,12 +1,13 @@
-import Constants from 'expo-constants';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import photoCredits from '../assets/vehicles/credits.json';
 import { AVISO } from './aviso';
+import { buildActual } from './buildActual';
 import { color, espacio, radio, tipo } from './theme';
 import { Boton, Icono, Tarjeta } from './ui';
+import { describeBuild } from './version';
 
 /** Aviso obligatorio (primer uso) y página «Aviso y fuentes» (siempre accesible desde el menú). */
 export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onListo: () => void }) {
@@ -45,8 +46,8 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
               <Text accessibilityRole="link" onPress={() => void Linking.openURL(item.licenseUrl)} style={tipo.nota}>{item.author} · {item.license}</Text>
             </View>)}
           </>}
-          <Text style={[tipo.nota, { marginTop: espacio.l }]}>Versión {Constants.expoConfig?.version}</Text>
         </View>}
+        <Text style={styles.version} selectable>Hoodini · {describeBuild(buildActual())}</Text>
       </ScrollView>
       <Boton texto={primerUso ? 'Entendido, continuar' : 'Cerrar'} onPress={onListo} estilo={styles.boton} />
     </View>
@@ -80,4 +81,5 @@ const styles = StyleSheet.create({
   punto: { flexDirection: 'row', gap: espacio.m, marginBottom: espacio.m, alignItems: 'flex-start' },
   puntoTexto: { flex: 1 },
   boton: { marginTop: espacio.m },
+  version: { fontSize: 11, color: color.textoTenue, textAlign: 'center', marginTop: espacio.xl },
 });

@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVehicleSelection } from '../../plates/selection';
 import { color, tipo } from '../../theme';
 import { BotonIcono, Icono } from '../../ui';
+import { buildActual } from '../../buildActual';
+import { describeBuild } from '../../version';
 import { vehicles } from '../../vehicles';
 
 const photos = new Map<string, number>([
@@ -106,6 +108,7 @@ export default function Menu() {
           <View key={index} pointerEvents="none" style={[styles.corner, corner]} />)}
         <Text style={styles.scanText}>Escanear motor</Text>
       </Pressable>
+      <Text selectable style={styles.version}>{describeBuild(buildActual())}</Text>
     </ScrollView>
   );
 }
@@ -126,6 +129,7 @@ const styles = StyleSheet.create({
   mediaAction: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   upcoming: { ...tipo.nota, marginTop: 14, marginBottom: 8 },
   upcomingRow: { flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 36 },
+  version: { ...tipo.nota, fontSize: 11, marginTop: 12, textAlign: 'center' },
   space: { flex: 1, minHeight: 20 },
   scan: { marginHorizontal: 12, alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 62 },
   scanText: { fontSize: 21, fontWeight: '700', color: color.texto },
