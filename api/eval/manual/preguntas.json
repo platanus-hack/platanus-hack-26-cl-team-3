@@ -1,0 +1,170 @@
+[
+ {
+  "id": "aceite-capacidad",
+  "es": "cuánto aceite lleva el motor 3.6",
+  "en": "engine oil capacity 3.6 L",
+  "dato": "3\\.6 L models: 6\\.9 US qt"
+ },
+ {
+  "id": "aceite-viscosidad",
+  "es": "qué aceite le echo al motor, qué viscosidad",
+  "en": "recommended engine oil viscosity",
+  "dato": "0W-20"
+ },
+ {
+  "id": "aceite-varilla",
+  "es": "cómo reviso el nivel de aceite con la varilla",
+  "en": "check engine oil level gauge",
+  "dato": "level gauge[^.]{0,80}(pull|wipe)|(pull|wipe)[^.]{0,80}level gauge"
+ },
+ {
+  "id": "aceite-presion",
+  "es": "se prendió la luz de presión de aceite",
+  "en": "oil pressure warning light",
+  "dato": "Do not operate the engine with the oil pressure warning light on"
+ },
+ {
+  "id": "limpiaparabrisas-liquido",
+  "es": "qué líquido uso en el limpiaparabrisas",
+  "en": "windshield washer fluid",
+  "dato": "Never use engine coolant as washer fluid"
+ },
+ {
+  "id": "escobillas",
+  "es": "cómo cambio las escobillas del limpiaparabrisas",
+  "en": "replace wiper blades",
+  "dato": "Replacement of wiper blades"
+ },
+ {
+  "id": "fusible-caja",
+  "es": "dónde está la caja de fusibles del motor",
+  "en": "fuse box location engine compartment",
+  "dato": "Fuse box \\(page 11-38\\)"
+ },
+ {
+  "id": "fusible-extractor",
+  "es": "cómo saco un fusible quemado",
+  "en": "remove blown fuse",
+  "dato": "fuse puller"
+ },
+ {
+  "id": "fusible-o2",
+  "es": "fusible del calefactor del sensor de oxígeno",
+  "en": "fuse O2 heater amperage",
+  "dato": "O2 HTR"
+ },
+ {
+  "id": "bateria-ubicacion",
+  "es": "dónde está la batería",
+  "en": "battery location engine compartment",
+  "dato": "Battery \\(page 11-37\\)"
+ },
+ {
+  "id": "bateria-cables",
+  "es": "cómo hago partir el auto con cables",
+  "en": "jump start with jumper cables",
+  "dato": "jumper cables"
+ },
+ {
+  "id": "bateria-luz-carga",
+  "es": "qué significa la luz de carga de la batería",
+  "en": "charge warning light",
+  "dato": "Charge warning light If this light illuminates"
+ },
+ {
+  "id": "llave-pila",
+  "es": "cómo cambio la pila de la llave",
+  "en": "replace key fob battery",
+  "dato": "CR2032"
+ },
+ {
+  "id": "refrigerante-tipo",
+  "es": "qué refrigerante usa el auto",
+  "en": "engine coolant type",
+  "dato": "Super Coolant"
+ },
+ {
+  "id": "frenos-liquido",
+  "es": "qué líquido de frenos lleva",
+  "en": "brake fluid specification",
+  "dato": "DOT ?[34]"
+ },
+ {
+  "id": "combustible-octanaje",
+  "es": "qué bencina le echo, qué octanaje",
+  "en": "fuel octane rating",
+  "dato": "87 AKI"
+ },
+ {
+  "id": "combustible-estanque",
+  "es": "cuántos litros tiene el estanque de combustible",
+  "en": "fuel tank capacity",
+  "dato": "Fuel tank capacity"
+ },
+ {
+  "id": "combustible-reserva",
+  "es": "cuánto queda cuando se prende la luz de reserva",
+  "en": "low fuel warning light tank nearly empty",
+  "dato": "nearly empty approximately 2\\.6 US gal"
+ },
+ {
+  "id": "filtro-aire",
+  "es": "cómo cambio el filtro de aire del motor",
+  "en": "replace air cleaner element",
+  "dato": "air cleaner element"
+ },
+ {
+  "id": "ampolleta-faro",
+  "es": "cómo cambio la ampolleta del foco delantero",
+  "en": "replace headlight bulb",
+  "dato": "headlight bulb"
+ },
+ {
+  "id": "ampolleta-niebla",
+  "es": "cómo cambio la ampolleta del faro de niebla",
+  "en": "front fog light bulb replace",
+  "dato": "Front fog light \\(if equipped\\) NOTE It may be difficult to replace"
+ },
+ {
+  "id": "neumatico-presion",
+  "es": "a cuántas psi inflo los neumáticos",
+  "en": "standard tire pressures psi",
+  "dato": "Standard tire pressures"
+ },
+ {
+  "id": "neumatico-medida",
+  "es": "qué medida de neumáticos lleva",
+  "en": "tire size",
+  "dato": "225/\\d\\dR1[78]"
+ },
+ {
+  "id": "neumatico-luz",
+  "es": "se prendió la luz de presión de neumáticos y parpadea",
+  "en": "tire pressure warning light blinking",
+  "dato": "blinking for approximately one minute"
+ },
+ {
+  "id": "neumatico-rotar",
+  "es": "cada cuánto roto los neumáticos",
+  "en": "tire rotation interval",
+  "dato": "rotate the tires every 7,500 miles"
+ },
+ {
+  "id": "rueda-gato",
+  "es": "cómo cambio una rueda con el gato",
+  "en": "change flat tire with jack",
+  "dato": "jack(ing)? (point|up)"
+ },
+ {
+  "id": "remolque-peso",
+  "es": "cuánto peso puedo remolcar con el 3.6",
+  "en": "maximum gross trailer weight 3.6 L",
+  "dato": "Maximum gross trailer weight 3\\.6 L models\\s+3,000"
+ },
+ {
+  "id": "capo-abrir",
+  "es": "cómo abro el capó",
+  "en": "open engine hood release knob",
+  "dato": "Hood lock release knob"
+ }
+]

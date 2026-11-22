@@ -1,5 +1,6 @@
 export const vehicles = [
   { id: 'outback', name: 'Subaru Outback', year: 2016, engine: '3.6R (EZ36)' },
+  { id: 'swift', name: 'Suzuki Swift', year: 2017, engine: '1.2' },
   { id: 'onix', name: 'Chevrolet Onix Plus LTZ', year: 2023, engine: '1.0 turbo' },
   { id: 'tracker', name: 'Chevrolet Tracker', year: 2023, engine: '1.2 turbo' },
   { id: 'rio', name: 'Kia Rio', year: 2023, engine: '1.4 MPI' },

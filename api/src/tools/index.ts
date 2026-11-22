@@ -1,5 +1,7 @@
 import type { Tool as ToolDefinition, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages";
 import type { ChatEvent } from "../chat/contract";
+import { buscarManual } from "./buscar-manual";
+import { leerManual } from "./leer-manual";
 import { lookupFuses } from "./lookup-fuses";
 import { lookupParts } from "./lookup-parts";
 import { showInCamera } from "./show-in-camera";
@@ -21,4 +23,6 @@ export const tools: ToolRegistry = {
   [lookupFuses.definition.name]: lookupFuses,
   [lookupParts.definition.name]: lookupParts,
   [showInCamera.definition.name]: showInCamera,
+  [buscarManual.definition.name]: buscarManual,
+  [leerManual.definition.name]: leerManual,
 };

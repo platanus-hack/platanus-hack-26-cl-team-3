@@ -38,12 +38,15 @@ internal fun landmarkAlignmentGain(pose: VisualModelPose, registered: Map<Engine
 }
 
 /** Depth and model points are measured on the same camera ray. A global scale preserves pixel alignment. */
-internal fun visualMetricScale(ratios: List<Float>): Float {
-  val supported = ratios.filter { it.isFinite() && it in .5f..2f }.sorted()
-  if (supported.size < 6) return 1f
+internal fun measuredSceneScale(ratios: Collection<Float>): Float? {
+  val supported = ratios.filter { it.isFinite() && it > 0f }.sorted()
+  if (supported.size < 6) return null
   val median = supported[supported.size / 2]
-  return if (supported.count { abs(it - median) < .1f * median } >= .7f * supported.size) median else 1f
+  return median.takeIf { supported.count { abs(it - median) < .1f * median } >= .7f * supported.size }
 }
+
+internal fun visualMetricScale(ratios: List<Float>): Float =
+  measuredSceneScale(ratios.filter { it in .5f..2f }) ?: 1f
 
 private class MatScope : AutoCloseable {
   private val mats = ArrayList<Mat>()
@@ -51,11 +54,12 @@ private class MatScope : AutoCloseable {
   override fun close() = mats.forEach { it.release() }
 }
 
-/** Called on the capture worker. Features were registered to the GLB on portrait and landscape views of the test Outback. */
-internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>, private val templates: OutbackLandmarkTemplates?) {
+/** Match the capture to the feature bank and colored landmarks of the selected vehicle. */
+internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: List<Landmark>,
+  private val templates: OutbackLandmarkTemplates?, private val requireMeasuredScale: Boolean = false,
+  private val poseSupport: List<EnginePoint>? = null) {
   private data class Reference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
   private data class Match(val point: Point3, val pixel: Point, val ratio: Float)
-  private val landmarks = outbackLandmarks(parts)
   private val references: List<Reference>
   private val orb = ORB.create(5200).apply { setFastThreshold(9) }
   private val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
@@ -135,7 +139,7 @@ internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>,
     val t = scope.own(Mat())
     val inliers = scope.own(Mat())
     if (!Calib3d.solvePnPRansac(xyz,uv,calibration,distortion,r,t,false,700,7f,.999,inliers,Calib3d.SOLVEPNP_EPNP)
-      || inliers.rows() < 8) return null
+      || inliers.rows() < (if (requireMeasuredScale) 18 else 8)) return null
     val indices = IntArray(inliers.rows())
     inliers.get(0,0,indices)
     val inlierPixels = indices.map(sensor::get)
@@ -154,12 +158,12 @@ internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>,
     if (!rotation.all(Double::isFinite) || !translation.all(Double::isFinite) ||
       indices.any { val p = objectPoints[it]; rotation[6]*p.x+rotation[7]*p.y+rotation[8]*p.z+translation[2] <= .05 }) return null
     var observations = emptyList<OutbackLandmarkObservation>()
-    try {
+    if (landmarks.isNotEmpty()) try {
       val color = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_COLOR))
       val candidate = translation.copyOf()
       val candidateRotation = rotation.copyOf()
       if (!color.empty()) observations = observeOutbackLandmarks(color,degrees,intrinsics,VisualModelPose(rotation,translation),landmarks,templates)
-      if (refineOutbackLandmarkPose(observations,intrinsics,candidateRotation,candidate)) {
+      if (refineOutbackLandmarkPose(observations,intrinsics,candidateRotation,candidate,poseSupport)) {
         val scale = intrinsics.width.toDouble() / (if (degrees.mod(180) == 90) image.rows() else image.cols())
         fun medianResidual(r: DoubleArray,t: DoubleArray): Double {
           val pose = VisualModelPose(r,t)
@@ -192,6 +196,9 @@ internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>,
       val opticalDepth = rotation[6]*p.x + rotation[7]*p.y + rotation[8]*p.z + translation[2]
       ratios[cell] = (mm / (1000.0 * opticalDepth)).toFloat()
     }
-    VisualModelPose(rotation,translation,visualMetricScale(ratios.values.toList()),observations)
+    val scale = if (requireMeasuredScale) {
+      measuredSceneScale(ratios.values) ?: return null
+    } else visualMetricScale(ratios.values.toList())
+    VisualModelPose(rotation,translation,scale,observations)
   }
 }

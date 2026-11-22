@@ -1,0 +1,116 @@
+[
+ {
+  "id": "tapa-bencina",
+  "es": "cómo abro la tapa del bencinero",
+  "en": "open fuel filler lid release lever",
+  "dato": "pull the lid release lever up"
+ },
+ {
+  "id": "awd-luz",
+  "es": "qué significa la luz AWD que parpadea",
+  "en": "AWD warning light flashing",
+  "dato": "AWD warning light flashing can lead to powertrain damage"
+ },
+ {
+  "id": "cadenas-nieve",
+  "es": "puedo poner cadenas para la nieve",
+  "en": "can tire chains be used",
+  "dato": "Tire chains cannot be used on your vehicle"
+ },
+ {
+  "id": "cadenas-repuesto",
+  "es": "puedo poner cadenas en la rueda de repuesto",
+  "en": "tire chain on temporary spare tire",
+  "dato": "Do not put a tire chain on the temporary spare tire"
+ },
+ {
+  "id": "fusibles-cabina",
+  "es": "dónde está la caja de fusibles de la cabina",
+  "en": "fuse box instrument panel driver seat side",
+  "dato": "behind the fuse box cover on the driver.s seat side"
+ },
+ {
+  "id": "seguro-ninos",
+  "es": "cómo pongo el seguro para niños de las puertas traseras",
+  "en": "child safety locks rear doors",
+  "dato": "child safety locks to the .LOCK. position when children sit"
+ },
+ {
+  "id": "balizas",
+  "es": "dónde está el botón de las balizas",
+  "en": "hazard warning flasher switch",
+  "dato": "Hazard warning flasher switch \\(page 3-7\\)"
+ },
+ {
+  "id": "camara-retroceso",
+  "es": "cómo funciona la cámara de retroceso",
+  "en": "rear view camera",
+  "dato": "A rear view camera is attached to the trunk lid"
+ },
+ {
+  "id": "puerta-abierta",
+  "es": "qué significa el aviso de puerta abierta",
+  "en": "door ajar warning",
+  "dato": "Door ajar warning: The door lock sensor"
+ },
+ {
+  "id": "retroceso-ampolleta",
+  "es": "cómo cambio la ampolleta de la luz de retroceso",
+  "en": "replace backup light bulb",
+  "dato": "Backup light"
+ },
+ {
+  "id": "cvt-aceite",
+  "es": "dónde veo el aceite de la transmisión",
+  "en": "continuously variable transmission fluid",
+  "dato": "Continuously variable transmission fluid"
+ },
+ {
+  "id": "check-engine",
+  "es": "qué significa la luz check engine",
+  "en": "check engine warning light malfunction indicator",
+  "dato": "If the CHECK ENGINE warning light/ malfunction indicator"
+ },
+ {
+  "id": "abs-luz",
+  "es": "se encendió la luz del ABS",
+  "en": "ABS warning light",
+  "dato": "we recommend that you have the ABS repaired"
+ },
+ {
+  "id": "crucero",
+  "es": "cómo activo el control de crucero",
+  "en": "cruise control set speed",
+  "dato": "press the (SET|CRUISE)"
+ },
+ {
+  "id": "sobrecalentamiento",
+  "es": "qué hago si el motor se sobrecalienta",
+  "en": "engine overheating radiator cap",
+  "dato": "Never attempt to remove the radiator cap until the engine has been shut off"
+ },
+ {
+  "id": "ac-compresor",
+  "es": "por qué se apaga el aire acondicionado al acelerar fuerte",
+  "en": "air conditioner compressor shut-off heavily loaded",
+  "dato": "compressor shut-off"
+ },
+ {
+  "id": "gancho-remolque",
+  "es": "dónde está el gancho de remolque",
+  "en": "towing hook",
+  "dato": "Towing hook \\(Outback\\)"
+ },
+ {
+  "id": "cinturon-luz",
+  "es": "qué significa la luz del cinturón de seguridad",
+  "en": "seatbelt warning light",
+  "dato": "Front passenger.s seatbelt warning light"
+ },
+ {
+  "id": "frenos-luz",
+  "es": "qué significa la luz roja de frenos",
+  "en": "brake system warning light",
+  "dato": "& Brake system warning light"
+ }
+]

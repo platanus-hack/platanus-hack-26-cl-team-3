@@ -6,11 +6,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 internal enum class InspectionAction(val duration: Float) {
-  HIGHLIGHT(3.2f), LIFT(5f), REFILL(10f), OPEN(6f);
+  HIGHLIGHT(3.2f), LIFT(5f), SEPARATE(5f), REFILL(10f), OPEN(6f);
 
   companion object {
     fun resolve(part: String, name: String) = entries.firstOrNull {
       it.name.equals(name, ignoreCase = true) && when (it) {
+        SEPARATE -> false
         OPEN -> part in openingParts
         REFILL -> part == "washer"
         else -> true
@@ -35,12 +36,42 @@ internal fun swingWasherLid(point: EnginePoint, hinge: EnginePoint, amount: Floa
   return hinge + EnginePoint(d.x*cos(angle) - d.y*sin(angle), d.x*sin(angle) + d.y*cos(angle), d.z)
 }
 
+internal interface PartAnimation {
+  fun frame(action: InspectionAction, time: Float): InspectionFrame?
+}
+
+internal fun inspectionBrightness(action: InspectionAction, time: Float): Float {
+  val pulse = sin(PI * time / 1.2).toFloat()
+  return (.12f + .58f * pulse * pulse * (1 - ease(time, 2.1f, 2.8f))) *
+    (1 - ease(time, action.duration - .4f, action.duration))
+}
+
+/** Capped cylinders for the inspection bottle and the short illustrated liquid stream. */
+internal fun MutableList<ModelTriangle>.inspectionTube(
+  a: EnginePoint, b: EnginePoint, radius: Float, index: Int, color: FloatArray, reference: EnginePoint,
+  place: (EnginePoint) -> EnginePoint = { it },
+) {
+  val span = b - a
+  if (span.length() <= radius * 1e-5f) return
+  val axis = span.unit()
+  val u = axis.cross(reference).unit()
+  val v = axis.cross(u)
+  fun edge(i: Int) = u * (radius * cos(i * PI / 6).toFloat()) + v * (radius * sin(i * PI / 6).toFloat())
+  for (i in 0 until 12) {
+    val p = edge(i)
+    val q = edge(i + 1)
+    add(ModelTriangle(place(a+p), place(b+p), place(b+q), index, color))
+    add(ModelTriangle(place(a+p), place(b+q), place(a+q), index, color))
+    add(ModelTriangle(place(b), place(b+p), place(b+q), index, color))
+  }
+}
+
 /** Animate in asset coordinates, then apply the same registration as the stationary mesh. */
 internal class InspectionPart(
   private val part: ModelPart, private val index: Int, private val source: List<ModelTriangle>,
   private val openTray: List<ModelTriangle> = emptyList(),
   private val register: (EnginePoint) -> EnginePoint,
-) {
+) : PartAnimation {
   private val points = source.flatMap { listOf(it.a, it.b, it.c) }.distinct()
   private val neck = if (part.id == "washer") source.filter { it.primitive == 0 }
     .flatMap { listOf(it.a, it.b, it.c) }.distinct() else emptyList()
@@ -61,15 +92,14 @@ internal class InspectionPart(
 
   private val opening by lazy { ServiceOpening(part, index, source, register, hinge, mouthRing, openTray) }
 
-  fun frame(action: InspectionAction, time: Float): InspectionFrame? {
+  override fun frame(action: InspectionAction, time: Float): InspectionFrame? {
     if (time < 0 || time >= action.duration) return null
-    val pulse = sin(PI * time / 1.2).toFloat()
-    val brightness = (.12f + .58f*pulse*pulse*(1-ease(time,2.1f,2.8f))) *
-      (1 - ease(time, action.duration-.4f, action.duration))
+    val brightness = inspectionBrightness(action, time)
     if (action == InspectionAction.HIGHLIGHT) return InspectionFrame(index, restingCenter, restingSurface, emptyList(), brightness)
     if (action == InspectionAction.OPEN) return opening.frame(time, brightness)
     val lift = when (action) {
       InspectionAction.HIGHLIGHT, InspectionAction.OPEN -> 0f
+      InspectionAction.SEPARATE -> return null
       InspectionAction.LIFT -> ease(time, .35f, 2f) * (1 - ease(time, 3.65f, 5f))
       InspectionAction.REFILL -> ease(time, 1.05f, 3.1f) * (1 - ease(time, 7.8f, 9.6f))
     }
@@ -131,17 +161,8 @@ internal class InspectionPart(
     val pour = if (refill) ease(time,3.85f,4.35f)*(1-ease(time,6.55f,6.9f)) else 0f
     if (pour > .005f) {
       val spout = mouth + EnginePoint(.028f,.064f,0f)
-      fun tube(a: EnginePoint,b: EnginePoint,r: Float,rgb: FloatArray) {
-        val axis = (b-a).unit()
-        val u = axis.cross(EnginePoint(0f,0f,1f)).unit()
-        val v = axis.cross(u)
-        fun edge(i: Int) = u*(r*cos(i*PI/6).toFloat()) + v*(r*sin(i*PI/6).toFloat())
-        for (i in 0 until 12) {
-          val p = edge(i); val q = edge(i+1)
-          quad(place(a+p),place(b+p),place(b+q),place(a+q),rgb)
-          effects.add(ModelTriangle(place(b),place(b+p),place(b+q),index,rgb))
-        }
-      }
+      fun tube(a: EnginePoint, b: EnginePoint, r: Float, rgb: FloatArray) =
+        effects.inspectionTube(a, b, r, index, rgb, EnginePoint(0f,0f,1f), ::place)
       val shoulder = spout + EnginePoint(.012f,.009f,0f)
       val bottle = floatArrayOf(.59f,.71f,.76f)
       tube(spout,shoulder,.004f,bottle)

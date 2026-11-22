@@ -4,16 +4,18 @@ import kotlin.math.*
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 
-/** Centers of colored surfaces in Outback model coordinates, with their approximate visible widths. */
-internal data class Landmark(val id: String, val center: EnginePoint, val width: Double, val red: Boolean = false)
+internal enum class LandmarkHue { AMBER, BLUE, RED }
+
+/** A colored surface with center and visible width expressed in its vehicle's model space. */
+internal data class Landmark(val id: String, val center: EnginePoint, val width: Double, val hue: LandmarkHue, val upperFace: Boolean = false)
 internal fun outbackLandmarks(parts: List<ModelPart>): List<Landmark> {
   val widths = mapOf("brake_fluid" to .039, "oil_cap" to .047, "positive" to .044, "washer" to .041, "dipstick" to .025)
   return parts.mapNotNull { part ->
-    widths[part.id]?.let { Landmark(part.id,part.guideCenter,it,part.id == "positive") }
+    widths[part.id]?.let { Landmark(part.id, part.guideCenter, it, if (part.id == "positive") LandmarkHue.RED else LandmarkHue.AMBER, upperFace = part.id == "positive") }
   }
 }
 
-private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Boolean): Point? {
+private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, landmark: Landmark): Point? {
   if (width < 5 || x !in 0.0..image.cols().toDouble() || y !in 0.0..image.rows().toDouble()) return null
   val radius = ceil(1.65 * width).toInt()
   val left = max(0, x.toInt()-radius)
@@ -29,7 +31,9 @@ private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Bo
   val hierarchy = Mat()
   try {
     Imgproc.cvtColor(roi,hsv,Imgproc.COLOR_BGR2HSV)
-    if (red) {
+    if (landmark.hue == LandmarkHue.BLUE) {
+      Core.inRange(hsv, Scalar(88.0,38.0,30.0), Scalar(125.0,255.0,255.0), mask)
+    } else if (landmark.hue == LandmarkHue.RED) {
       Core.inRange(hsv,Scalar(0.0,73.0,65.0),Scalar(7.0,255.0,255.0),mask)
       Core.inRange(hsv,Scalar(166.0,73.0,65.0),Scalar(179.0,255.0,255.0),extra)
       Core.bitwise_or(mask,extra,mask)
@@ -45,7 +49,7 @@ private fun colorCenter(image: Mat, x: Double, y: Double, width: Double, red: Bo
         box.x == 0 || box.y == 0 || box.x+box.width == roi.cols() || box.y+box.height == roi.rows()) return@mapNotNull null
       val moments = Imgproc.moments(contour)
       // The red cover has a tall skirt. Its upper face provides the physical registration point.
-      val point = if (red) {
+      val point = if (landmark.upperFace) {
         val first = box.y + (box.height * .10).toInt()
         val last = min(box.y + box.height, max(first + 1, box.y + (box.height * .63).toInt()))
         val strip = mask.submat(first,last,box.x,box.x+box.width)
@@ -85,7 +89,7 @@ internal fun observeOutbackLandmarks(image: Mat, degrees: Int, intr: EngineCaptu
       val x = imagePoint(landmark.center + EnginePoint(step,0f,0f)) ?: return@mapNotNull null
       val z = imagePoint(landmark.center + EnginePoint(0f,0f,step)) ?: return@mapNotNull null
       templates.oilCenter(image,predicted,Point(x.x-predicted.x,x.y-predicted.y),Point(z.x-predicted.x,z.y-predicted.y))
-    } else colorCenter(image,predicted.x,predicted.y,landmark.width*pixelsPerFocal/-p.z,landmark.red)
+    } else colorCenter(image,predicted.x,predicted.y,landmark.width*pixelsPerFocal/-p.z,landmark)
     if (center == null || seen.any { hypot(it.x-center.x,it.y-center.y) < 3 }) return@mapNotNull null
     seen.add(center)
     val (sx,sy) = Imagen.desgirar(((center.x+.5)/image.cols()).toFloat(),((center.y+.5)/image.rows()).toFloat(),degrees)

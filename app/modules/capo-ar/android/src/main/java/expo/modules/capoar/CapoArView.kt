@@ -60,11 +60,23 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private var inspection: Inspection? = null
 
   fun playPartAction(id: String, actionName: String) {
-    val action = InspectionAction.resolve(id, actionName) ?: return
     gl.queueEvent {
       val model = placedEngine?.model ?: return@queueEvent
-      val index = outbackParts.indexOf(id)
-      val movingPart = if (action == InspectionAction.OPEN && id == "brake_fluid") outbackParts.indexOf("brake_cap") else index
+      val action = if (swiftParts.isNotEmpty()) {
+        when (actionName) {
+          "highlight" -> InspectionAction.HIGHLIGHT
+          "lift" -> InspectionAction.LIFT
+          "separate" -> InspectionAction.SEPARATE
+          "open" -> InspectionAction.OPEN
+          "refill" -> if (id == "washer") InspectionAction.REFILL else null
+          else -> null
+        }
+      } else InspectionAction.resolve(id, actionName)
+      if (action == null) return@queueEvent
+      val ids = swiftParts.ifEmpty { outbackParts }
+      val index = ids.indexOf(id)
+      val inspectCap = id == "brake_fluid" && (action == InspectionAction.OPEN || action == InspectionAction.SEPARATE)
+      val movingPart = if (inspectCap) ids.indexOf("brake_cap") else index
       if (index == guidePart && movingPart in model.inspections) {
         inspection = Inspection(model, index, movingPart, action, android.os.SystemClock.elapsedRealtimeNanos())
       }
@@ -76,15 +88,26 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val gl = GLSurfaceView(context)
   internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
   @Volatile internal var outbackParts: List<String> = emptyList()
+  @Volatile internal var swiftParts: List<String> = emptyList()
+  private val swiftModel by lazy { OutbackModel.load(context.assets, swift = true) }
   private val outbackModel by lazy { OutbackModel.load(context.assets) }
   private val visualRegistration by lazy {
     if (org.opencv.android.OpenCVLoader.initLocal()) {
       val templates = try {
         context.assets.open("engine-models/outback-oil-templates.bin").use { OutbackLandmarkTemplates(it.readBytes()) }
       } catch (_: java.io.IOException) { null } catch (_: IllegalArgumentException) { null }
-      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.parts,templates) }
+      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.colorLandmarks,templates) }
     } else null
   }
+  private val swiftRegistration by lazy {
+    if (org.opencv.android.OpenCVLoader.initLocal()) {
+      context.assets.open("engine-models/swift-features.bin").use {
+        VisualModelRegistration(it.readBytes(), swiftModel.colorLandmarks, null, requireMeasuredScale = true, poseSupport = swiftModel.corners)
+      }
+    } else null
+  }
+  private val hasDetailedModel get() = outbackParts.isNotEmpty() || swiftParts.isNotEmpty()
+  private val selectedModel get() = if (swiftParts.isNotEmpty()) swiftModel else outbackModel
   private val modelRenderer = ModelRenderer()
   private val fondo = FondoCamara()
   private val principal = Handler(Looper.getMainLooper())
@@ -476,7 +499,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
       val selectedPart = animation?.index ?: guidePart
-      val focus = focusedPart?.let(outbackParts::indexOf) ?: -1
+      val focus = focusedPart?.let { id -> (swiftParts.ifEmpty { outbackParts }).indexOf(id) } ?: -1
       val effectiveFocus = if (focus >= 0 && focus == guidePart) selectedPart else focus
       modelRenderer.draw(engine.model, mvp, selectedPart, animation, effectiveFocus)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
@@ -567,13 +590,13 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
     val intrinsics = EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1])
-    val previousVisualOutlines = if (pose != null && placedEngine == null && outbackParts.isNotEmpty()) {
+    val previousVisualOutlines = if (pose != null && placedEngine == null && hasDetailedModel) {
       val referenceToCamera = pose.cameraInReference.inverse()
       capturas.mapNotNull { (id, previous) ->
         val visual = previous.visualPose ?: return@mapNotNull null
         val toCurrentCamera = referenceToCamera.compose(previous.pose.cameraInReference)
         val outline = listOf(0, 1, 3, 2).mapNotNull { i ->
-          val p = visual.cameraPoint(outbackModel.corners[i])
+          val p = visual.cameraPoint(selectedModel.corners[i])
           val v = toCurrentCamera.transformPoint(floatArrayOf(p.x, p.y, p.z))
           intrinsics.project(EnginePoint(v[0], v[1], v[2]))?.let { Imagen.girar(it.x, it.y, grados) }
         }
@@ -581,7 +604,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }.toMap()
     } else emptyMap()
     val registeredOutline = placedEngine?.takeIf {
-      measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING
+      measure && hasDetailedModel && it.anchor.trackingState == TrackingState.TRACKING
     }?.let { engine ->
       val localToCamera = camara.pose.inverse().compose(engine.anchor.pose)
       listOf(0, 1, 3, 2).mapNotNull { i ->
@@ -590,14 +613,12 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { Imagen.girar(it.x,it.y,grados) }
       }.takeIf { it.size == 4 }?.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
     }
-    val registeredFeatures = placedEngine?.takeIf { measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING }?.let { engine ->
+    val registeredFeatures = placedEngine?.takeIf { measure && hasDetailedModel && it.anchor.trackingState == TrackingState.TRACKING }?.let { engine ->
       val localToCamera = camara.pose.inverse().compose(engine.anchor.pose)
-      val ids = outbackParts
-      outbackLandmarks(outbackModel.parts).mapNotNull { feature ->
-        val local = engine.model?.centers?.get(ids.indexOf(feature.id)) ?: return@mapNotNull null
+      engine.model?.registeredLandmarks.orEmpty().mapNotNull { (source, local) ->
         val q = engine.alignment.apply(local)
         val v = localToCamera.transformPoint(floatArrayOf(q.x,q.y,q.z))
-        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { feature.center to it }
+        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { source to it }
       }.toMap()
     }
     val puntos = prof?.validos ?: 0
@@ -612,7 +633,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val id = ++contador
     val capture = pose?.let { Captura(it, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof) }
-    val matchOutback = capture != null && outbackParts.isNotEmpty()
+    val matchModel = capture != null && (outbackParts.isNotEmpty() || (swiftParts.isNotEmpty() && prof != null))
+    val matchSwift = swiftParts.isNotEmpty()
     if (capture != null) {
       capturas[id] = capture
       while (capturas.size > 8) capturas.remove(capturas.keys.first())
@@ -624,9 +646,9 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           // Each caller owns its JPEG, including when recalibration and a contour check share the same frame.
           val archivo = File(context.cacheDir, "capo-ar-$id-$index.jpg")
           val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
-          if (matchOutback && capture != null && request.includeMeasurements) {
+          if (matchModel && capture != null && request.includeMeasurements) {
             capture.visualPose = try {
-              visualRegistration?.locate(archivo.path, grados, intrinsics, capture.prof)
+              (if (matchSwift) swiftRegistration else visualRegistration)?.locate(archivo.path, grados, intrinsics, capture.prof)
             } catch (_: org.opencv.core.CvException) { null } catch (_: UnsatisfiedLinkError) { null }
           }
           val r = mutableMapOf<String, Any>(
@@ -641,7 +663,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           val visual = capture?.visualPose
           if (visual != null && capture != null) {
             r["visualLandmarks"] = visual.observations.size
-            r["visualReferenceCorners"] = outbackModel.corners.flatMap { corner ->
+            r["visualReferenceCorners"] = selectedModel.corners.flatMap { corner ->
               val p = visual.cameraPoint(corner)
               capture.pose.cameraInReference.transformPoint(floatArrayOf(p.x, p.y, p.z)).map { it.toDouble() }
             }
@@ -649,7 +671,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
               landmarkAlignmentGain(visual,registeredFeatures,intrinsics,ancho,alto,grados)?.let { r["landmarkGainPx"] = it }
             }
             val polygon = listOf(0, 1, 3, 2).mapNotNull { corner ->
-              intrinsics.project(visual.cameraPoint(outbackModel.corners[corner]))?.let { Imagen.girar(it.x,it.y,grados) }
+              intrinsics.project(visual.cameraPoint(selectedModel.corners[corner]))?.let { Imagen.girar(it.x,it.y,grados) }
             }
             if (polygon.size == 4) r["visualOutline"] = polygon.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
           }
@@ -819,13 +841,17 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     var registrationMethod: String? = null
     val mesh = if (registration.size == 8 && volumes.isNotEmpty()) {
       val frameCorners = registration.chunked(2).map { (x, y) -> Imagen.desgirar(x.toFloat(), y.toFloat(), c.grados) }
-      val visualMesh = c.visualPose?.takeIf { allowVisual && outbackParts.isNotEmpty() }?.let { pose ->
-        val corners = outbackModel.corners.map { corner ->
+      val visualMesh = c.visualPose?.takeIf { allowVisual && hasDetailedModel }?.let { pose ->
+        val corners = selectedModel.corners.map { corner ->
           val point = pose.cameraPoint(corner)
           cameraToWorld(floatArrayOf(point.x, point.y, point.z))
         }
         EngineMesh.create(corners, volumes, captureDepth = ::captureDepth)
       }?.also { registrationMethod = "visual" }
+      if (swiftParts.isNotEmpty() && visualMesh == null) {
+        promise.reject("ERR_REGISTRATION", "Apunta al depósito de frenos y a la batería del Swift.", null)
+        return
+      }
       val scanMesh = scanPoints?.takeIf { visualMesh == null }?.let { points ->
         val rays = frameCorners.map { (u, v) -> intrinsics.ray(EngineImagePoint(u, v)) }
         scanIntersections(points, rays)?.let { corners ->
@@ -886,8 +912,11 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       }
       placement = mesh?.let {
         val origin = it.origin
-        val ids = outbackParts
-        val model = if (ids.isEmpty()) null else PlacedModel(outbackModel, it, ids)
+        val model = when {
+          swiftParts.isNotEmpty() -> PlacedModel(swiftModel, it, swiftParts)
+          outbackParts.isNotEmpty() -> PlacedModel(outbackModel, it, outbackParts)
+          else -> null
+        }
         PlacedEngine(s.createAnchor(Pose.makeTranslation(origin.x, origin.y, origin.z)), it, model)
       }
     } catch (e: Exception) {

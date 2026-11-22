@@ -82,6 +82,7 @@ class CapoArModule : Module() {
 
       Prop("debug") { vista: CapoArView, debug: Boolean? -> vista.capa.debug = debug ?: true }
 
+      Prop("swiftParts") { view: CapoArView, ids: List<String>? -> view.swiftParts = ids.orEmpty() }
       Prop("outbackParts") { view: CapoArView, ids: List<String>? -> view.outbackParts = ids.orEmpty() }
 
       Prop("editingMap") { view: CapoArView, enabled: Boolean? -> view.editMap(enabled == true) }
