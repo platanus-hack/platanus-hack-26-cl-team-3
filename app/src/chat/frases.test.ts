@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { crearCortador } from './frases';
+import { crearCortador, frasesDe } from './frases';
 
 test('5: entrega las frases completas en orden mientras el texto crece, sin repetir', () => {
   const c = crearCortador();
@@ -37,4 +37,13 @@ test('7: texto que no extiende al anterior reinicia; terminar entrega el resto y
   assert.deepEqual(c.terminar(), ['Más']);
   assert.deepEqual(c.terminar(), []);
   assert.deepEqual(c.push('Otra respuesta distinta por completo. Más'), ['Otra respuesta distinta por completo.']);
+});
+
+test('F2-3: frasesDe devuelve todas las frases, incluida la última sin punto final', () => {
+  assert.deepEqual(frasesDe('Apaga el motor por completo. Espera un minuto entero y revisa el nivel'), [
+    'Apaga el motor por completo.',
+    'Espera un minuto entero y revisa el nivel',
+  ]);
+  assert.deepEqual(frasesDe('Una sola frase terminada.'), ['Una sola frase terminada.']);
+  assert.deepEqual(frasesDe(''), []);
 });

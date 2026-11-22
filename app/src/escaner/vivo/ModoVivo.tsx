@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { cargarAjustes } from '../../ajustes';
-import { crearCortador } from './frases';
+import { crearCortador } from '../../chat/frases';
 import { juntarPregunta } from './pregunta';
 import { useEscuchaViva } from './useEscuchaViva';
-import { useVoz } from './useVoz';
+import { useVoz } from '../../chat/useVoz';
 
 type Caption = { text: string; pensando: boolean };
 

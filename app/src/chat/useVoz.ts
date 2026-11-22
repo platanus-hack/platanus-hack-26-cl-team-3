@@ -1,8 +1,8 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { API_URL, CHAT_TOKEN } from '../../chat/client';
-import { fuenteVoz } from '../../chat/voz';
+import { API_URL, CHAT_TOKEN } from './client';
+import { fuenteVoz } from './voz';
 
 const COLA_PRECARGA = 1;
 const COLA_FIN_MS = 300;

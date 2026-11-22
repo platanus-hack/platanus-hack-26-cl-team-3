@@ -12,6 +12,11 @@ const finDeFrase = (texto: string, i: number) => {
 
 const unir = (a: string, b: string) => (a ? `${a} ${b}` : b);
 
+export function frasesDe(texto: string): string[] {
+  const cortador = crearCortador();
+  return [...cortador.push(texto), ...cortador.terminar()];
+}
+
 export function crearCortador() {
   let previo = '';
   let cursor = 0;
