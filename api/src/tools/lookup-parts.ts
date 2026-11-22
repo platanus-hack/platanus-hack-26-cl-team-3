@@ -1,9 +1,6 @@
 import type { Tool as ToolDefinition } from "@anthropic-ai/sdk/resources/messages";
-import rows from "../data/parts.json";
+import { outbackParts } from "../data/outback-parts";
 import type { Tool, ToolOutput } from "./index";
-
-// Existing unscoped records describe the Outback manual used by this chat tool.
-const outbackParts = rows.filter(row => !row.vehicles || row.vehicles.includes("outback"));
 
 const SOURCE = "piezas://outback-2016-3.6r/vano";
 
