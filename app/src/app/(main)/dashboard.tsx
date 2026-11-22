@@ -82,9 +82,9 @@ function DashboardScanner({ vehicleId }: { vehicleId: string }) {
         {!supported ? <Text style={tipo.cuerpo}>El escáner tiene referencias del Subaru Outback 2016. Todavía no hay un manual verificado para el vehículo seleccionado.</Text> : <>
           {!result && <Text style={tipo.cuerpo}>Con el auto estacionado, encuadra el tablero completo y comprueba que los símbolos encendidos se vean nítidos.</Text>}
           {(result || permission?.granted) && (
-            <View style={[styles.preview, result ? { aspectRatio: result.width / result.height } : { maxHeight: height * 0.46, alignSelf: 'center' }]}>
+            <View style={[styles.preview, result ? { aspectRatio: result.width / result.height } : { height: height * 0.46 }]}>
               {result ? <Image source={{ uri: result.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> :
-              <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back" ratio="4:3"
+              <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back"
                 onCameraReady={() => setReady(true)}
                 onMountError={() => { setReady(false); setError('No se pudo abrir la cámara. Vuelve al menú y reintenta.'); }} />}
               {result?.detections.map((box, index) => (
@@ -131,7 +131,7 @@ function DashboardScanner({ vehicleId }: { vehicleId: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.fondo },
   content: { padding: espacio.l, gap: espacio.m },
-  preview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  preview: { width: '100%', backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   marker: { position: 'absolute', borderWidth: 1, borderColor: color.acento },
   result: { backgroundColor: color.superficie, padding: espacio.l, gap: espacio.s },
   link: { ...tipo.nota, color: color.acento, textDecorationLine: 'underline' },
