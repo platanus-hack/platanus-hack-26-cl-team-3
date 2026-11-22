@@ -24,6 +24,7 @@ import { inspectionActions, inspectionLabels } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
+import { lastSonnetStatus, locatePartsWithSonnet, resetSonnetCalls } from '../engine-maps/landmarks/sonnet';
 import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
 import { InitialVisualScan } from './initial-visual-scan';
 import { PartGuide, type PartGuideRef } from './PartGuide';
@@ -119,10 +120,23 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       .catch((e) => setError(`No se pudo cargar el modelo de reconocimiento. ${String(e?.message ?? e)}`));
   }, [intento]);
 
-  const lookForPartCenters = useCallback((captura: CapturaAR, bay: Vano) =>
-    vehicle?.id === 'outback' && captura.profundidad && captura.puntos > 0
-      ? locateOutbackParts(captura, bay, engineMaps.outback.volumes)
-      : Promise.resolve<PartCenter[]>([]), [vehicle?.id]);
+  const sonnetAnchorRef = useRef(false);
+  const [sonnetNote, setSonnetNote] = useState('–');
+
+  useEffect(() => {
+    resetSonnetCalls();
+  }, []);
+
+  const lookForPartCenters = useCallback(async (captura: CapturaAR, bay: Vano): Promise<PartCenter[]> => {
+    if (vehicle?.id !== 'outback' || !captura.profundidad || captura.puntos <= 0) return [];
+    if (sonnetAnchorRef.current) {
+      const fromSonnet = await locatePartsWithSonnet(captura, bay, engineMaps.outback.volumes);
+      const last = lastSonnetStatus();
+      if (last) setSonnetNote(last.points ? `${last.points} puntos en ${last.ms} ms` : 'sin respuesta');
+      if (fromSonnet.length) return fromSonnet;
+    }
+    return locateOutbackParts(captura, bay, engineMaps.outback.volumes);
+  }, [vehicle?.id]);
 
   const fijar = useCallback(async (captura: CapturaAR, v: Vano, centers: PartCenter[], partial = false, initial = false) => {
     if (ocupado.current || !ar.current) return;
@@ -503,9 +517,19 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
+  sonnetAnchorRef.current = controls.sonnetAnchor;
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
-  const { current: step, stepKey, play } = cameraGuide;
+  const { current: step, stepKey, play, focus } = cameraGuide;
+  const playedFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focus) playedFocus.current = null;
+    else if (playedFocus.current !== focus && mapTracking && outbackParts && selected === focus && ar.current) {
+      playedFocus.current = focus;
+      play('highlight');
+      void ar.current.playPartAction(focus, 'highlight').catch(() => setAviso('No se pudo mostrar la acción.'));
+    }
+  }, [focus, mapTracking, outbackParts, selected, play]);
   useEffect(() => {
     if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
       playedStep.current = stepKey;
@@ -651,7 +675,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               anclaje.adjustedParts?.length ? ` · ${anclaje.adjustedParts.length} piezas ajustadas` : ''
             } · calce del contorno ${
               calce ? `${pct(calce.valor)} (${calce.n})` : '–'
-            }`}
+            }${controls.sonnetAnchor ? ` · Sonnet ${sonnetNote}` : ''}`}
           />
         )}
       </>
@@ -699,7 +723,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               tasa.total ? ` (${pct(tasa.validos / tasa.total)})` : ''
             } · zoom ×${zoom.toFixed(1)} · escaneo ${escaneo ? `${escaneo.vistas} vistas, acuerdo ${pct(escaneo.acuerdo)}` : '–'}${motorMarcado ? ' · motor marcado' : ''} · vano ${vano ? `${pct(vano.area)} · ${vano.esquinas.length} esquinas` : '–'} · capó ${pct(capo)} · profundidad ${
               ultima?.profundidad ? `${ultima.puntos} puntos` : `no (${ultima?.muestras ?? 0}/49)`
-            }${ms !== null ? ` · ${ms} ms` : ''}`}
+            }${ms !== null ? ` · ${ms} ms` : ''}${controls.sonnetAnchor ? ` · Sonnet ${sonnetNote}` : ''}`}
           />
         )}
       </>
@@ -716,7 +740,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         debug={debug}
         outbackParts={outbackParts}
         selectedPart={selectedIndex}
-        onPart={(e) => setSelectedIndex(e.nativeEvent.index)}
+        focusedPart={focus}
+        onPart={(e) => {
+          setSelectedIndex(e.nativeEvent.index);
+          if (map?.volumes[e.nativeEvent.index]?.part !== focus) cameraGuide.clearFocus();
+        }}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />

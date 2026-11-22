@@ -6,6 +6,11 @@ const MAX_TOKENS = 4096;
 
 let client: Anthropic | undefined;
 
+export function getClient(): Anthropic {
+  client ??= new Anthropic();
+  return client;
+}
+
 const PROVIDER_MESSAGE = "El proveedor del modelo falló. Inténtalo de nuevo.";
 const CREDIT_MESSAGE = "Se acabó el crédito de la key de Anthropic.";
 
@@ -20,9 +25,8 @@ export function toProviderError(e: unknown): ProviderError {
 }
 
 export const anthropic: Adapter = async function* ({ profile, system, tools, messages, signal }) {
-  client ??= new Anthropic();
   try {
-    const stream = client.messages.stream(
+    const stream = getClient().messages.stream(
       {
         model: profile.model,
         max_tokens: MAX_TOKENS,
