@@ -21,7 +21,8 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
-import { inspectionActions, inspectionLabels, inspectionSeconds } from '../engine-maps/inspection';
+import swiftBinding from '../../modules/capo-ar/android/src/main/assets/engine-models/swift-registration.json';
+import { inspectionActions, inspectionLabels, inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
@@ -40,6 +41,20 @@ import type { Vehicle } from '../vehicles';
 import {
   ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO,
 } from './comun';
+
+const swiftMotions = new Map(
+  (swiftBinding.parts as { id: string; inspection?: { kind: string } }[])
+    .map(part => [part.id, part.inspection?.kind])
+);
+
+function swiftInspectionActions(part: PartId): InspectionAction[] {
+  const motion = swiftMotions.get(part === 'brake_fluid' ? 'brake_cap' : part);
+  const actions: InspectionAction[] = ['highlight', 'lift'];
+  if (motion === 'separate') actions.push('separate');
+  if (motion === 'twist') actions.push('open');
+  if (part === 'washer' && motion === 'separate') actions.push('refill');
+  return actions;
+}
 
 type PlacementCandidate = {
   capture: CapturaAR; bay: Vano; centers: PartCenter[]; partial: boolean;
@@ -531,33 +546,36 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, stop, focus } = cameraGuide;
-  const refillLoop = !!(cameraGuide.refilling && mapTracking && outbackParts && selected === 'washer');
+  const detailedParts = swiftParts ?? outbackParts;
+  const refillLoop = !!(cameraGuide.refilling && mapTracking && selected === 'washer' &&
+    (outbackParts || (swiftParts && swiftInspectionActions('washer').includes('refill'))));
   const choosePart = (index: number) => {
     setSelectedIndex(index);
     const part = map?.volumes[index]?.part;
-    if (outbackParts && part) cameraGuide.toggleFocus(part);
+    if (detailedParts && part) cameraGuide.toggleFocus(part);
     else if (part !== focus) cameraGuide.clearFocus();
   };
   const playedFocus = useRef<string | null>(null);
   useEffect(() => {
     if (!focus) playedFocus.current = null;
-    else if (playedFocus.current !== focus && mapTracking && outbackParts && selected === focus && ar.current) {
+    else if (playedFocus.current !== focus && mapTracking && detailedParts && selected === focus && ar.current) {
       playedFocus.current = focus;
       play('highlight');
       void ar.current.playPartAction(focus, 'highlight').catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [focus, mapTracking, outbackParts, selected, play]);
+  }, [focus, mapTracking, detailedParts, selected, play]);
   useEffect(() => {
     if (refillLoop) {
       playedStep.current = stepKey;
       return;
     }
-    if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
+    if (playedStep.current !== stepKey && mapTracking && detailedParts && step?.action && selected === step.part && ar.current &&
+        (!swiftParts || swiftInspectionActions(step.part).includes(step.action))) {
       playedStep.current = stepKey;
       play(step.action);
       void ar.current.playPartAction(step.part, step.action).catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [refillLoop, mapTracking, outbackParts, selected, step, stepKey, play]);
+  }, [refillLoop, mapTracking, detailedParts, swiftParts, selected, step, stepKey, play]);
   useEffect(() => {
     if (!refillLoop) return;
     const cycle = () => {
@@ -677,14 +695,14 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
             )}
             {(outbackParts || swiftParts) && selected && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
-                {(swiftParts ? ['highlight' as const] : inspectionActions(selected)).map((action) => (
+                {(swiftParts ? swiftInspectionActions(selected) : inspectionActions(selected)).map((action) => (
                   <Pressable key={action} accessibilityRole="button" style={styles.part}
                     onPress={() => {
                       controls.setMode('compact');
                       cameraGuide.play(action);
                       void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
                     }}>
-                    <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
+                    <Text style={tipo.nota}>{action === 'separate' && selected === 'brake_fluid' ? 'Separar tapa en 3D' : inspectionLabels[action]}</Text>
                   </Pressable>
                 ))}
               </ScrollView>

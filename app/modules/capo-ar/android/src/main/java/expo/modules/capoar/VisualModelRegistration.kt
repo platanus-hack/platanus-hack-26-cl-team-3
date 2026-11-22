@@ -54,11 +54,12 @@ private class MatScope : AutoCloseable {
   override fun close() = mats.forEach { it.release() }
 }
 
-/** Called on the capture worker. Features were registered to the GLB on portrait and landscape views of the test Outback. */
-internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>, private val templates: OutbackLandmarkTemplates?, private val requireMeasuredScale: Boolean = false) {
+/** Match the capture to the feature bank and colored landmarks of the selected vehicle. */
+internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: List<Landmark>,
+  private val templates: OutbackLandmarkTemplates?, private val requireMeasuredScale: Boolean = false,
+  private val poseSupport: List<EnginePoint>? = null) {
   private data class Reference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
   private data class Match(val point: Point3, val pixel: Point, val ratio: Float)
-  private val landmarks = outbackLandmarks(parts)
   private val references: List<Reference>
   private val orb = ORB.create(5200).apply { setFastThreshold(9) }
   private val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
@@ -162,7 +163,7 @@ internal class VisualModelRegistration(bytes: ByteArray, parts: List<ModelPart>,
       val candidate = translation.copyOf()
       val candidateRotation = rotation.copyOf()
       if (!color.empty()) observations = observeOutbackLandmarks(color,degrees,intrinsics,VisualModelPose(rotation,translation),landmarks,templates)
-      if (refineOutbackLandmarkPose(observations,intrinsics,candidateRotation,candidate)) {
+      if (refineOutbackLandmarkPose(observations,intrinsics,candidateRotation,candidate,poseSupport)) {
         val scale = intrinsics.width.toDouble() / (if (degrees.mod(180) == 90) image.rows() else image.cols())
         fun medianResidual(r: DoubleArray,t: DoubleArray): Double {
           val pose = VisualModelPose(r,t)

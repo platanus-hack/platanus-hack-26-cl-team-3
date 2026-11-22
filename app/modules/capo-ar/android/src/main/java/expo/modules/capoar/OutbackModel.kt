@@ -8,10 +8,12 @@ import java.nio.ByteOrder
 import kotlin.math.abs
 
 internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c: EnginePoint, val part: Int, val rgb: FloatArray, val primitive: Int = 0)
-internal data class ModelPart(val id: String, val center: EnginePoint, val guideCenter: EnginePoint = center)
+internal data class ModelPart(val id: String, val center: EnginePoint, val guideCenter: EnginePoint = center, val motion: BayInspectionMotion? = null)
 internal class OutbackModel(
   val parts: List<ModelPart>, val corners: List<EnginePoint>, val triangles: List<ModelTriangle>,
   val relativeDepths: List<Float>, val openFuseTray: List<ModelTriangle> = emptyList(),
+  val usesBayInspection: Boolean = false,
+  val colorLandmarks: List<Landmark> = outbackLandmarks(parts),
 ) {
   companion object {
     // The bundled GLB has a single scene of identity-transform nodes, indexed triangles,
@@ -23,7 +25,18 @@ internal class OutbackModel(
       fun point(a: JSONArray) = EnginePoint(a.getDouble(0).toFloat(), a.getDouble(1).toFloat(), a.getDouble(2).toFloat())
       val parts = binding.getJSONArray("parts").objects().map { part ->
         val center = point(part.getJSONArray("center"))
-        ModelPart(part.getString("id"), center, part.optJSONArray("guideCenter")?.let(::point) ?: center)
+        val motion = part.optJSONObject("inspection")?.let { data ->
+          val kind = BayMotionKind.valueOf(data.getString("kind").uppercase(java.util.Locale.ROOT))
+          val axis = point(data.getJSONArray("axis"))
+          val travel = data.getDouble("travel").toFloat()
+          require(axis.length().isFinite() && axis.length() > 0f && travel.isFinite() && travel > 0f)
+          val primitive = if (data.has("movingPrimitive")) data.getInt("movingPrimitive") else null
+          val origin = if (kind == BayMotionKind.TWIST) point(data.getJSONArray("origin")) else center
+          val angle = if (kind == BayMotionKind.TWIST) data.getDouble("angle").toFloat() else 0f
+          require(angle.isFinite() && origin.x.isFinite() && origin.y.isFinite() && origin.z.isFinite())
+          BayInspectionMotion(kind, axis.unit(), travel, origin, angle, primitive)
+        }
+        ModelPart(part.getString("id"), center, part.optJSONArray("guideCenter")?.let(::point) ?: center, motion)
       }
       val corners = binding.getJSONArray("corners").let { a -> List(4) { point(a.getJSONArray(it)) } }
       val file = ByteBuffer.wrap(assets.open("engine-models/$modelName.glb").use { it.readBytes() }).order(ByteOrder.LITTLE_ENDIAN)
@@ -72,7 +85,12 @@ internal class OutbackModel(
       }
       val depths = binding.getJSONArray("relativeDepths")
       val relativeDepths = List(4) { depths.getDouble(it).toFloat() }
-      if (swift) return OutbackModel(parts, corners, triangles, relativeDepths)
+      if (swift) {
+        val landmarks = binding.getJSONArray("colorLandmarks").objects().map { site ->
+          Landmark(site.getString("id"), point(site.getJSONArray("center")), site.getDouble("width"), LandmarkHue.valueOf(site.getString("color")))
+        }
+        return OutbackModel(parts, corners, triangles, relativeDepths, usesBayInspection = true, colorLandmarks = landmarks)
+      }
       val detailed = triangles.groupBy { it.part }.flatMap { (index, shape) ->
         when (parts[index].id) {
           "dipstick" -> dipstickHandle(shape)
@@ -107,8 +125,9 @@ internal class ModelBasis(points: List<EnginePoint>) {
 
 internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: List<String>) {
   val triangles: List<ModelTriangle>
+  val registeredLandmarks: Map<EnginePoint, EnginePoint>
   val centers: Map<Int, EnginePoint>
-  val inspections: Map<Int, InspectionPart>
+  val inspections: Map<Int, PartAnimation>
   init {
     val indices = model.parts.map { ids.indexOf(it.id).also { i -> require(i >= 0) } }
     val src = model.corners
@@ -145,6 +164,7 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
     }
     fun place(p: EnginePoint) = best(initial(p))
     centers = model.parts.mapIndexed { i,p -> indices[i] to place(p.guideCenter) }.toMap()
+    registeredLandmarks = model.colorLandmarks.associate { it.center to place(it.center) }
     val cache = HashMap<EnginePoint,EnginePoint>()
     fun vertex(p: EnginePoint) = cache.getOrPut(p) { place(p) }
     triangles = model.triangles.map { t -> t.copy(a = vertex(t.a), b = vertex(t.b), c = vertex(t.c), part = indices[t.part]) }
@@ -160,8 +180,11 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
     )
     inspections = model.triangles.groupBy { it.part }.map { (index, sourceTriangles) ->
       val part = model.parts[index]
-      indices[index] to InspectionPart(part, indices[index], sourceTriangles,
+      val inspection = if (model.usesBayInspection) {
+        BayPartInspection(part, indices[index], sourceTriangles, source, ::registered)
+      } else InspectionPart(part, indices[index], sourceTriangles,
         openTray = if (part.id == "fuses") model.openFuseTray else emptyList(), register = ::registered)
+      indices[index] to inspection
     }.toMap()
   }
 

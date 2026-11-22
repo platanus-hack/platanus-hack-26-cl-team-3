@@ -60,12 +60,23 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private var inspection: Inspection? = null
 
   fun playPartAction(id: String, actionName: String) {
-    val action = InspectionAction.resolve(id, actionName) ?: return
     gl.queueEvent {
       val model = placedEngine?.model ?: return@queueEvent
-      if (swiftParts.isNotEmpty() && action != InspectionAction.HIGHLIGHT) return@queueEvent
-      val index = swiftParts.ifEmpty { outbackParts }.indexOf(id)
-      val movingPart = if (action == InspectionAction.OPEN && id == "brake_fluid") outbackParts.indexOf("brake_cap") else index
+      val action = if (swiftParts.isNotEmpty()) {
+        when (actionName) {
+          "highlight" -> InspectionAction.HIGHLIGHT
+          "lift" -> InspectionAction.LIFT
+          "separate" -> InspectionAction.SEPARATE
+          "open" -> InspectionAction.OPEN
+          "refill" -> if (id == "washer") InspectionAction.REFILL else null
+          else -> null
+        }
+      } else InspectionAction.resolve(id, actionName)
+      if (action == null) return@queueEvent
+      val ids = swiftParts.ifEmpty { outbackParts }
+      val index = ids.indexOf(id)
+      val inspectCap = id == "brake_fluid" && (action == InspectionAction.OPEN || action == InspectionAction.SEPARATE)
+      val movingPart = if (inspectCap) ids.indexOf("brake_cap") else index
       if (index == guidePart && movingPart in model.inspections) {
         inspection = Inspection(model, index, movingPart, action, android.os.SystemClock.elapsedRealtimeNanos())
       }
@@ -85,13 +96,13 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val templates = try {
         context.assets.open("engine-models/outback-oil-templates.bin").use { OutbackLandmarkTemplates(it.readBytes()) }
       } catch (_: java.io.IOException) { null } catch (_: IllegalArgumentException) { null }
-      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.parts,templates) }
+      context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.colorLandmarks,templates) }
     } else null
   }
   private val swiftRegistration by lazy {
     if (org.opencv.android.OpenCVLoader.initLocal()) {
       context.assets.open("engine-models/swift-features.bin").use {
-        VisualModelRegistration(it.readBytes(), emptyList(), null, requireMeasuredScale = true)
+        VisualModelRegistration(it.readBytes(), swiftModel.colorLandmarks, null, requireMeasuredScale = true, poseSupport = swiftModel.corners)
       }
     } else null
   }
@@ -602,14 +613,12 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { Imagen.girar(it.x,it.y,grados) }
       }.takeIf { it.size == 4 }?.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) }
     }
-    val registeredFeatures = placedEngine?.takeIf { measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING }?.let { engine ->
+    val registeredFeatures = placedEngine?.takeIf { measure && hasDetailedModel && it.anchor.trackingState == TrackingState.TRACKING }?.let { engine ->
       val localToCamera = camara.pose.inverse().compose(engine.anchor.pose)
-      val ids = outbackParts
-      outbackLandmarks(outbackModel.parts).mapNotNull { feature ->
-        val local = engine.model?.centers?.get(ids.indexOf(feature.id)) ?: return@mapNotNull null
+      engine.model?.registeredLandmarks.orEmpty().mapNotNull { (source, local) ->
         val q = engine.alignment.apply(local)
         val v = localToCamera.transformPoint(floatArrayOf(q.x,q.y,q.z))
-        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { feature.center to it }
+        intrinsics.project(EnginePoint(v[0],v[1],v[2]))?.let { source to it }
       }.toMap()
     }
     val puntos = prof?.validos ?: 0

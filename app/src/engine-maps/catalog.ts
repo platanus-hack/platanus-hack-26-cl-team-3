@@ -1,3 +1,4 @@
+import { swiftVolumes } from './swift-volumes';
 import { outbackVolumes } from './outback-volumes';
 import type { Vehicle } from '../vehicles';
 
@@ -13,6 +14,8 @@ export const parts = {
   positive: ["Borne positivo","Terminal positivo de la batería."],
   engine_cover: ["Cubierta del motor", "Cubierta central con el emblema Subaru sobre el motor bóxer de seis cilindros."],
   intake_snorkel: ["Toma frontal de aire", "Conducto ancho que lleva aire desde el frente del auto hasta la caja del filtro."],
+  cowl_panel: ["Panel bajo el parabrisas", "Panel transversal en el borde trasero del vano."],
+  intake_resonator: ["Resonador de admisión", "Cámara frontal unida al conducto de admisión."],
   intake_hose: ["Manguito de admisión", "Tramo que une la salida de la caja del filtro con la admisión bajo la cubierta."],
   abs_unit: ["Unidad hidráulica ABS", "Bloque hidráulico y bomba a los que llegan las tuberías rígidas de freno."],
   left_strut_mount: ["Copela delantera izquierda", "Soporte superior de la suspensión izquierda del vehículo, junto al depósito de frenos."],
@@ -69,11 +72,19 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
   },
   swift: {
     referenceVariant: "1.2 · Vehículo de referencia de 2017",
-    volumes: [
-      { part: 'brake_fluid', height: 0.052733, outline: [[0.73005, 0.08521], [0.73702, 0.10337], [0.73998, 0.11793], [0.75054, 0.21401], [0.75058, 0.23293], [0.74562, 0.24961], [0.73567, 0.25612], [0.72316, 0.25078], [0.71121, 0.23496], [0.70403, 0.2174], [0.69943, 0.19708], [0.68685, 0.10091], [0.68687, 0.0831], [0.6924, 0.06695], [0.70272, 0.06077], [0.7181, 0.0682]] },
-      { part: 'brake_cap', height: 0.034484, outline: [[0.73891, 0.10529], [0.74052, 0.12647], [0.73769, 0.1424], [0.73093, 0.15246], [0.72129, 0.15496], [0.71032, 0.14949], [0.69978, 0.13696], [0.69133, 0.11945], [0.68583, 0.09777], [0.68416, 0.0772], [0.68624, 0.06112], [0.69244, 0.04947], [0.70314, 0.04567], [0.71568, 0.05272], [0.72611, 0.06671], [0.73387, 0.0842]] },
-    ],
+    volumes: swiftVolumes,
     partDetails: {
+      fuses: "Tapa de la caja de fusibles exterior, junto al guardabarros y la batería. El guardabarros oculta el borde exterior en la grabación. Verifica los circuitos en la etiqueta de la unidad.",
+      coolant: "Parte superior visible del depósito de expansión, conectada con la manguera del radiador.",
+      air_filter: "Caja estriada del filtro de aire en el centro del vano.",
+      intake_snorkel: "Conducto curvo con la boca abierta junto al llenado del lavaparabrisas.",
+      radiator_support: "Travesaño frontal que pasa bajo el borde de la toma de aire.",
+      washer: "Tapa azul del lavaparabrisas, cerca del extremo abierto del conducto de admisión.",
+      dipstick: "Manilla amarilla de la varilla, detrás del conducto curvo de admisión.",
+      oil_cap: "Tapa oscura con agarre transversal, al costado de la caja del filtro.",
+      radiator_cap: "Tapa de presión con pestañas y etiqueta de advertencia. Ábrela solo con el motor completamente frío.",
+      coolant_cap: "Tapa del depósito de expansión del Swift. Identifica el depósito con el motor frío.",
+      positive: "Cubierta roja del borne positivo junto al borde de la batería.",
       brake_fluid: "Depósito de líquido de frenos junto a la batería y al parabrisas.",
       brake_cap: "Tapa del depósito de líquido de frenos.",
     },
