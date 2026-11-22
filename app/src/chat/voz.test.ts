@@ -10,3 +10,7 @@ test('8: codifica el texto en la URL y agrega x-chat-token si existe', () => {
   });
   assert.deepEqual(fuenteVoz('hola', { apiUrl: 'https://api.test' }).headers, {});
 });
+
+test('agrega la voz a la URL si viene', () => {
+  assert.equal(fuenteVoz('hola', { apiUrl: 'https://api.test', voz: 'luisa' }).uri, 'https://api.test/api/speak?text=hola&voz=luisa');
+});

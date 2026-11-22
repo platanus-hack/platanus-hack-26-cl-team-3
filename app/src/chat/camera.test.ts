@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { toCard } from './history';
-import { cameraRoute, fuseCitationRoute, fuseRoute } from './camera';
+import { confirmsGuideStep } from './guide';
+import { maintenanceSteps, toCard } from './history';
+import { cameraRoute, fuseCitationRoute, fuseRoute, readGuide } from './camera';
 
 test('cameraRoute points to /escanear with the vehicle, part and instruction', () => {
   const card = { part: 'washer' as const, instruction: 'Busca la tapa amarilla.' };
   assert.deepEqual(cameraRoute(card, [card], 'outback'), {
     pathname: '/escanear',
-    params: { vehicleId: 'outback', part: 'washer', instruction: 'Busca la tapa amarilla.' },
+    params: { vivo: '1', vehicleId: 'outback', part: 'washer', instruction: 'Busca la tapa amarilla.' },
   });
 });
 
@@ -47,4 +48,25 @@ test('a citation from an unknown vehicle or box does not open the fuse screen', 
 test('fuseRoute points to /fusibles with the vehicle, the box and the fuse number', () => {
   assert.deepEqual(fuseRoute('outback', 'motor', 37), { pathname: '/fusibles', params: { vehicleId: 'outback', box: 'motor', fuse: '37' } });
   assert.deepEqual(fuseRoute('outback', 'cabina', 6), { pathname: '/fusibles', params: { vehicleId: 'outback', box: 'cabina', fuse: '6' } });
+});
+
+test('the camera route keeps the verified fuse target on the third step only', () => {
+  const target = { box: 'motor', numbers: [5], instruction: 'Open the diagram to inspect fuse 5.' };
+  const find = toCard('fuses', 'Find the box.')!;
+  const open = toCard('fuses', 'Open the box.', 'open')!;
+  const cards = maintenanceSteps([find, open], [target]);
+  const route = cameraRoute(find, cards, 'outback');
+  assert.deepEqual(readGuide(route.params).steps, [find, open, { part: 'fuses', instruction: target.instruction, fuseTargets: [target] }]);
+  assert.deepEqual(maintenanceSteps([], [target]), []);
+  const washer = [toCard('washer', 'Find the reservoir.')!, toCard('washer', 'Refill.', 'refill')!];
+  assert.deepEqual(maintenanceSteps(washer, []), washer);
+  const oil = toCard('oil_cap', 'Open the cap.', 'open')!;
+  assert.deepEqual(maintenanceSteps([oil], []).map(card => [card.part, card.action]), [['oil_cap', undefined], ['oil_cap', 'open']]);
+  assert.ok(confirmsGuideStep('Ya la encontré.'));
+  assert.ok(confirmsGuideStep('Listo'));
+  assert.ok(confirmsGuideStep('Perfecto, la encontré.'));
+  assert.ok(confirmsGuideStep('Listo, destapada'));
+  assert.equal(confirmsGuideStep('Todavía no la encontré'), false);
+  assert.deepEqual(maintenanceSteps([find], [target]).map(card => card.fuseTargets), [undefined, [target]]);
+  assert.equal(confirmsGuideStep('¿Cómo la destapo?'), false);
 });

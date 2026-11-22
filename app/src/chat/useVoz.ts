@@ -1,6 +1,7 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cargarAjustes, playbackVoice } from '../ajustes';
 import { servidor, SERVIDOR_POR_DEFECTO } from '../servidor';
 import { CHAT_TOKEN } from './client';
 import { fuenteVoz } from './voz';
@@ -15,7 +16,7 @@ const limiteFraseMs = (frase: string) => LIMITE_BASE_MS + frase.length * LIMITE_
 type Reproductor = { player: AudioPlayer; frase: string; soltar: () => void };
 
 export function useVoz() {
-  const [hablando, setHablando] = useState(false);
+  const [phrase, setPhrase] = useState('');
   const cola = useRef<string[]>([]);
   const actual = useRef<Reproductor | null>(null);
   const precargados = useRef<Reproductor[]>([]);
@@ -34,7 +35,7 @@ export function useVoz() {
 
   const crear = useCallback((frase: string): Reproductor | null => {
     try {
-      const player = createAudioPlayer(fuenteVoz(frase, { apiUrl: base.current, token: CHAT_TOKEN }));
+      const player = createAudioPlayer(fuenteVoz(frase, { apiUrl: base.current, token: CHAT_TOKEN, voz: playbackVoice() }));
       const suscripcion = player.addListener('playbackStatusUpdate', (estado) => {
         if (!estado.didJustFinish && !estado.error) return;
         if (actual.current?.player !== player) return;
@@ -73,7 +74,7 @@ export function useVoz() {
     const siguiente = precargados.current.shift();
     if (!siguiente) {
       clearTimeout(timer.current);
-      timer.current = setTimeout(() => setHablando(false), COLA_FIN_MS);
+      timer.current = setTimeout(() => setPhrase(''), COLA_FIN_MS);
       return;
     }
     clearTimeout(timer.current);
@@ -83,7 +84,7 @@ export function useVoz() {
       return;
     }
     actual.current = siguiente;
-    setHablando(true);
+    setPhrase(siguiente.frase);
     try {
       siguiente.player.play();
     } catch {
@@ -101,6 +102,10 @@ export function useVoz() {
     }, limiteFraseMs(siguiente.frase));
     precargar();
   }, [precargar]);
+
+  useEffect(() => {
+    void cargarAjustes();
+  }, []);
 
   useEffect(() => {
     avanzarRef.current = avanzar;
@@ -131,10 +136,10 @@ export function useVoz() {
       } catch {}
       r.soltar();
     }
-    setHablando(false);
+    setPhrase('');
   }, []);
 
   useEffect(() => callar, [callar]);
 
-  return { hablando, decir, callar };
+  return { hablando: !!phrase, phrase, decir, callar };
 }

@@ -10,13 +10,15 @@ import type { Speaker } from "../../src/speak/handler";
 let server: Server;
 let base: string;
 let seen: string | null = null;
-let behavior: Speaker = async (texto) => {
+let seenVoz: string | null = null;
+let behavior: Speaker = async (texto, _signal, voz) => {
   seen = texto;
+  seenVoz = voz;
   return new Response(new Uint8Array([73, 68, 51, 4, 0])).body!;
 };
 
 before(async () => {
-  server = createServer({ speaker: (t, s) => behavior(t, s) });
+  server = createServer({ speaker: (t, s, v) => behavior(t, s, v) });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -27,8 +29,11 @@ afterEach(() => {
   delete process.env.CHAT_TOKEN;
 });
 
-const get = (text: string | null, headers: Record<string, string> = {}) =>
-  fetch(`${base}/api/speak${text === null ? "" : `?text=${encodeURIComponent(text)}`}`, { headers });
+const get = (text: string | null, headers: Record<string, string> = {}, voz?: string) =>
+  fetch(
+    `${base}/api/speak${text === null ? "" : `?text=${encodeURIComponent(text)}`}${voz === undefined ? "" : `&voz=${encodeURIComponent(voz)}`}`,
+    { headers },
+  );
 
 test("400 sin texto, con texto que queda vacío y con más de 500 caracteres", async () => {
   const sin = await get(null);
@@ -76,4 +81,22 @@ test("401 con CHAT_TOKEN puesto y sin header", async () => {
   assert.equal(r.status, 401);
   assert.deepEqual(await r.json(), { error: "No autorizado." });
   assert.equal((await get("hola", { "x-chat-token": "secreto" })).status, 200);
+});
+
+test("la voz por defecto es jorge y voz=luisa se pasa al speaker", async () => {
+  seenVoz = null;
+  assert.equal((await get("hola")).status, 200);
+  assert.equal(seenVoz, "jorge");
+  assert.equal((await get("hola", {}, "luisa")).status, 200);
+  assert.equal(seenVoz, "luisa");
+});
+
+test("400 con una voz que no existe y el speaker no se llama", async () => {
+  seenVoz = null;
+  for (const voz of ["george", "toString"]) {
+    const r = await get("hola", {}, voz);
+    assert.equal(r.status, 400, voz);
+    assert.deepEqual(await r.json(), { error: "La voz no existe." }, voz);
+  }
+  assert.equal(seenVoz, null);
 });

@@ -13,6 +13,12 @@ function joinNames(names: string[]): string {
   return `${first}, ${lowered.slice(0, -1).join(', ')} y ${lowered[lowered.length - 1]}`;
 }
 
+export function confirmsGuideStep(text: string) {
+  return /^(?:(?:ok(?:ay)?|perfecto|list[oa])[, ]+)?(?:list[oa]|(?:ya )?(?:la |lo )?(?:encontre|ubique|destape|abri)|(?:ya )?(?:esta )?(?:abierta|destapada))[.! ]*$/.test(
+    text.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+  );
+}
+
 export function guideSummary(cards: ViewCard[]): { title: string; subtitle: string } {
   if (cards.length === 0) return { title: '', subtitle: '' };
   if (cards.length === 1) return { title: catalogParts[cards[0].part][0], subtitle: cards[0].instruction };
