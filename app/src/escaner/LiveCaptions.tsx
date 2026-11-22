@@ -47,7 +47,7 @@ export function LiveCaptions({ part, text, citations = [], children }: {
     <View style={styles.box}>
       {(part || citation) && (
         <View style={styles.head}>
-          {part && <Text style={styles.part} numberOfLines={1}>{parts[part][0]}</Text>}
+          {part && <Text style={styles.part} numberOfLines={1}>Asistente · {parts[part][0]}</Text>}
           {citation && (
             <Pressable accessibilityRole="button" accessibilityLabel={`Ver cita: ${label}`} onPress={() => setOpen(true)} style={styles.source} hitSlop={8}>
               <Text style={styles.sourceText} numberOfLines={1}>{label}</Text>

@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View 
 
 import { CitationModal } from '../../chat/CitationModal';
 import type { ViewCitation } from '../../chat/history';
-import { parts, type PartId } from '../../engine-maps/catalog';
+import type { PartId } from '../../engine-maps/catalog';
 import { color, espacio, radio, video } from '../../theme';
 import { Icono } from '../../ui';
 import { sourceLabel } from '../captions';
@@ -25,8 +25,8 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
 }) {
   const { estado, nivel, cerrando, parcial, pregunta, error, hablando: asistenteHabla, callar } = vivo;
   const [open, setOpen] = useState(false);
-  const chunk = useCaptionChunk(caption.text);
-  const pensando = estado === 'escuchando' && caption.pensando;
+  const chunk = useCaptionChunk(vivo.agentPhrase || caption.text);
+  const pensando = vivo.waitingForAgent || (estado === 'escuchando' && caption.pensando);
   const hablando = estado === 'oyendo';
   const transcribiendo = estado === 'transcribiendo';
   const guia = !error && !hablando && !transcribiendo && !pensando;
@@ -35,19 +35,12 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
   const label = citation ? sourceLabel(citation.title) || citation.source : '';
 
   return (
-    <Pressable
-      style={styles.tarjeta}
-      disabled={!respondiendo}
-      accessible={respondiendo}
-      onPress={callar}
-      accessibilityRole={respondiendo ? 'button' : undefined}
-      accessibilityLabel={respondiendo ? 'Callar al asistente' : undefined}
-    >
+    <View style={styles.tarjeta}>
       <View style={styles.cabecera}>
         <View style={styles.izquierda}>
           {pensando || transcribiendo ? (
             <ActivityIndicator size="small" color={color.acento} />
-          ) : estado === 'silenciado' ? (
+          ) : estado === 'silenciado' && !respondiendo ? (
             <View style={[styles.punto, { backgroundColor: color.textoTenue }]} />
           ) : respondiendo ? (
             <Icono nombre="volume-high" tam={16} tono={color.acento} />
@@ -58,12 +51,12 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
             <Barras nivel={nivel} tono={hablando ? (cerrando ? 'plano' : 'activo') : 'reposo'} />
           )}
           <Text style={styles.etiqueta} numberOfLines={1}>
-            {pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
+            {vivo.waitingForAgent ? 'Pensando…' : pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
           </Text>
         </View>
         {guia && (
           <View style={styles.derecha}>
-            {part && <Text style={styles.pieza} numberOfLines={1}>{parts[part][0]}</Text>}
+            {part && <Text style={styles.pieza} numberOfLines={1}>Asistente</Text>}
             {citation && (
               <Pressable accessibilityRole="button" accessibilityLabel={`Ver cita: ${label}`} onPress={() => setOpen(true)} style={styles.fuente} hitSlop={8}>
                 <Text style={styles.fuenteTexto} numberOfLines={1}>{label}</Text>
@@ -84,12 +77,15 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
       ) : pensando ? (
         <Text style={[styles.cuerpo, { color: color.textoSuave }]} numberOfLines={2}>{pregunta}</Text>
       ) : (
-        <Text style={styles.cuerpo} numberOfLines={2} accessibilityLiveRegion="polite">{chunk}</Text>
+        <Text style={styles.cuerpo} numberOfLines={2} accessibilityLiveRegion="polite"
+          onPress={respondiendo ? callar : undefined}
+          accessibilityRole={respondiendo ? 'button' : undefined}
+          accessibilityHint={respondiendo ? 'Toca para callar al asistente' : undefined}>{chunk}</Text>
       )}
       {guia && children}
       {hablando && cerrando && <BarraCierre />}
       <CitationModal citation={open ? citation : null} onClose={() => setOpen(false)} />
-    </Pressable>
+    </View>
   );
 }
 

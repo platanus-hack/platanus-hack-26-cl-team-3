@@ -23,7 +23,7 @@ export async function* runTurn({
   mode?: 'vivo';
   signal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
-  const { modelo, esfuerzo } = await cargarAjustes();
+  const { modelo, esfuerzo, instrucciones } = await cargarAjustes();
   const device = await deviceId();
   const { id: conversationId, generation } = await currentConversation();
   const vehicleId = await conversationVehicle();
@@ -37,7 +37,7 @@ export async function* runTurn({
         ...tokenHeaders(),
         ...(device ? { 'x-device-id': device } : {}),
       },
-      body: JSON.stringify({ messages, ...(vehicleId ? { vehicle_id: vehicleId } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ messages, ...(vehicleId ? { vehicle_id: vehicleId } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}), ...(instrucciones.trim() ? { instructions: instrucciones.trim() } : {}) }),
       signal,
     });
   } catch {

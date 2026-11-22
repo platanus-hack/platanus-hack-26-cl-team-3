@@ -9,6 +9,8 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { poligonoVano, Suavizador, tramos, type Vano } from '../detector/vano';
 import { color } from '../theme';
+import type { ViewCard } from '../chat/history';
+import { StepCounter } from './StepCounter';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { useScannerConversation } from './useScannerConversation';
 import { ProveedorVivo } from './vivo/ModoVivo';
@@ -36,7 +38,9 @@ function elegirTamano(tamanos: string[]): string | undefined {
 
 type Tam = { ancho: number; alto: number };
 
-export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: string; initialLive: boolean }) {
+export default function EscanerCamara({ vehicleId, initialLive, steps, initialStep }: {
+  vehicleId?: string; initialLive: boolean; steps: ViewCard[]; initialStep: number;
+}) {
   const camara = useRef<CameraView>(null);
   const [camaraLista, setCamaraLista] = useState(false);
   const [tamanoFoto, setTamanoFoto] = useState<string>();
@@ -51,7 +55,7 @@ export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: 
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
 
-  const guide = useCameraGuide([], 0, () => {}, vehicleId);
+  const guide = useCameraGuide(steps, initialStep, () => {}, vehicleId, initialLive);
   const conversation = useScannerConversation(initialLive, activa, guide, vehicleId);
   const pendingFrame = useRef<((uri: string, bay: Vano) => Promise<void>) | null>(null);
   const captureBay = () => new Promise<string | null>(resolve => {
@@ -155,7 +159,7 @@ export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: 
   const mostrarVano = detectado && !!foto && !!vista;
 
   return (
-    <ProveedorVivo enabled={conversation.enabled} activo={conversation.listening} capturarVano={captureBay} preguntar={conversation.ask}>
+    <ProveedorVivo enabled={conversation.enabled} activo={conversation.listening} caption={guide.caption} busy={guide.busy} capturarVano={captureBay} preguntar={conversation.ask}>
       <View style={estilos.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
         <CameraView
           ref={camara}
@@ -169,7 +173,7 @@ export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: 
         />
         {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
         {conversation.listening && <EstadoVozPantalla pensando={guide.caption.pensando} />}
-        <ScannerControls controls={controls} status={status} conversation={conversation}
+        <ScannerControls controls={controls} status={status} top={<StepCounter card={guide.current} step={guide.index} total={guide.steps.length} />} conversation={conversation}
           captions={<GuideCaptions guide={guide} />} step={guide.current}>
           {error ? (
             <>

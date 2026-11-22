@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { useAgentSpeech } from '../../chat/AgentSpeech';
 import { cargarAjustes } from '../../ajustes';
 import { crearCortador } from '../../chat/frases';
 import { juntarPregunta } from './pregunta';
@@ -8,7 +9,7 @@ import { MICROPHONE_DENIED, MICROPHONE_BLOCKED } from '../../chat/microphone-per
 import { useEscuchaViva } from './useEscuchaViva';
 import { useVoz } from '../../chat/useVoz';
 
-type Caption = { text: string; pensando: boolean };
+type Caption = { text: string; pensando: boolean; stageKey?: number };
 
 export type ModoVivoEstado = ReturnType<typeof useModoVivo>;
 
@@ -60,6 +61,11 @@ export function useModoVivo({
   const controlador = useRef<AbortController | null>(null);
   const vivo = useRef(true);
   const { hablando, decir, callar } = useVoz();
+  const agent = useAgentSpeech();
+  const { stop: stopChatSpeech } = agent;
+  const stageKey = caption?.stageKey;
+  const lastSpokenStage = useRef<number | undefined>(undefined);
+  const agentActive = agent.pending || agent.hablando;
   const cortador = useRef(crearCortador());
   const estabaOcupado = useRef(busy);
   const [ajusteVoz, setVozVivo] = useState(false);
@@ -78,19 +84,35 @@ export function useModoVivo({
   }, []);
 
   useEffect(() => {
+    if (activo && stageKey !== undefined) stopChatSpeech();
+  }, [activo, stageKey, stopChatSpeech]);
+
+  useEffect(() => {
     if (!activo || !vozVivo) {
       callar();
       cortador.current.terminar();
       return;
     }
-    if (textoCaption !== undefined && !pensandoCaption) decir(cortador.current.push(textoCaption));
-  }, [activo, vozVivo, textoCaption, pensandoCaption, decir, callar]);
+    if (stageKey !== undefined && textoCaption) {
+      if (lastSpokenStage.current !== stageKey) {
+        lastSpokenStage.current = stageKey;
+        cortador.current.terminar();
+        callar();
+        decir([textoCaption]);
+      }
+      return;
+    }
+    if (textoCaption !== undefined && !pensandoCaption) {
+      const sentences = cortador.current.push(textoCaption);
+      if (!agentActive) decir(sentences);
+    }
+  }, [activo, vozVivo, textoCaption, pensandoCaption, decir, callar, agentActive, stageKey]);
 
   useEffect(() => {
-    if (activo && vozVivo && estabaOcupado.current && !busy) decir(cortador.current.terminar());
-    if (activo && vozVivo && !estabaOcupado.current && busy) callar();
+    if (activo && vozVivo && stageKey === undefined && estabaOcupado.current && !busy) decir(cortador.current.terminar());
+    if (activo && vozVivo && stageKey === undefined && !estabaOcupado.current && busy) callar();
     estabaOcupado.current = busy;
-  }, [activo, vozVivo, busy, decir, callar]);
+  }, [activo, vozVivo, busy, decir, callar, stageKey]);
 
   const [wasEnabled, setWasEnabled] = useState(enabled);
   if (wasEnabled !== enabled) {
@@ -142,7 +164,7 @@ export function useModoVivo({
   );
 
   const { estado, nivel, cerrando, parcial } = useEscuchaViva({
-    silenciado: silenciado || !activo,
+    silenciado: silenciado || !activo || agentActive,
     retry,
     sessionEnabled: enabled && !silenciado,
     pausado: hablando,
@@ -158,10 +180,12 @@ export function useModoVivo({
     nivel,
     cerrando,
     parcial,
-    hablando,
-    callar,
+    hablando: hablando || agent.hablando,
+    agentPhrase: agent.phrase,
+    waitingForAgent: agent.pending && !agent.hablando,
+    callar: () => { agent.stop(); callar(); },
     pregunta,
-    error,
+    error: error || agent.error,
     silenciado: (silenciado || permissionMissing) && activo,
     alternarSilencio: () => {
       if (error === MICROPHONE_BLOCKED) void Linking.openSettings().catch(() => {});

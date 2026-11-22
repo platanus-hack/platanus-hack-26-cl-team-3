@@ -101,7 +101,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
-  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id);
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id, initialLive);
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -722,7 +722,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               </ScrollView>
             )}
             {selected === 'fuses' && fuseGuideFor(vehicle?.id) && (
-              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
+              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse={!cameraGuide.waitingForFuseStep} />
             )}
             {fuseLink && (
               <Pressable
@@ -863,7 +863,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
             <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
           </View>
         ) : (
-          <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
+          <ScannerControls controls={controls} status={status} top={<StepCounter card={cameraGuide.current} step={cameraGuide.index} total={cameraGuide.steps.length} />}
             conversation={conversation} captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
         )}
       </View>

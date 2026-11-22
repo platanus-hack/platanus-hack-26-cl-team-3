@@ -11,7 +11,7 @@ const VEHICLE_KEY = 'capo-ar:chat-vehicle:v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
-export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction };
+export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction; fuseTargets?: ViewFuse[] };
 export type ViewFuse = { box: string; numbers: number[]; instruction: string };
 export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[]; fuses: ViewFuse[] };
 
@@ -34,6 +34,20 @@ export function toFuse(box: unknown, numbers: unknown, instruction: unknown): Vi
       !numbers.every(number => Object.values(fuseGuides).some(guide => guide.slots.some(slot => slot.box === box && slot.number === number && slot.amps !== null)))) return null;
   if (typeof instruction !== 'string' || instruction.trim() === '') return null;
   return { box, numbers: numbers as number[], instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
+}
+
+export function maintenanceSteps(cards: ViewCard[], fuses: ViewFuse[]): ViewCard[] {
+  const steps: ViewCard[] = [];
+  for (const card of cards) {
+    if (card.action && steps.at(-1)?.part !== card.part) {
+      steps.push({ part: card.part, instruction: `Ubica la pieza marcada: ${catalogParts[card.part][0]}.` });
+    }
+    steps.push(card);
+  }
+  if (!steps.some(card => card.part === 'fuses') ||
+      !fuses.length || !fuses.every(fuse => fuse.box === 'motor')) return steps;
+  const instruction = fuses.map(fuse => fuse.instruction).join(' ');
+  return [...steps, { part: 'fuses', instruction, fuseTargets: fuses }];
 }
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
@@ -200,5 +214,6 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
     }
     else out.push({ role: 'assistant', parts, cards, fuses });
   }
+  for (const bubble of out) bubble.cards = maintenanceSteps(bubble.cards, bubble.fuses);
   return out;
 }

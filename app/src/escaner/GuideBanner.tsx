@@ -8,7 +8,7 @@ import { Boton } from '../ui';
 export function GuideBanner({ part, instruction }: { part?: PartId; instruction: string }) {
   return (
     <View style={styles.banner}>
-      {part && <Text style={styles.part}>{parts[part][0]}</Text>}
+      <Text style={styles.part}>{part ? `Asistente · ${parts[part][0]}` : 'Asistente'}</Text>
       <Text style={tipo.cuerpo}>{instruction}</Text>
       <Boton texto="Volver al chat" icono="arrow-left" variante="secundario" onPress={() => router.navigate('/ask')} estilo={styles.back} />
     </View>
