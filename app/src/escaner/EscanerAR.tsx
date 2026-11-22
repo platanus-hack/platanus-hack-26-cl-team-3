@@ -4,7 +4,7 @@
  *
  * 1. Buscando: cuadros de la cámara AR → modelo → polígono de vista previa (ámbar, punteado). Si el vano se ve chico
  *    (auto lejos, o una foto del auto completo en una pantalla) el análisis hace zoom solo (detector/encuadre.ts).
- * 2. Vehicle maps use the first usable tracked detection, with measured or estimated depth.
+ * 2. The Outback compares initial visual placements in a common ARCore reference before anchoring.
  * 3. Anclado: el contorno o el mapa de piezas se dibuja en nativo en cada cuadro con la pose actual del teléfono.
  *    - Cada pocos segundos se compara el contorno anclado con una detección nueva («calce», 0-100 %): mide cuánto se
  *      corrió. Si baja mucho, se sugiere recalibrar.
@@ -25,6 +25,7 @@ import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
+import { InitialVisualScan } from './initial-visual-scan';
 import { PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { StepCounter } from './StepCounter';
@@ -35,6 +36,10 @@ import type { Vehicle } from '../vehicles';
 import {
   ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO,
 } from './comun';
+
+type PlacementCandidate = {
+  capture: CapturaAR; bay: Vano; centers: PartCenter[]; partial: boolean;
+};
 
 const ESTABLES_PARA_FIJAR = 3;
 const INTENTOS_RECALIBRAR = 3;
@@ -78,6 +83,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [modeloListo, setModeloListo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
+  const [targetRevision, setTargetRevision] = useState(0);
   const [capo, setCapo] = useState(0); // puntaje «capó abierto» de CLIP (solo debug)
   const [vano, setVano] = useState<Vano | null>(null); // en coordenadas del cuadro completo
   const [valido, setValido] = useState(false);
@@ -95,9 +101,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [motorMarcado, setMotorMarcado] = useState(false);
   const [marca, setMarca] = useState<{ x: number; y: number } | null>(null); // aro visible donde se mantuvo presionado
   const [ultima, setUltima] = useState<CapturaAR | null>(null);
-  const [registrationCandidate, setRegistrationCandidate] = useState<{
-    capture: CapturaAR; bay: Vano; centers: PartCenter[]; partial: boolean;
-  } | null>(null);
+  const [registrationCandidate, setRegistrationCandidate] = useState<PlacementCandidate | null>(null);
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
@@ -120,12 +124,14 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       ? locateOutbackParts(captura, bay, engineMaps.outback.volumes)
       : Promise.resolve<PartCenter[]>([]), [vehicle?.id]);
 
-  const fijar = useCallback(async (captura: CapturaAR, v: Vano, centers: PartCenter[], partial = false) => {
+  const fijar = useCallback(async (captura: CapturaAR, v: Vano, centers: PartCenter[], partial = false, initial = false) => {
     if (ocupado.current || !ar.current) return;
     ocupado.current = true;
     setFijando(true);
     try {
-      const result = await ar.current.fijar(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes, centers, !!visualBay(captura.visualOutline, v));
+      const place = initial && ar.current.placeInitial
+        ? ar.current.placeInitial.bind(ar.current) : ar.current.fijar.bind(ar.current);
+      const result = await place(captura.id, plano(v), volumes.length ? registrationCorners(v) : [], volumes, centers, !!visualBay(captura.visualOutline, v));
       setAnclaje({ ...result, partial: result.metodo !== 'visual' && partial });
       setCalce(null);
       setAviso(null);
@@ -155,6 +161,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   useEffect(() => {
     if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
     const generation = registrationGeneration.current;
+    const initialScan = outbackParts && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
@@ -167,8 +174,8 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     const areas: number[] = []; // área del contorno del escaneo en los últimos análisis
     let semilla: { x: number; y: number } | null = null; // punto marcado por el usuario, en la última captura
     (async () => {
-      while (vivo && ar.current) {
-        const t0 = Date.now();
+      while (vivo && ar.current && generation === registrationGeneration.current) {
+        const t0 = performance.now();
         let captureUri: string | undefined;
         try {
           encuadre.apuntar(semilla);
@@ -176,7 +183,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           const cap = await ar.current.capturar();
           captureUri = cap.uri;
           const r = await analizarFoto(cap.uri, recorte);
-          if (!vivo) break;
+          if (!vivo || generation !== registrationGeneration.current) break;
           semilla = cap.semilla && cap.semilla.length === 2 ? { x: cap.semilla[0], y: cap.semilla[1] } : null;
           // El punto marcado, en coordenadas del recorte que vio el modelo (si cae dentro).
           const sx = semilla ? (semilla.x - recorte.x) / recorte.lado : -1;
@@ -261,11 +268,13 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
             setEscaneo({ vistas: acc.vistas, estable, acuerdo });
           }
 
-          setMs(Date.now() - t0);
+          setMs(Math.round(performance.now() - t0));
           const previous = cap.anclas ? pares(cap.anclas) : [];
           const expanded = !!delEscaneo && extendsPartialMap(previous, delEscaneo);
           const scan = estable && (!anclaje || expanded) ? delEscaneo : null;
           const bay = scan ?? candidateBay;
+          const freshTarget = vanoValido(detection) ? candidateBay : visual;
+          let candidate: (PlacementCandidate & { visual: boolean }) | undefined;
           if (bay && cap.rastreando) {
             const partial = !!volumes.length && clipped;
             const sameTarget = !!scan || (previous.length > 0 && overlapsPlacedBay(previous, bay));
@@ -273,15 +282,23 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               ? (!anclaje || (awaitingVisual && !!visual && overlapsPlacedBay(previous, visual)) || (anclaje.partial && sameTarget && (!partial || !!scan)))
               : (!!scan || seguidos >= ESTABLES_PARA_FIJAR);
             const centers = attempt && volumes.length && !visual ? await lookForPartCenters(cap, bay) : [];
-            if (!vivo) break;
-            setRegistrationCandidate({ capture: cap, bay: attempt ? bay : (delEscaneo ?? bay), centers, partial });
-            if (generation === registrationGeneration.current && attempt && await fijar(cap, bay, centers, partial)) break;
+            if (!vivo || generation !== registrationGeneration.current) break;
+            setRegistrationCandidate(initialScan && !freshTarget ? null : { capture: cap, bay: attempt ? bay : (delEscaneo ?? bay), centers, partial });
+            if (attempt) candidate = { capture: cap, bay, centers, partial, visual: !!visualBay(cap.visualOutline, bay) };
           } else {
             setRegistrationCandidate(null);
           }
+          if (!cap.rastreando) initialScan?.reset();
+          const placement = initialScan && cap.rastreando
+            ? initialScan.select(t0, performance.now(), candidate, freshTarget ?? undefined) : candidate;
+          if (vivo && generation === registrationGeneration.current && placement) {
+            if (await fijar(placement.capture, placement.bay, placement.centers, placement.partial, !!initialScan)) break;
+            initialScan?.discard(placement.capture.id);
+          }
           fallos = 0;
         } catch (e) {
-          if (!vivo) break;
+          if (!vivo || generation !== registrationGeneration.current) break;
+          initialScan?.reset();
           seguidos = 0;
           setRegistrationCandidate(null);
           setEstables(0);
@@ -307,7 +324,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       vivo = false;
       releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, targetRevision]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
@@ -453,7 +470,10 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
 
   /** El usuario mantuvo presionado sobre el motor: se guarda ese punto del mundo para centrar y desambiguar la detección. */
   const marcarMotor = async (x: number, y: number) => {
-    if (!ar.current || anclaje) return;
+    if (!ar.current || anclaje || ocupado.current) return;
+    const revision = ++registrationGeneration.current;
+    ocupado.current = true;
+    setRegistrationCandidate(null);
     try {
       // La vista nativa trabaja en píxeles físicos; React Native entrega puntos independientes de la densidad.
       const ok = await ar.current.sembrar(x * PixelRatio.get(), y * PixelRatio.get());
@@ -467,6 +487,9 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       setTimeout(() => setMarca(null), 1800);
     } catch (e) {
       setAviso(`No se pudo marcar el motor. ${String((e as Error)?.message ?? e)}`);
+    } finally {
+      ocupado.current = false;
+      setTargetRevision(revision);
     }
   };
 
@@ -508,6 +531,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   else if (anclaje && (!rastreando || (anclaje.mapPlaced && !mapTracking))) status = 'Buscando seguimiento…';
   else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
+  else if (outbackParts && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
 
   let panel;

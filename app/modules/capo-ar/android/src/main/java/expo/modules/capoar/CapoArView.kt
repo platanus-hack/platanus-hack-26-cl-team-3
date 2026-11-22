@@ -107,6 +107,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val observedCenters: Map<Int, EngineImagePoint>,
     val allowVisual: Boolean,
     val promise: Promise,
+    val checkLiveView: Boolean,
   )
   private val pendingFix = AtomicReference<FixRequest?>()
   private data class PlacedEngine(val anchor: Anchor, val mesh: EngineMesh, val model: PlacedModel?, var alignment: ManualModelAlignment = ManualModelAlignment())
@@ -256,7 +257,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
 
   fun fijar(
     id: Int, esquinas: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
-    observedCenters: List<List<Double>>, allowVisual: Boolean, promise: Promise,
+    observedCenters: List<List<Double>>, allowVisual: Boolean, promise: Promise, checkLiveView: Boolean = false,
   ) {
     if (esquinas.size < 6 || esquinas.size % 2 != 0) {
       promise.reject("ERR_AR", "Se necesitan al menos 3 esquinas", null)
@@ -264,7 +265,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val request = FixRequest(
       id, FloatArray(esquinas.size) { esquinas[it].toFloat() }, registration, volumes,
-      decodeObservedCenters(observedCenters, volumes.size), allowVisual, promise,
+      decodeObservedCenters(observedCenters, volumes.size), allowVisual, promise, checkLiveView,
     )
     if (!pendingFix.compareAndSet(null, request)) promise.reject("ERR_AR", "Ya se está fijando el vano", null)
   }
@@ -403,7 +404,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     pendingFix.getAndSet(null)?.let { request ->
       if (camara.trackingState == TrackingState.TRACKING) {
-        anclar(s, request)
+        anclar(s, request, frame)
       } else {
         request.promise.reject("ERR_REGISTRATION", "ARCore perdió el seguimiento del vano", null)
       }
@@ -542,12 +543,26 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     // Keep same-frame hit tests for gaps in dense depth. The bay mask is only known after inference.
     val requestedMeasurements = pedidos.any { it.includeMeasurements }
     val pose = if (rastreando && requestedMeasurements) capturePose(session, camara.pose, frame.timestamp) else null
+    val referenceId = captureReference?.createdAtNs?.toString()
     val measure = pose != null
     val prof = if (measure && profundidad) Profundidad.leer(frame) else null
     val muestras = if (measure) muestrearDistancias(frame) else HitSamples()
     // Con el contorno ya anclado: dónde caen las anclas en ESTA imagen (para medir el calce con una detección nueva).
     val anclasImagen = if (rastreando && anclas.isNotEmpty()) anclasEnImagen(frame, grados) else null
     val intrinsics = EngineCaptureIntrinsics(dims[0], dims[1], f[0], f[1], c[0], c[1])
+    val previousVisualOutlines = if (pose != null && placedEngine == null && outbackParts.isNotEmpty()) {
+      val referenceToCamera = pose.cameraInReference.inverse()
+      capturas.mapNotNull { (id, previous) ->
+        val visual = previous.visualPose ?: return@mapNotNull null
+        val toCurrentCamera = referenceToCamera.compose(previous.pose.cameraInReference)
+        val outline = listOf(0, 1, 3, 2).mapNotNull { i ->
+          val p = visual.cameraPoint(outbackModel.corners[i])
+          val v = toCurrentCamera.transformPoint(floatArrayOf(p.x, p.y, p.z))
+          intrinsics.project(EnginePoint(v[0], v[1], v[2]))?.let { Imagen.girar(it.x, it.y, grados) }
+        }
+        if (outline.size == 4) id.toString() to outline.flatMap { listOf(it.first.toDouble(), it.second.toDouble()) } else null
+      }.toMap()
+    } else emptyMap()
     val registeredOutline = placedEngine?.takeIf {
       measure && outbackParts.isNotEmpty() && it.anchor.trackingState == TrackingState.TRACKING
     }?.let { engine ->
@@ -604,8 +619,15 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
             "puntos" to puntos,
             "registrationMeasurements" to (puntos >= AnclajeDenso.MIN_REGISTRATION_POINTS || muestras.local.size >= 4)
           )
+          if (previousVisualOutlines.isNotEmpty()) r["previousVisualOutlines"] = previousVisualOutlines
+          if (measure && referenceId != null) r["captureReference"] = referenceId
           val visual = capture?.visualPose
-          if (visual != null) {
+          if (visual != null && capture != null) {
+            r["visualLandmarks"] = visual.observations.size
+            r["visualReferenceCorners"] = outbackModel.corners.flatMap { corner ->
+              val p = visual.cameraPoint(corner)
+              capture.pose.cameraInReference.transformPoint(floatArrayOf(p.x, p.y, p.z)).map { it.toDouble() }
+            }
             if (!registeredFeatures.isNullOrEmpty()) {
               landmarkAlignmentGain(visual,registeredFeatures,intrinsics,ancho,alto,grados)?.let { r["landmarkGainPx"] = it }
             }
@@ -663,7 +685,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     return HitSamples(nearest, local)
   }
 
-  private fun anclar(s: Session, request: FixRequest) {
+  private fun anclar(s: Session, request: FixRequest, frame: Frame) {
     val (captureId, esquinasGiradas, registration, volumes, observedCenters, allowVisual, promise) = request
     val c = capturas[captureId]
     val reference = captureReference?.takeIf { it.session === s }?.anchor
@@ -796,6 +818,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       promise.reject("ERR_REGISTRATION", "Faltan medidas del vano completo.", null)
       return
     }
+    if (request.checkLiveView && mesh != null && outsideCameraView(mesh.registrationCorners, viewProjection(frame))) {
+      promise.reject("ERR_REGISTRATION", "Vuelve a apuntar al vano.", null)
+      return
+    }
     val usedHitTests = registrationMethod == "hit-test"
     val estimated = registrationMethod == "estimado"
     val localMedian = when {
@@ -886,15 +912,20 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     return salida
   }
 
-  private fun screenProjector(frame: Frame): (Float, Float, Float) -> EngineScreenPoint? {
+  private fun viewProjection(frame: Frame): FloatArray {
     val view = FloatArray(16)
     val projection = FloatArray(16)
     val combined = FloatArray(16)
-    val point = floatArrayOf(0f, 0f, 0f, 1f)
-    val clip = FloatArray(4)
     frame.camera.getViewMatrix(view, 0)
     frame.camera.getProjectionMatrix(projection, 0, 0.05f, 100f)
     Matrix.multiplyMM(combined, 0, projection, 0, view, 0)
+    return combined
+  }
+
+  private fun screenProjector(frame: Frame): (Float, Float, Float) -> EngineScreenPoint? {
+    val combined = viewProjection(frame)
+    val point = floatArrayOf(0f, 0f, 0f, 1f)
+    val clip = FloatArray(4)
     return { x, y, z ->
       point[0] = x; point[1] = y; point[2] = z
       Matrix.multiplyMV(clip, 0, combined, 0, point, 0)
