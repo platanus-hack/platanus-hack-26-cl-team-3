@@ -3,6 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { cargarAjustes } from '../../ajustes';
 import { crearCortador } from '../../chat/frases';
 import { juntarPregunta } from './pregunta';
+import { Linking } from 'react-native';
+import { MICROPHONE_DENIED, MICROPHONE_BLOCKED } from '../../chat/microphone-permission';
 import { useEscuchaViva } from './useEscuchaViva';
 import { useVoz } from '../../chat/useVoz';
 
@@ -51,6 +53,7 @@ export function useModoVivo({
   preguntar: (texto: string, imagen: string | null, signal: AbortSignal) => Promise<unknown>;
 }) {
   const [silenciado, setSilenciado] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [pregunta, setPregunta] = useState('');
   const [error, setError] = useState('');
   const pendiente = useRef('');
@@ -140,14 +143,18 @@ export function useModoVivo({
 
   const { estado, nivel, cerrando, parcial } = useEscuchaViva({
     silenciado: silenciado || !activo,
+    retry,
+    sessionEnabled: enabled && !silenciado,
     pausado: hablando,
+    onListening: () => setError(message => message === MICROPHONE_DENIED || message === MICROPHONE_BLOCKED ? '' : message),
     onInicio,
     onFrase: (t) => void onFrase(t),
     onError: setError,
   });
 
+  const permissionMissing = error === MICROPHONE_DENIED || error === MICROPHONE_BLOCKED;
   return {
-    estado,
+    estado: permissionMissing ? 'silenciado' as const : estado,
     nivel,
     cerrando,
     parcial,
@@ -155,7 +162,11 @@ export function useModoVivo({
     callar,
     pregunta,
     error,
-    silenciado: silenciado && activo,
-    alternarSilencio: () => setSilenciado((s) => !s),
+    silenciado: (silenciado || permissionMissing) && activo,
+    alternarSilencio: () => {
+      if (error === MICROPHONE_BLOCKED) void Linking.openSettings().catch(() => {});
+      else if (permissionMissing) setRetry(value => value + 1);
+      else setSilenciado(s => !s);
+    },
   };
 }
