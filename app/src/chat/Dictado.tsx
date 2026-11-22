@@ -1,9 +1,10 @@
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text } from 'react-native';
 
 import { color } from '../theme';
 import { Icono } from '../ui';
+import { createMicrophonePermission, microphoneError } from './microphone-permission';
 import { transcribeAudio } from './transcribe';
 
 type Estado = 'idle' | 'grabando' | 'transcribiendo';
@@ -26,6 +27,7 @@ export function Dictado({
   const recorder = useAudioRecorder(VOZ);
   const [estado, setEstado] = useState<Estado>('idle');
   const [segundos, setSegundos] = useState(0);
+  const starting = useRef(false);
   const grabando = useRef(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const desmontado = useRef(false);
@@ -65,16 +67,37 @@ export function Dictado({
   }, [recorder, onTexto, onError]);
 
   const empezar = useCallback(async () => {
+    if (starting.current || grabando.current) return;
+    starting.current = true;
     onEmpezar?.();
     onError('');
     try {
-      const permiso = await AudioModule.requestRecordingPermissionsAsync();
-      if (!permiso.granted) return onError('Necesito permiso de micrófono para dictar.');
+      const permission = await createMicrophonePermission(
+        () => AudioModule.getRecordingPermissionsAsync(),
+        () => AudioModule.requestRecordingPermissionsAsync(),
+      )(() => !desmontado.current);
+      if (desmontado.current) return;
+      if (!permission.granted) {
+        onError(microphoneError(permission));
+        if (!permission.canAskAgain) Alert.alert('Permiso de micrófono', 'Activa el micrófono en los ajustes de la aplicación para dictar.', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir ajustes', onPress: () => { void Linking.openSettings().catch(() => {}); } },
+        ]);
+        return;
+      }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      if (desmontado.current) return;
       await recorder.prepareToRecordAsync();
+      if (desmontado.current) {
+        await recorder.stop();
+        return;
+      }
       recorder.record();
     } catch {
-      return onError('No pude empezar a grabar. Inténtalo de nuevo.');
+      if (!desmontado.current) onError('No pude empezar a grabar. Inténtalo de nuevo.');
+      return;
+    } finally {
+      starting.current = false;
     }
     grabando.current = true;
     setSegundos(0);
@@ -84,9 +107,12 @@ export function Dictado({
     }, 1000);
   }, [recorder, onError, onEmpezar]);
 
+  const stopAtLimit = useEffectEvent(() => { void parar(); });
   useEffect(() => {
-    if (estado === 'grabando' && segundos >= MAX_SEGUNDOS) void parar();
-  }, [estado, segundos, parar]);
+    if (estado !== 'grabando') return;
+    const limit = setTimeout(stopAtLimit, MAX_SEGUNDOS * 1000);
+    return () => clearTimeout(limit);
+  }, [estado]);
 
   useEffect(() => {
     desmontado.current = false;
