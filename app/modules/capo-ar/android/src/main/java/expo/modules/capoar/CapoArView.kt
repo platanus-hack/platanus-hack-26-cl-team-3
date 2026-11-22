@@ -3,6 +3,7 @@ package expo.modules.capoar
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.display.DisplayManager
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
@@ -93,7 +94,15 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private var pedirInstalacion = true
   private var anchoVista = 0
   private var altoVista = 0
-  private var geometriaPendiente = false
+  @Volatile private var geometriaPendiente = false
+
+  // Girar el teléfono de horizontal a horizontal invertido no cambia el tamaño de la vista, así que onSurfaceChanged no
+  // se entera: sin este aviso la imagen de la cámara quedaría al revés.
+  private val pantallaListener = object : DisplayManager.DisplayListener {
+    override fun onDisplayAdded(displayId: Int) {}
+    override fun onDisplayRemoved(displayId: Int) {}
+    override fun onDisplayChanged(displayId: Int) { geometriaPendiente = true }
+  }
   private var texturaAsignada = false
   private var profundidad = false
   private var ultimoEstado = ""
@@ -174,11 +183,13 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
     CapoArModule.vistas.add(this)
+    (context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).registerDisplayListener(pantallaListener, principal)
     reanudar()
   }
 
   override fun onDetachedFromWindow() {
     CapoArModule.vistas.remove(this)
+    (context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(pantallaListener)
     pausar()
     super.onDetachedFromWindow()
   }
