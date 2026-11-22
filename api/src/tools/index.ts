@@ -4,6 +4,7 @@ import { buscarManual } from "./buscar-manual";
 import { leerManual } from "./leer-manual";
 import { lookupFuses } from "./lookup-fuses";
 import { lookupParts } from "./lookup-parts";
+import { showFuse } from "./show-fuse";
 import { showInCamera } from "./show-in-camera";
 import { profiles, type VehicleProfile } from "../vehicles/registry";
 
@@ -22,7 +23,7 @@ export type ToolRegistry = Record<string, Tool>;
 
 export function toolsFor(profile: VehicleProfile): ToolRegistry {
   const list: Tool[] = [
-    ...(profile.fuses ? [lookupFuses] : []),
+    ...(profile.fuses ? [lookupFuses, showFuse] : []),
     ...(profile.parts.length > 0 ? [lookupParts(profile), showInCamera(profile)] : []),
     ...(profile.manual ? [buscarManual, leerManual] : []),
   ];

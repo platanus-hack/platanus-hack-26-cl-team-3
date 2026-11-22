@@ -11,7 +11,8 @@ const VEHICLE_KEY = 'capo-ar:chat-vehicle:v1';
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
 export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction };
-export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[] };
+export type ViewFuse = { box: 'cabin' | 'engine'; numbers: number[]; instruction: string };
+export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[]; fuses: ViewFuse[] };
 
 const MAX_INSTRUCTION = 200;
 
@@ -20,6 +21,14 @@ export function toCard(part: unknown, instruction: unknown, action?: unknown): V
   if (typeof instruction !== 'string' || instruction.trim() === '') return null;
   if (action !== undefined && !supportsInspection(part, action)) return null;
   return { ...(action ? { action } : {}), part: part as PartId, instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
+}
+
+export function toFuse(box: unknown, numbers: unknown, instruction: unknown): ViewFuse | null {
+  const mapped = box === 'cabina' ? 'cabin' : box === 'motor' ? 'engine' : null;
+  if (!mapped) return null;
+  if (!Array.isArray(numbers) || numbers.length === 0 || !numbers.every(Number.isInteger)) return null;
+  if (typeof instruction !== 'string' || instruction.trim() === '') return null;
+  return { box: mapped, numbers: numbers as number[], instruction: instruction.trim().slice(0, MAX_INSTRUCTION) };
 }
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
@@ -117,16 +126,22 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
   const out: Bubble[] = [];
   for (const m of messages) {
     if (m.role === 'user') {
-      if (typeof m.content === 'string') out.push({ role: 'user', parts: [{ text: m.content, citations: [] }], cards: [] });
+      if (typeof m.content === 'string') out.push({ role: 'user', parts: [{ text: m.content, citations: [] }], cards: [], fuses: [] });
       continue;
     }
     const parts: ViewPart[] = [];
     const cards: ViewCard[] = [];
+    const fuses: ViewFuse[] = [];
     if (Array.isArray(m.content)) {
       for (const b of m.content as any[]) {
         if (b.type === 'tool_use' && b.name === 'show_in_camera') {
           const card = toCard(b.input?.part, b.input?.instruction, b.input?.action);
           if (card) cards.push(card);
+          continue;
+        }
+        if (b.type === 'tool_use' && b.name === 'show_fuse') {
+          const fuse = toFuse(b.input?.box, b.input?.numbers, b.input?.instruction);
+          if (fuse) fuses.push(fuse);
           continue;
         }
         if (b.type !== 'text') continue;
@@ -138,14 +153,15 @@ export function toView(messages: AnthropicMessage[]): Bubble[] {
     } else if (typeof m.content === 'string') {
       parts.push({ text: m.content, citations: [] });
     }
-    if (parts.length === 0 && cards.length === 0) continue;
+    if (parts.length === 0 && cards.length === 0 && fuses.length === 0) continue;
     const last = out[out.length - 1];
     if (last?.role === 'assistant') {
       if (parts.length > 0) parts[0] = { ...parts[0], breakBefore: true };
       last.parts.push(...parts);
       last.cards.push(...cards);
+      last.fuses.push(...fuses);
     }
-    else out.push({ role: 'assistant', parts, cards });
+    else out.push({ role: 'assistant', parts, cards, fuses });
   }
   return out;
 }

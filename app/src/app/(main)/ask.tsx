@@ -4,13 +4,14 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cameraRoute } from '../../chat/camera';
+import { cameraRoute, fuseRoute } from '../../chat/camera';
+import { FuseLinks } from '../../chat/FuseLinks';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
 import { runTurn } from '../../chat/client';
 import { Dictado } from '../../chat/Dictado';
 import type { AnthropicMessage } from '../../chat/contract';
-import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
+import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewFuse, type ViewPart } from '../../chat/history';
 import { useVehicleSelection } from '../../plates/selection';
 import { vehicles } from '../../vehicles';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../../chat/turn';
@@ -34,6 +35,7 @@ export default function Ask() {
   const [question, setQuestion] = useState<string | null>(null);
   const [live, setLive] = useState<ViewPart[]>([]);
   const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
+  const [liveFuses, setLiveFuses] = useState<ViewFuse[]>([]);
   const [replies, setReplies] = useState(false);
   const openedCamera = useRef(false);
   const openedHistory = useRef(false);
@@ -81,6 +83,10 @@ export default function Ask() {
     router.push(cameraRoute(card, cards, chatVehicleId));
   }, [chatVehicleId]);
 
+  const openFuse = useCallback((box: ViewFuse['box'], number: number) => {
+    router.push(fuseRoute(box, number));
+  }, []);
+
   const openHistory = useCallback(() => {
     openedHistory.current = true;
     router.push('/historial');
@@ -88,10 +94,10 @@ export default function Ask() {
 
   const bubbles = useMemo(() => {
     const b: Bubble[] = toView(messages);
-    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [] });
-    if (live.length > 0 || liveCards.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards });
+    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [], fuses: [] });
+    if (live.length > 0 || liveCards.length > 0 || liveFuses.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards, fuses: liveFuses });
     return b;
-  }, [messages, question, live, liveCards]);
+  }, [messages, question, live, liveCards, liveFuses]);
 
   const send = useCallback(async (override?: string) => {
     const text = (override ?? input).trim();
@@ -108,6 +114,7 @@ export default function Ask() {
     setQuestion(text);
     setLive([]);
     setLiveCards([]);
+    setLiveFuses([]);
     setStatus(THINKING);
     setBusy(true);
 
@@ -116,6 +123,7 @@ export default function Ask() {
       const result = await sendTurn(await load(), text, runTurn, (progress) => {
         setLive(progress.parts);
         setLiveCards(progress.cards);
+        setLiveFuses(progress.fuses);
         setStatus(progress.status);
       });
       if ('messages' in result) await save(result.messages);
@@ -131,6 +139,7 @@ export default function Ask() {
     setQuestion(null);
     setLive([]);
     setLiveCards([]);
+    setLiveFuses([]);
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
@@ -177,9 +186,11 @@ export default function Ask() {
         )}
         {bubbles.map((b, i) => (
           <BubbleView
-            key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0) && i === bubbles.length - 1}
+            key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0 || liveFuses.length > 0) && i === bubbles.length - 1}
+            showFuses={chatVehicleId === 'outback'}
             onCitation={setCitation}
             onCamera={openCamera}
+            onFuse={openFuse}
           />
         ))}
       </ScrollView>
@@ -246,13 +257,17 @@ export default function Ask() {
 function BubbleView({
   bubble,
   streaming,
+  showFuses,
   onCitation,
   onCamera,
+  onFuse,
 }: {
   bubble: Bubble;
   streaming: boolean;
+  showFuses: boolean;
   onCitation: (c: ViewCitation) => void;
   onCamera: (card: ViewCard, cards: ViewCard[]) => void;
+  onFuse: (box: ViewFuse['box'], number: number) => void;
 }) {
   const mine = bubble.role === 'user';
   const uncited =
@@ -284,6 +299,9 @@ function BubbleView({
         </GuideChoice>
       ) : (
         text
+      )}
+      {!mine && showFuses && bubble.fuses.length > 0 && (
+        <FuseLinks fuses={bubble.fuses} disabled={streaming} onOpen={onFuse} />
       )}
     </View>
   );
