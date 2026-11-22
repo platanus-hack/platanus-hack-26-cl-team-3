@@ -31,12 +31,12 @@ test('4: 250 ms sobre el umbral dan inicio, 100 ms no', () => {
   assert.deepEqual(e.salidas, ['inicio']);
 });
 
-test('5: tras un inicio, 2,9 s de silencio no cierran y 3 s sí', () => {
+test('5: tras un inicio, 0,9 s de silencio no cierran y 1 s sí', () => {
   const vad = crearVad();
   const a = correr(vad, RUIDO, 2000, 0);
   const b = correr(vad, VOZ, 500, a.t);
   assert.deepEqual(b.salidas, ['inicio']);
-  const c = correr(vad, RUIDO, 2900, b.t);
+  const c = correr(vad, RUIDO, 900, b.t);
   assert.deepEqual(c.salidas, []);
   const d = correr(vad, RUIDO, 100, c.t);
   assert.deepEqual(d.salidas, ['fin']);
