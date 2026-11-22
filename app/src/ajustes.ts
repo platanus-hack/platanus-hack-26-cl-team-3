@@ -51,17 +51,24 @@ export function parseAjustes(raw: string | null): Pick<Ajustes, 'modelo' | 'esfu
 
 const storage = async () => (await import('@react-native-async-storage/async-storage')).default;
 
+let selectedVoice: VozId | undefined;
+
+export const playbackVoice = () => selectedVoice ?? DEFECTO.voz;
+
 export async function cargarAjustes(): Promise<Ajustes> {
   try {
     const s = await storage();
     const [raw, anclaje] = await Promise.all([s.getItem(KEY), s.getItem(ANCLAJE_KEY)]);
-    return { ...parseAjustes(raw), anclajeConModelo: anclaje === '1' };
+    const settings = parseAjustes(raw);
+    selectedVoice ??= settings.voz;
+    return { ...settings, anclajeConModelo: anclaje === '1' };
   } catch {
     return { ...DEFECTO, anclajeConModelo: false };
   }
 }
 
 export async function guardarAjustes({ modelo, esfuerzo, anclajeConModelo, vozVivo, vozChat, voz, instrucciones }: Ajustes): Promise<void> {
+  selectedVoice = voz;
   try {
     const s = await storage();
     await s.setItem(KEY, JSON.stringify({ modelo, esfuerzo, vozVivo, vozChat, voz, instrucciones }));
