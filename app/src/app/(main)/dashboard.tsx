@@ -1,19 +1,27 @@
+import { useVehicleSelection } from '../../plates/selection';
+import { useScannerPermission } from '../../useScannerPermission';
 import { File } from 'expo-file-system';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { router, useLocalSearchParams } from 'expo-router';
+import { CameraView } from 'expo-camera';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { guide, manualUrl } from '../dashboard/guide';
-import { readDashboardPhoto } from '../dashboard/photo';
-import { borrar } from '../escaner/comun';
-import { color, espacio, tipo } from '../theme';
-import { Boton, BotonIcono } from '../ui';
+import { guide, manualUrl } from '../../dashboard/guide';
+import { readDashboardPhoto } from '../../dashboard/photo';
+import { borrar } from '../../escaner/comun';
+import { color, espacio, tipo } from '../../theme';
+import { Boton, BotonIcono } from '../../ui';
 
 export default function Dashboard() {
-  const { vehicleId } = useLocalSearchParams<{ vehicleId?: string }>();
-  const [permission, requestPermission] = useCameraPermissions();
+  const { vehicle } = useVehicleSelection();
+  const { vehicleId = vehicle.id } = useLocalSearchParams<{ vehicleId?: string }>();
+  const focused = useIsFocused();
+  return focused && <DashboardScanner key={vehicleId} vehicleId={vehicleId} />;
+}
+
+function DashboardScanner({ vehicleId }: { vehicleId: string }) {
+  const [permission, requestPermission] = useScannerPermission(vehicleId === 'outback');
   const camera = useRef<CameraView>(null);
   const mounted = useRef(false);
   const scanning = useRef(false);
@@ -64,7 +72,7 @@ export default function Dashboard() {
   const supported = vehicleId === 'outback';
   const lights = [...new Set(result?.detections.map(detection => detection.light))];
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
         <Text style={tipo.titulo}>Escanear tablero</Text>

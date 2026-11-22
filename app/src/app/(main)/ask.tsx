@@ -1,23 +1,24 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CHAT_VEHICLE_ID, cameraRoute } from '../chat/camera';
-import { CitationModal } from '../chat/CitationModal';
-import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
-import { runTurn } from '../chat/client';
-import { Dictado } from '../chat/Dictado';
-import type { AnthropicMessage } from '../chat/contract';
-import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
-import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
-import { color, espacio, radio, tipo } from '../theme';
-import { BotonIcono, Icono, Tarjeta } from '../ui';
+import { CHAT_VEHICLE_ID, cameraRoute } from '../../chat/camera';
+import { CitationModal } from '../../chat/CitationModal';
+import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
+import { runTurn } from '../../chat/client';
+import { Dictado } from '../../chat/Dictado';
+import type { AnthropicMessage } from '../../chat/contract';
+import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
+import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../../chat/turn';
+import { color, espacio, radio, tipo } from '../../theme';
+import { BotonIcono, Icono, Tarjeta } from '../../ui';
 
 const QUICK_REPLIES = [DONE_REPLY, LOST_REPLY];
 
 export default function Ask() {
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
   const scroll = useRef<ScrollViewInstance>(null);
   const [messages, setMessages] = useState<AnthropicMessage[]>([]);
   const [question, setQuestion] = useState<string | null>(null);
@@ -143,7 +144,7 @@ export default function Ask() {
         {bubbles.length === 0 && (
           <Tarjeta estilo={styles.empty}>
             <Icono nombre="book-open-variant" tam={26} tono={color.textoSuave} />
-            <Text style={tipo.nota}>Cuéntame qué le pasa al Outback. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
+            <Text style={[tipo.nota, styles.flex]}>Cuéntame qué le pasa al Outback. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
           </Tarjeta>
         )}
         {bubbles.map((b, i) => (
@@ -155,7 +156,7 @@ export default function Ask() {
         ))}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + espacio.s }]}>
+      <View style={[styles.footer, { paddingBottom: espacio.s }]}>
         {error && <Text style={styles.error}>{error}</Text>}
         {dictationError && <Text style={styles.error}>{dictationError}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
@@ -180,11 +181,11 @@ export default function Ask() {
             returnKeyType="send"
             onSubmitEditing={() => void send()}
           />
-          <Dictado
+          {focused && <Dictado
             deshabilitado={busy || !loaded}
             onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
             onError={(message) => setDictationError(message || null)}
-          />
+          />}
           {input.trim() ? (
             <Pressable
               onPress={() => void send()}

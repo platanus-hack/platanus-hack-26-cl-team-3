@@ -1,12 +1,16 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
+import { useState } from 'react';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import photoCredits from '../assets/vehicles/credits.json';
 import { AVISO } from './aviso';
 import { color, espacio, radio, tipo } from './theme';
 import { Boton, Icono, Tarjeta } from './ui';
 
 /** Aviso obligatorio (primer uso) y página «Aviso y fuentes» (siempre accesible desde el menú). */
 export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onListo: () => void }) {
+  const [showCredits, setShowCredits] = useState(false);
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.raiz, { paddingTop: insets.top + espacio.xl, paddingBottom: insets.bottom + espacio.l }]}>
@@ -30,6 +34,19 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
           Reconocimiento del vano del motor: CLIPSeg de CIDAS (licencia Apache-2.0), basado en CLIP ViT-B/16 de OpenAI
           (licencia MIT), con un decodificador entrenado por el equipo.
         </Text>
+        {!primerUso && <View style={styles.seccion}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showCredits }} onPress={() => setShowCredits(open => !open)}>
+            <Text style={tipo.cuerpo}>Fotografías de los vehículos {showCredits ? '⌃' : '⌄'}</Text>
+          </Pressable>
+          {showCredits && <>
+            <Text style={tipo.nota}>Fotografías de referencia. El año y el equipamiento pueden variar. Imágenes redimensionadas y recortadas sobre fondo transparente.</Text>
+            {photoCredits.map(item => <View key={item.id} style={{ marginTop: espacio.m }}>
+              <Text accessibilityRole="link" onPress={() => void Linking.openURL(item.source)} style={tipo.cuerpo}>{item.image}</Text>
+              <Text accessibilityRole="link" onPress={() => void Linking.openURL(item.licenseUrl)} style={tipo.nota}>{item.author} · {item.license}</Text>
+            </View>)}
+          </>}
+          <Text style={[tipo.nota, { marginTop: espacio.l }]}>Versión {Constants.expoConfig?.version}</Text>
+        </View>}
       </ScrollView>
       <Boton texto={primerUso ? 'Entendido, continuar' : 'Cerrar'} onPress={onListo} estilo={styles.boton} />
     </View>

@@ -856,5 +856,5 @@ const styles = StyleSheet.create({
   selected: { borderColor: color.acento, borderWidth: 1 },
   link: { ...tipo.cuerpo, color: color.acento, paddingVertical: espacio.s },
   aviso: { color: color.acento, fontSize: 13, lineHeight: 19, marginTop: espacio.s },
-  marca: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: color.acento, backgroundColor: 'rgba(255, 176, 32, 0.25)' },
+  marca: { position: 'absolute', width: 44, height: 44, borderRadius: 22, borderWidth: 3, borderColor: color.acento, backgroundColor: color.acentoSuave },
 });
