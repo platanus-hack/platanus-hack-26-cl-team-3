@@ -1,0 +1,19 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+index 6c81fce..ce85716 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioModule.kt
+@@ -1177,8 +1177,14 @@ class AudioModule : Module() {
+     }
+   }
+ 
++  private var earpieceModeApplied = false
++
+   @Suppress("DEPRECATION")
+   private fun updatePlaySoundThroughEarpiece(playThroughEarpiece: Boolean) {
++    if (!playThroughEarpiece && !earpieceModeApplied) {
++      return
++    }
++    earpieceModeApplied = playThroughEarpiece
+     audioManager.mode = if (playThroughEarpiece) {
+       AudioManager.MODE_IN_COMMUNICATION
+     } else {
