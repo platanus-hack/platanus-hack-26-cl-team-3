@@ -79,7 +79,6 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     setBusy(true);
     setCaption({ text: THINKING, citations: [], pensando: true });
     let turnFuses: ViewFuse[] = [];
-    let spoke = false;
     let replaced: ViewCard[] = [];
     const result = await withChatTurn(async () => {
       if (opts?.signal?.aborted) return { aborted: true } as const;
@@ -88,14 +87,17 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
         if (turn.current !== id || opts?.signal?.aborted) return;
         turnFuses = progress.fuses;
         const said = progress.parts.map((p) => p.text).join('\n');
-        spoke ||= said.trim() !== '';
-        setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations), pensando: !spoke });
+        const firstStep = !keepGuide && progress.cards[0];
+        const spoken = firstStep ? firstStep.instruction : said;
+        setCaption({ text: spoken || progress.status || THINKING, citations: firstStep ? [] : progress.parts.flatMap(p => p.citations), pensando: !spoken });
         if (keepGuide || progress.cards.length === 0) return;
         if (replaced.length === 0) {
+          setFinished(false);
           setFocus(null);
           onStep(progress.cards[0]);
         }
-        setGuide((g) => ({ steps: progress.cards, index: replaced.length ? g.index : 0, key: replaced.length ? g.key : g.key + 1 }));
+        const continuing = replaced.length > 0;
+        setGuide((g) => ({ steps: progress.cards, index: continuing ? g.index : 0, key: continuing ? g.key : g.key + 1 }));
         replaced = progress.cards;
       }, opts);
       if ('messages' in result) await save(result.messages);
@@ -108,14 +110,18 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     }
     if ('error' in result) setCaption({ text: result.error, citations: [], pensando: false });
     else {
-      if (turnFuses.length) setFuses(turnFuses);
-      if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [], pensando: false });
+      if (turnFuses.length) {
+        setFuses(turnFuses);
+        if (!replaced.length && !keepGuide) setGuide(g => ({ steps: [], index: 0, key: g.key + 1 }));
+      }
+      if (replaced[0]) setCaption({ text: replaced[0].instruction, citations: [], pensando: false });
     }
     setBusy(false);
     return !('error' in result) && replaced.length === 0;
   };
 
   const current = guide.steps[guide.index];
+  const waitingForFuseStep = !!current && !finished && !current.fuseTargets;
   const refilling = !finished && current?.part === 'washer' && guide.steps.slice(0, guide.index + 1).some((s) => s.action === 'refill');
   const done = () => {
     setFocus(null);
@@ -140,7 +146,8 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const toggleFocus = useCallback((part: PartId) => setFocus((f) => (f === part ? null : part)), []);
 
   return {
-    vehicleId, steps: guide.steps, index: guide.index, current, stepKey: guide.key, fuses, caption, busy, playing, focus, finished, refilling,
+    vehicleId, steps: guide.steps, index: guide.index, current, stepKey: guide.key,
+    waitingForFuseStep, fuses: waitingForFuseStep ? [] : current?.fuseTargets ?? fuses, caption, busy, playing, focus, finished, refilling,
     resetCaption, endConversation, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }

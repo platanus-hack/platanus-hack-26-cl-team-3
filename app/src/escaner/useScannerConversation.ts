@@ -1,5 +1,6 @@
 import { useIsFocused } from 'expo-router';
 import { useRef, useState } from 'react';
+import { confirmsGuideStep } from '../chat/guide';
 import { clear, conversationVehicle } from '../chat/history';
 import { parts, type PartId } from '../engine-maps/catalog';
 import type { useCameraGuide } from './CameraGuide';
@@ -35,6 +36,10 @@ export function useScannerConversation(initialLive: boolean, foreground: boolean
   };
   const ask = async (text: string, image: string | null, signal: AbortSignal) => {
     if (signal.aborted) return;
+    if (!guide.busy && guide.steps[guide.index + 1] && confirmsGuideStep(text)) {
+      guide.done();
+      return;
+    }
     const question = selected ? `Pieza seleccionada: ${parts[selected][0]}.\n${text}` : text;
     return guide.ask(question, false, { image: image ?? undefined, mode: 'vivo', signal, vehicleId });
   };

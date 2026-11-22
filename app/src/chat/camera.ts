@@ -1,5 +1,5 @@
 import { fuseGuides } from '../fusibles/guides';
-import { toCard, type ViewCard, type ViewCitation, type ViewFuse } from './history';
+import { toFuse, toCard, type ViewCard, type ViewCitation, type ViewFuse } from './history';
 
 export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string) => ({
   pathname: '/escanear' as const,
@@ -43,7 +43,15 @@ export function readGuide({ part, instruction, action, steps, step }: GuideParam
   let list: ViewCard[] = [];
   try {
     const raw: unknown = steps ? JSON.parse(steps) : [];
-    if (Array.isArray(raw)) list = raw.flatMap((s) => toCard(s?.part, s?.instruction, s?.action) ?? []);
+    if (Array.isArray(raw)) list = raw.flatMap(s => {
+      const card = toCard(s?.part, s?.instruction, s?.action);
+      if (!card) return [];
+      if (card.part === 'fuses' && !card.action && Array.isArray(s.fuseTargets)) {
+        const targets = s.fuseTargets.flatMap((f: Partial<ViewFuse> | null) => toFuse(f?.box, f?.numbers, f?.instruction) ?? []);
+        if (targets.length) card.fuseTargets = targets;
+      }
+      return [card];
+    });
   } catch {}
   if (list.length < 2) return { steps: single ? [single] : [], step: 0 };
   const index = Number(step);
