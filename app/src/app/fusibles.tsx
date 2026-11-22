@@ -72,7 +72,8 @@ function SinGuia() {
 
 function FuseDetail({ guide, initialBox, initialFuse, initialQuery }: { guide: FuseGuide; initialBox: string; initialFuse?: FuseSlot; initialQuery: string }) {
   const [box, setBox] = useState(initialBox);
-  const [selected, setSelected] = useState(initialFuse);
+  const [picked, setPicked] = useState<Record<string, FuseSlot>>(initialFuse ? { [initialFuse.box]: initialFuse } : {});
+  const selected = picked[box];
   const [view, setView] = useState<'photo' | 'diagram'>('photo');
   const [zoomed, setZoomed] = useState(false);
   const [query, setQuery] = useState(initialQuery);
@@ -95,7 +96,7 @@ function FuseDetail({ guide, initialBox, initialFuse, initialQuery }: { guide: F
     Keyboard.dismiss();
     setQuery('');
     setBox(fuse.box);
-    setSelected(fuse);
+    setPicked(current => ({ ...current, [fuse.box]: fuse }));
     scroll.current?.scrollTo({ y: 0, animated: false });
   }
 
@@ -120,7 +121,7 @@ function FuseDetail({ guide, initialBox, initialFuse, initialQuery }: { guide: F
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         {!searching && <>
           <View style={styles.tabs}>
-            {guide.boxes.map(item => <Pressable key={item.id} onPress={() => { setBox(item.id); setSelected(undefined); setLinkError(false); }}
+            {guide.boxes.map(item => <Pressable key={item.id} onPress={() => { setBox(item.id); setLinkError(false); }}
               accessibilityRole="button" accessibilityState={{ selected: item.id === box }} style={[styles.tab, item.id === box && styles.currentTab]}>
               <Text style={[styles.tabLabel, item.id === box && styles.currentTabLabel]}>{item.name}</Text>
             </Pressable>)}
