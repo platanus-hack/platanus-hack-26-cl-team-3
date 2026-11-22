@@ -14,7 +14,7 @@ export const LOST_REPLY = 'No lo encuentro';
 
 export type TurnProgress = { parts: ViewPart[]; cards: ViewCard[]; status: string | null };
 export type TurnResult = { messages: AnthropicMessage[]; truncated: boolean } | { error: string } | { aborted: true };
-export type TurnOptions = { image?: string; mode?: 'vivo'; signal?: AbortSignal };
+export type TurnOptions = { vehicleId?: string; image?: string; mode?: 'vivo'; signal?: AbortSignal };
 
 export async function sendTurn(
   history: AnthropicMessage[],
