@@ -11,7 +11,6 @@
  *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas.
  *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
-import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -29,11 +28,15 @@ import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { lastSonnetStatus, locatePartsWithSonnet, resetSonnetCalls } from '../engine-maps/landmarks/sonnet';
 import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
-import { InitialVisualScan } from './initial-visual-scan';
+import { GuiaMovimiento } from './GuiaMovimiento';
+import { InitialVisualScan, type ScanProgress } from './initial-visual-scan';
 import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
+import { FuseLinks } from '../chat/FuseLinks';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
+import { useScannerConversation } from './useScannerConversation';
 import { ProveedorVivo } from './vivo/ModoVivo';
+import { EstadoVozPantalla } from './vivo/EstadoVozPantalla';
 import { StepCounter } from './StepCounter';
 import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
@@ -88,7 +91,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
+export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo: initialLive = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const measuredVehicle = vehicle?.id === 'swift' || vehicle?.id === 'ram700' ? vehicle.id : undefined;
@@ -97,7 +100,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
-  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id);
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -109,8 +112,13 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [vano, setVano] = useState<Vano | null>(null); // en coordenadas del cuadro completo
   const capturarVano = async () => {
     if (!vano || !ar.current) return null;
-    const cap = await ar.current.capturar();
-    return vanoParaChat(cap.uri, vano);
+    // Solo hace falta la foto: sin medición no se hacen hit tests ni registro visual en el hilo de GL en cada turno de voz.
+    const cap = await ar.current.capturar(false);
+    try {
+      return await vanoParaChat(cap.uri, vano);
+    } finally {
+      borrar(cap.uri);
+    }
   };
   const [valido, setValido] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -128,9 +136,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [marca, setMarca] = useState<{ x: number; y: number } | null>(null); // aro visible donde se mantuvo presionado
   const [ultima, setUltima] = useState<CapturaAR | null>(null);
   const [registrationCandidate, setRegistrationCandidate] = useState<PlacementCandidate | null>(null);
+  const [movimiento, setMovimiento] = useState<ScanProgress | null>(null); // cuánto se movió la cámara durante el escaneo inicial
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
+  const conversation = useScannerConversation(initialLive, activa, cameraGuide, vehicle?.id, selected);
   const registrationGeneration = useRef(0);
   const ocupado = useRef(false); // fijando o recalibrando
 
@@ -331,6 +341,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           if (!cap.rastreando) initialScan?.reset();
           const placement = initialScan && cap.rastreando
             ? initialScan.select(t0, performance.now(), candidate, freshTarget ?? undefined) : candidate;
+          if (initialScan) setMovimiento(initialScan.progress());
           if (vivo && generation === registrationGeneration.current && placement) {
             if (await fijar(placement.capture, placement.bay, placement.centers, placement.partial, !!initialScan)) break;
             initialScan?.discard(placement.capture.id);
@@ -617,7 +628,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   } else if (measuredParts && !registrationCandidate) status = measuredVehicle === 'ram700'
     ? 'Desde el frente, encuadra la admisión y las tapas de aceite, dirección y refrigerante.'
     : 'Apunta al depósito de frenos y a la batería. El anclaje requiere profundidad.';
-  else if ((outbackParts || measuredParts) && registrationCandidate) status = 'Scanning…';
+  else if ((outbackParts || measuredParts) && registrationCandidate) status = 'Escaneando…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
   else engineHint = 'Apunta la cámara al motor';
 
@@ -710,8 +721,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               </ScrollView>
             )}
             {outbackParts && selected === 'fuses' && (
-              <Boton texto="Ver fusibles por circuito" icono="fuse" variante="secundario"
-                onPress={() => router.push('/outback-fuses')} />
+              <FuseLinks fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
             )}
             {fuseLink && (
               <Pressable
@@ -805,9 +815,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
 
   return (
     <ProveedorVivo
-      activo={vivo}
+      enabled={conversation.enabled} activo={conversation.listening}
+      caption={cameraGuide.caption}
+      busy={cameraGuide.busy}
       capturarVano={capturarVano}
-      preguntar={(t, img, signal) => cameraGuide.ask(t, false, { image: img ?? undefined, mode: 'vivo', signal })}
+      preguntar={conversation.ask}
     >
       <View style={estilos.raiz}>
         {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
@@ -827,7 +839,12 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         />
         <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
           name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+        {/* Feedback de voz a pantalla completa (solo en modo en vivo): escuchando / oyendo / pensando. */}
+        {conversation.listening && <EstadoVozPantalla pensando={cameraGuide.caption.pensando} />}
         {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
+        {!anclaje && !recalibrando && !error && registrationCandidate && (outbackParts || measuredParts) && movimiento && !editingMap && controls.mode !== 'hidden' && (
+          <GuiaMovimiento base={movimiento.baseline} objetivo={movimiento.target} />
+        )}
         {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
             los toques sobre las piezas del mapa. */}
         {!anclaje && (
@@ -846,7 +863,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           </View>
         ) : (
           <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
-            captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
+            conversation={conversation} captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
         )}
       </View>
     </ProveedorVivo>

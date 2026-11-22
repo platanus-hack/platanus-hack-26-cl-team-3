@@ -66,3 +66,21 @@ test('maps conversation_id on done to conversationId', () => {
   const buffer = 'event: done\ndata: {"messages":[],"conversation_id":"c1","turn_id":"t1"}\n\n';
   assert.deepEqual(splitEvents(buffer).events, [{ type: 'done', messages: [], conversationId: 'c1' }]);
 });
+
+test('fuse maps cabina/motor to cabin/engine', () => {
+  const ok = 'event: fuse\ndata: {"box":"motor","numbers":[37],"instruction":"Revisa este."}\n\n';
+  assert.deepEqual(splitEvents(ok).events, [{ type: 'fuse', box: 'engine', numbers: [37], instruction: 'Revisa este.' }]);
+  const cabin = 'event: fuse\ndata: {"box":"cabina","numbers":[6,7],"instruction":"x"}\n\n';
+  assert.deepEqual(splitEvents(cabin).events, [{ type: 'fuse', box: 'cabin', numbers: [6, 7], instruction: 'x' }]);
+});
+
+test('fuse with an invalid box or numbers is dropped', () => {
+  for (const data of [
+    '{"box":"techo","numbers":[1],"instruction":"x"}',
+    '{"box":"motor","numbers":[],"instruction":"x"}',
+    '{"box":"motor","numbers":"37","instruction":"x"}',
+    '{"box":"motor","numbers":[1.5],"instruction":"x"}',
+  ]) {
+    assert.deepEqual(splitEvents(`event: fuse\ndata: ${data}\n\n`).events, [], data);
+  }
+});

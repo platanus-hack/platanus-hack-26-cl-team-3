@@ -1,6 +1,6 @@
 import type { Tool as ToolDefinition } from "@anthropic-ai/sdk/resources/messages";
 import { loadManual } from "../manual/store";
-import { notice, pageResult } from "../manual/results";
+import { manualResults } from "../manual/results";
 import type { Tool, ToolOutput } from "./index";
 
 const MAX_QUERY = 200;
@@ -41,7 +41,7 @@ async function run(input: unknown): Promise<ToolOutput> {
   }
   const hits = index.search(query, (limit as number | undefined) ?? 4);
   if (!hits.length) return { content: [{ type: "text", text: "No encontré páginas del manual para esa búsqueda. Prueba otras palabras en inglés." }] };
-  return { content: [notice(index), ...hits.map(({ page }) => pageResult(index, page, 2400))] };
+  return { content: manualResults(index, hits.map(hit => hit.page), 2400) };
 }
 
 export const buscarManual: Tool = { definition, run };

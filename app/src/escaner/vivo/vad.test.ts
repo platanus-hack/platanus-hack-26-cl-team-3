@@ -92,3 +92,11 @@ test('cerrando: solo en frase y con silencio en curso', () => {
   assert.deepEqual(e.salidas, ['fin']);
   assert.equal(vad.cerrando(), false);
 });
+
+test('reiniciar descarta el estado: tras una pausa larga no abre una frase de golpe', () => {
+  const vad = crearVad();
+  correr(vad, RUIDO, 1000, 0);
+  vad.reiniciar();
+  assert.equal(vad.push(VOZ, 60000), null);
+  assert.equal(vad.cerrando(), false);
+});

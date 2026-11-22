@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState, type ComponentRef } from 'react';
-import { Image, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Animated, Image, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { findOutbackFuses, outbackFuseGuide, outbackFuseManualUrl, outbackFuses, type FuseBox, type OutbackFuse } from '../engine-maps/outback-fuses';
 import { engineFusePhoto } from '../engine-maps/outback-fuse-photo';
 import { color, espacio, radio, tipo } from '../theme';
+import { useReducedMotion } from '../useReducedMotion';
 import { BotonIcono, Icono } from '../ui';
 
 const images = {
@@ -17,6 +18,27 @@ const boxIds = ['engine', 'cabin'] as const;
 
 function fuseName(fuse: OutbackFuse) {
   return fuse.amps == null ? `Posición ${fuse.number}` : `Fusible ${fuse.number} · ${fuse.amps} A`;
+}
+
+function FuseBeacon({ photo }: { photo: boolean }) {
+  const reducedMotion = useReducedMotion();
+  const [pulse] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    if (reducedMotion) return;
+    const animation = Animated.loop(Animated.timing(pulse, {
+      toValue: 1, duration: 1500, useNativeDriver: Platform.OS !== 'web', isInteraction: false,
+    }));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse, reducedMotion]);
+
+  return <>
+    <Animated.View pointerEvents="none" accessible={false} style={[styles.beacon, !reducedMotion && {
+    opacity: pulse.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0.35, 1, 0] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.65] }) }],
+  }]} />
+    {photo && <View accessible={false} pointerEvents="none" style={styles.beaconCenter} />}
+  </>;
 }
 
 export default function OutbackFuses() {
@@ -104,7 +126,9 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
               style={[styles.slot, {
                 left: `${100 * (bounds.x - viewport.x) / viewport.width}%`, top: `${100 * (bounds.y - viewport.y) / viewport.height}%`,
                 width: `${100 * bounds.width / viewport.width}%`, height: `${100 * bounds.height / viewport.height}%`,
-              }, selected?.number === fuse.number && styles.selectedSlot]} />;
+              }, selected?.number === fuse.number && styles.selectedSlot]}>
+                {selected?.number === fuse.number && <FuseBeacon photo={photo} />}
+              </Pressable>;
             })}
           </View>
           {selected ? <View accessibilityLiveRegion="polite" style={styles.info}>
@@ -158,7 +182,11 @@ const styles = StyleSheet.create({
   zoom: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
   diagram: { width: '100%', maxWidth: 650, alignSelf: 'center', overflow: 'hidden' },
   slot: { position: 'absolute' },
-  selectedSlot: { borderWidth: 3, borderColor: color.acento, backgroundColor: color.acentoSuave },
+  beaconCenter: { position: 'absolute', left: '50%', top: '50%', marginLeft: -2, marginTop: -2,
+    width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFF' },
+  beacon: { position: 'absolute', left: '50%', top: '50%', marginLeft: -13, marginTop: -13,
+    width: 26, height: 26, borderRadius: 13, borderWidth: 3, borderColor: '#FFF' },
+  selectedSlot: { zIndex: 1, borderWidth: 2, borderColor: color.acento, backgroundColor: color.acentoSuave },
   info: { gap: espacio.xs, borderLeftWidth: 3, borderColor: color.acento, paddingLeft: espacio.m },
   selectedTitle: { color: color.acento, fontWeight: '700', fontSize: 18 },
   link: { ...tipo.nota, color: color.acento, paddingVertical: espacio.xs },

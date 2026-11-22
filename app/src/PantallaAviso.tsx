@@ -4,7 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import photoCredits from '../assets/vehicles/credits.json';
 import { AVISO } from './aviso';
+import { capacidadesDe, resumenCapacidades } from './capacidades';
 import { buildActual } from './buildActual';
+import { useVehicleSelection } from './plates/selection';
 import { color, espacio, radio, tipo } from './theme';
 import { Boton, Icono, Tarjeta } from './ui';
 import { describeBuild } from './version';
@@ -12,6 +14,7 @@ import { describeBuild } from './version';
 /** Aviso obligatorio (primer uso) y página «Aviso y fuentes» (siempre accesible desde el menú). */
 export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onListo: () => void }) {
   const [showCredits, setShowCredits] = useState(false);
+  const { vehicle } = useVehicleSelection();
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.raiz, { paddingTop: insets.top + espacio.xl, paddingBottom: insets.bottom + espacio.l }]}>
@@ -28,7 +31,7 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
         <Text style={[tipo.seccion, styles.seccion]}>Cómo funciona</Text>
         <Punto icono="camera-iris" texto="El reconocimiento del capó corre en tu teléfono. Las imágenes de la cámara no salen del dispositivo." />
         <Punto icono="book-open-variant" texto="Cuando la app responda preguntas, cada respuesta citará el manual del propietario: documento, sección y página. Sin fuente, no se afirma." />
-        <Punto icono="car-info" texto="El Subaru Outback 2016 3.6R es el auto de pruebas. La posición de las piezas en la cámara es aproximada." />
+        <Punto icono="car-info" texto={`${resumenCapacidades(`${vehicle.name}${vehicle.year ? ` ${vehicle.year}` : ''}`, capacidadesDe(vehicle.id))} La posición de las piezas en la cámara es aproximada.`} />
 
         <Text style={[tipo.seccion, styles.seccion]}>Créditos</Text>
         <Text style={tipo.nota}>

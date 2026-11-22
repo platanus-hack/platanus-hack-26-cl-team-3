@@ -1,5 +1,5 @@
 import { servidor } from '../servidor';
-import { vehicles } from '../vehicles';
+import { vehicles, type Vehicle } from '../vehicles';
 
 export type PlateRecord = { plate: string; make: string | null; model: string | null; year: number | null };
 
@@ -25,12 +25,25 @@ function words(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
 }
 
+/**
+ * Registros de revisión técnica que son el mismo vano que un auto del catálogo aunque el texto no coincida exacto.
+ * Cada alias fija marca, variante de motor y años: el 3.6R no es el 2.5i, y otro año no entra solo por parecerse.
+ */
+const ALIASES: { id: Vehicle['id']; make: RegExp; model: RegExp; years: readonly number[] }[] = [
+  // Outback de 5.ª generación con el 3.6R (EZ36): la revisión técnica lo registra como «ALL NEW OUTBACK 3.6R» (2015).
+  // El mapa 3D del catálogo es del 2016 y es el mismo vano.
+  { id: 'outback', make: /^SUBARU$/, model: /\bOUTBACK\b.*\b3 6/, years: [2015, 2016] },
+];
+
 export function identifiedVehicle(record: PlateRecord) {
   const name = [record.make, record.model].filter(Boolean).join(' ') || 'Vehículo';
-  // Engine maps are variant-specific. Only reuse one with explicit matching engine and year.
+  // Engine maps are variant-specific. Only reuse one with explicit matching engine and year, or a listed alias.
+  const make = words(record.make ?? '');
+  const model = words(record.model ?? '');
+  const alias = ALIASES.find(a => record.year !== null && a.years.includes(record.year) && a.make.test(make) && a.model.test(model));
   const catalog = vehicles.find(vehicle => vehicle.year === record.year
     && words(name) === words(vehicle.name + ' ' + vehicle.engine));
-  return { id: catalog?.id ?? 'prt-' + record.plate, name, year: record.year, engine: record.plate };
+  return { id: catalog?.id ?? alias?.id ?? 'prt-' + record.plate, name, year: record.year, engine: record.plate };
 }
 
 export async function lookupPlate(plate: string, signal: AbortSignal): Promise<PlateRecord> {

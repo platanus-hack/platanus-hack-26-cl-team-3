@@ -10,7 +10,7 @@ export function GuideBanner({ part, instruction }: { part?: PartId; instruction:
     <View style={styles.banner}>
       {part && <Text style={styles.part}>{parts[part][0]}</Text>}
       <Text style={tipo.cuerpo}>{instruction}</Text>
-      <Boton texto="Volver al chat" icono="arrow-left" variante="secundario" onPress={() => router.back()} estilo={styles.back} />
+      <Boton texto="Volver al chat" icono="arrow-left" variante="secundario" onPress={() => router.navigate('/ask')} estilo={styles.back} />
     </View>
   );
 }

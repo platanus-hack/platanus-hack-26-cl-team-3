@@ -1,6 +1,6 @@
 import type { Tool as ToolDefinition } from "@anthropic-ai/sdk/resources/messages";
 import { loadManual } from "../manual/store";
-import { notice, pageResult } from "../manual/results";
+import { manualResults } from "../manual/results";
 import type { Tool, ToolOutput } from "./index";
 
 const MAX_COUNT = 3;
@@ -36,7 +36,7 @@ async function run(input: unknown): Promise<ToolOutput> {
   }
   const pages = index.from(page, (count as number | undefined) ?? 1);
   if (!pages.length) return { content: [{ type: "text", text: `No existe la página «${page}» en el manual. Se numeran como en el manual impreso, por ejemplo «11-9».` }] };
-  return { content: [notice(index), ...pages.map((p) => pageResult(index, p, 6000))] };
+  return { content: manualResults(index, pages, 6000) };
 }
 
 export const leerManual: Tool = { definition, run };
