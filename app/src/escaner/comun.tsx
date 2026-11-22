@@ -62,12 +62,13 @@ export function useScannerControls(hasError: boolean) {
   };
 }
 
-export function ScannerControls({ controls, status, children, top, captions, step }: {
+export function ScannerControls({ controls, status, children, top, captions, step, conversation }: {
   controls: ReturnType<typeof useScannerControls>;
   status: string;
   children: ReactNode;
   top?: ReactNode;
   captions?: ReactNode;
+  conversation?: { enabled: boolean; toggle: () => void };
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
@@ -113,6 +114,12 @@ export function ScannerControls({ controls, status, children, top, captions, ste
             </ScrollView>
           )}
           {!expanded && captions}
+          {conversation && (
+            <Boton texto={conversation.enabled ? 'Terminar conversación' : 'Empezar conversación'}
+              icono={conversation.enabled ? 'phone-hangup-outline' : 'message-processing-outline'}
+              variante={conversation.enabled ? 'secundario' : 'primario'}
+              onPress={() => { setMode('compact'); conversation.toggle(); }} />
+          )}
           <Pressable accessibilityRole="button" accessibilityState={{expanded}}
             accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
             onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>

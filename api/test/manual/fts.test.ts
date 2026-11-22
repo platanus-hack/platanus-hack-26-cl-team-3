@@ -80,10 +80,10 @@ test("8: MANUAL_INDEX con extensión .sqlite hace que las herramientas usen FTS5
   try {
     assert.ok((await loadManual()) instanceof FtsIndex);
     const out = (await tools.buscar_manual.run({ query: "engine oil level gauge" })).content as any[];
-    assert.equal(out[0].type, "text");
-    assert.equal(out[1].source, "manual://subaru-outback-2016-us/11-11");
+    assert.equal(out[0].type, "search_result");
+    assert.equal(out[0].source, "manual://subaru-outback-2016-us/11-11");
     const read = (await tools.leer_manual.run({ page: "11-11", count: 2 })).content as any[];
-    assert.deepEqual(read.slice(1).map((sr) => sr.source.split("/").pop()), ["11-11", "11-12"]);
+    assert.deepEqual(read.slice(0, -1).map((sr) => sr.source.split("/").pop()), ["11-11", "11-12"]);
   } finally {
     delete process.env.MANUAL_INDEX;
     forgetManual();

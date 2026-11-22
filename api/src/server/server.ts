@@ -10,13 +10,15 @@ import { handleChat } from "./chat-handler";
 import { handleTranscribe, handleTranscribeToken } from "../transcribe/handler";
 import type { Transcriber } from "../transcribe/handler";
 import type { RealtimeTokenProvider } from "../transcribe/realtime-token";
+import { handleSpeak } from "../speak/handler";
+import type { Speaker } from "../speak/handler";
 import { json } from "./responses";
 import { defaultVehicleDatabase, handleVehicleLookup } from "./vehicle-lookup";
 
 export function createServer({
-  adapter, locator, heartbeatMs, transcriber, realtimeToken, vehicleDatabase = defaultVehicleDatabase,
+  adapter, locator, heartbeatMs, transcriber, realtimeToken, speaker, vehicleDatabase = defaultVehicleDatabase,
   conversations = null, runlog = null,
-}: { adapter?: Adapter; locator?: Locator; heartbeatMs?: number; transcriber?: Transcriber; realtimeToken?: RealtimeTokenProvider; vehicleDatabase?: string; conversations?: ConversationStore | null; runlog?: RunLogStore | null } = {}): http.Server {
+}: { adapter?: Adapter; locator?: Locator; heartbeatMs?: number; transcriber?: Transcriber; realtimeToken?: RealtimeTokenProvider; speaker?: Speaker; vehicleDatabase?: string; conversations?: ConversationStore | null; runlog?: RunLogStore | null } = {}): http.Server {
   return http.createServer((req, res) => {
     let pathname: string;
     try {
@@ -32,6 +34,7 @@ export function createServer({
     if (req.method === "POST" && pathname === "/api/locate") return void handleLocate(req, res, locator);
     if (req.method === "POST" && pathname === "/api/transcribe") return void handleTranscribe(req, res, transcriber);
     if (req.method === "POST" && pathname === "/api/transcribe/token") return void handleTranscribeToken(req, res, realtimeToken);
+    if (req.method === "GET" && pathname === "/api/speak") return void handleSpeak(req, res, speaker);
     if (pathname === "/api/devices" || pathname === "/api/conversations" || pathname.startsWith("/api/conversations/")) {
       return void handleConversations(req, res, pathname, conversations);
     }
