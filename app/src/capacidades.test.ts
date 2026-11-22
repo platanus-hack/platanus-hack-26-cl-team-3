@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { capacidadesDe, resumenCapacidades } from './capacidades';
+import { fuseGuides } from './fusibles/guides';
 import { vehicles } from './vehicles';
 
 test('el Outback lo tiene todo y los demás autos solo lo que existe', () => {
@@ -18,12 +19,19 @@ test('un auto del catálogo sin modelo 3D usa la plantilla, y uno desconocido (p
   assert.deepEqual(capacidadesDe('prt-X'), { ar: 'ninguno', manual: false, fusibles: false, tablero: false });
 });
 
+test('fusibles sale de las guías de fusibles de la app, no de un flag a mano', () => {
+  for (const id of Object.keys(fuseGuides)) assert.equal(capacidadesDe(id).fusibles, true, id);
+  assert.equal(capacidadesDe('onix').fusibles, false);
+  assert.equal(capacidadesDe('toString').fusibles, false);
+  assert.equal(capacidadesDe(undefined).fusibles, false);
+});
+
 test('todo auto del catálogo tiene capacidades y solo el Outback tiene manual, fusibles y tablero', () => {
   for (const v of vehicles) {
     const c = capacidadesDe(v.id);
     assert.notEqual(c.ar, 'ninguno', v.id);
     assert.equal(c.manual, v.id === 'outback', v.id);
-    assert.equal(c.fusibles, v.id === 'outback', v.id);
+    assert.equal(c.fusibles, Object.hasOwn(fuseGuides, v.id), v.id);
     assert.equal(c.tablero, v.id === 'outback', v.id);
   }
 });

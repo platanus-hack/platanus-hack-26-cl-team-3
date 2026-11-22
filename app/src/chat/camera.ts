@@ -1,4 +1,4 @@
-import { outbackFuses } from '../engine-maps/outback-fuses';
+import { fuseGuides } from '../fusibles/guides';
 import { toCard, type ViewCard, type ViewCitation, type ViewFuse } from './history';
 
 export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string) => ({
@@ -12,23 +12,28 @@ export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string
   },
 });
 
-export const fuseRoute = (box: ViewFuse['box'], number: number) => ({
-  pathname: '/outback-fuses' as const,
-  params: { box, fuse: String(number) },
+export const fuseRoute = (vehicleId: string, box: ViewFuse['box'], number: number) => ({
+  pathname: '/fusibles' as const,
+  params: { vehicleId, box, fuse: String(number) },
 });
 
 /** The fuse tool cites whole rows. A citation spanning multiple rows opens the panel without selecting one. */
 export function fuseCitationRoute(citation: ViewCitation) {
-  const match = /^fusibles:\/\/outback-2016-3\.6r\/(cabina|motor)$/.exec(citation.source ?? '');
-  if (!match) return null;
-  const box = match[1] === 'motor' ? 'engine' : 'cabin';
-  const tokens = (citation.cited_text ?? '').matchAll(/\b(?:fusible-(?:cabina|motor)-|fusible\s+)(\d+)\b/gi);
-  const numbers = [...new Set(Array.from(tokens, token => Number(token[1])))];
-  const slot = numbers.length === 1 ? outbackFuses.find(item => item.box === box && item.number === numbers[0]) : undefined;
-  return {
-    pathname: '/outback-fuses' as const,
-    params: { box, ...(slot && { fuse: String(slot.number) }) },
-  };
+  const source = citation.source ?? '';
+  for (const guide of Object.values(fuseGuides)) {
+    const prefix = `${guide.sourceUri}/`;
+    if (!source.startsWith(prefix)) continue;
+    const box = source.slice(prefix.length);
+    if (!guide.boxes.some(item => item.id === box)) continue;
+    const tokens = (citation.cited_text ?? '').matchAll(new RegExp(`\\b(?:fusible-${box}-|fusible\\s+)(\\d+)\\b`, 'gi'));
+    const numbers = [...new Set(Array.from(tokens, token => Number(token[1])))];
+    const slot = numbers.length === 1 ? guide.slots.find(item => item.box === box && item.number === numbers[0]) : undefined;
+    return {
+      pathname: '/fusibles' as const,
+      params: { vehicleId: guide.vehicleId, box, ...(slot && { fuse: String(slot.number) }) },
+    };
+  }
+  return null;
 }
 
 export type GuideParams = { part?: string; instruction?: string; action?: string; steps?: string; step?: string };

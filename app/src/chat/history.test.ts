@@ -108,12 +108,13 @@ test('toView reads show_fuse tool_use into the assistant bubble', () => {
       content: [
         { type: 'text', text: 'Revisa el fusible.' },
         fuseCall({ box: 'motor', numbers: [37], instruction: '  Revisa este.  ' }),
-        fuseCall({ box: 'techo', numbers: [1], instruction: 'x' }),
+        fuseCall({ box: 5, numbers: [1], instruction: 'x' }),
+        fuseCall({ box: 'motor', numbers: [999], instruction: 'x' }),
       ],
     },
   ]);
   assert.deepEqual(v[0].fuses, []);
-  assert.deepEqual(v[1].fuses, [{ box: 'engine', numbers: [37], instruction: 'Revisa este.' }]);
+  assert.deepEqual(v[1].fuses, [{ box: 'motor', numbers: [37], instruction: 'Revisa este.' }]);
 });
 
 test('rejected calls and unknown slots cannot create fuse links on replay', () => {
