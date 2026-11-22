@@ -1,9 +1,11 @@
 /**
  * Analizar una foto o un video de la galería: para cuando el auto no está a mano pero hay material sobre él.
  *
- * Usa el mismo modelo que el escáner, en el teléfono (nada se sube). Sin cámara en vivo ni ARCore: el contorno del
- * vano y las piezas del catálogo se dibujan en 2D sobre la imagen. De un video se analizan varios cuadros repartidos
- * en su duración y se muestra el más útil; se puede pasar a los demás.
+ * Usa el mismo modelo que el escáner, en el teléfono (nada se sube). Con el Outback, el módulo nativo ubica el modelo 3D
+ * sobre la foto con el mismo registro visual del escáner en vivo (sin ARCore ni profundidad: la pose vale para esa
+ * imagen). Si no se puede, o con otro auto, se dibujan en 2D el contorno del vano y las piezas del catálogo (ubicación
+ * aproximada). De un video se analizan varios cuadros repartidos en su duración y se muestra el más útil; se puede pasar
+ * a los demás.
  */
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,10 +15,12 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { encajar, mejorCuadro, piezasSobreImagen, volumenesBasicos, type Punto } from '../analizar/mapa2d';
+import { aPiezas2D, esquinasParaModelo, piezaEnPunto } from '../analizar/modelo3d';
+import { analizarImagen, type ResultadoImagen } from '../../modules/capo-ar';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { Encuadre } from '../detector/encuadre';
 import { poligonoVano, Suavizador, type Vano } from '../detector/vano';
-import { engineMaps, parts } from '../engine-maps/catalog';
+import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono } from '../ui';
 import { vehicles } from '../vehicles';
@@ -52,7 +56,8 @@ export default function Analizar() {
   const [progreso, setProgreso] = useState<string | null>(null); // texto mientras analiza
   const [cuadros, setCuadros] = useState<Cuadro[]>([]);
   const [indice, setIndice] = useState(0);
-  const [seleccion, setSeleccion] = useState(-1);
+  const [seleccion, setSeleccion] = useState<PartId | null>(null);
+  const [modelos, setModelos] = useState<Record<string, ResultadoImagen>>({}); // modelo 3D por imagen
   const [error, setError] = useState<string | null>(null);
   const [caja, setCaja] = useState<{ w: number; h: number } | null>(null);
 
@@ -69,7 +74,8 @@ export default function Analizar() {
       if (r.canceled || !r.assets.length) return;
       const medio = r.assets[0];
       setCuadros([]);
-      setSeleccion(-1);
+      setModelos({});
+      setSeleccion(null);
       if (medio.type === 'video') {
         const nuevos: Cuadro[] = [];
         const duracion = medio.duration ?? 0; // ms
@@ -100,17 +106,42 @@ export default function Analizar() {
   };
 
   const cuadro = cuadros[indice];
+  const modelo3d = vehicle?.id === 'outback' && !!analizarImagen;
+  // Ubica el modelo 3D de la imagen que se está viendo (en un video, solo la del cuadro mostrado).
+  useEffect(() => {
+    if (!modelo3d || !analizarImagen || !cuadro || modelos[cuadro.uri]) return;
+    let vigente = true;
+    analizarImagen(cuadro.uri, esquinasParaModelo(cuadro.vano))
+      .catch((e): ResultadoImagen => ({ ok: false, motivo: String(e?.message ?? e) }))
+      .then((r) => vigente && setModelos((m) => ({ ...m, [cuadro.uri]: r })));
+    return () => {
+      vigente = false;
+    };
+  }, [cuadro, modelo3d, modelos]);
+  const resultado3d = cuadro ? modelos[cuadro.uri] : undefined;
+  const ubicando = modelo3d && !!cuadro && !resultado3d; // el resultado (bueno o no) siempre llega y apaga el aviso
+  const en3d = resultado3d?.ok ? resultado3d : null;
   const piezas = useMemo(
-    () => (cuadro?.vano && cuadro.valido && map ? piezasSobreImagen(cuadro.vano, volumenesBasicos(map.volumes, map.partDetails)) : []),
-    [cuadro, map],
+    () =>
+      en3d
+        ? aPiezas2D(en3d.piezas)
+        : cuadro?.vano && cuadro.valido && map
+          ? piezasSobreImagen(cuadro.vano, volumenesBasicos(map.volumes, map.partDetails))
+          : [],
+    [en3d, cuadro, map],
   );
-  const elegida = piezas[seleccion]?.part;
-  const marco = caja && cuadro ? encajar(cuadro.ancho, cuadro.alto, caja) : null;
+  // Con el modelo 3D se puede tocar cualquiera de sus piezas; los botones son las que tienen ficha del manual.
+  const botones = en3d && map?.partDetails ? piezas.filter(({ part }) => map.partDetails?.[part]) : piezas;
+  const elegida = seleccion && piezas.some(({ part }) => part === seleccion) ? seleccion : null;
+  const contornoElegido = piezas.find(({ part }) => part === elegida)?.contorno;
+  const ancho = en3d?.ancho ?? cuadro?.ancho ?? 0;
+  const alto = en3d?.alto ?? cuadro?.alto ?? 0;
+  const marco = caja && cuadro ? encajar(ancho, alto, caja) : null;
   // De coordenadas normalizadas de la imagen a puntos de pantalla dentro de la caja.
   const aPantalla = (p: Punto) => ({ x: (marco?.x ?? 0) + p.x * (marco?.w ?? 0), y: (marco?.y ?? 0) + p.y * (marco?.h ?? 0) });
   const cambiarCuadro = (paso: number) => {
     setIndice((i) => Math.min(cuadros.length - 1, Math.max(0, i + paso)));
-    setSeleccion(-1);
+    setSeleccion(null);
   };
 
   return (
@@ -127,26 +158,44 @@ export default function Analizar() {
       <View style={styles.lienzo} onLayout={(e) => setCaja({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
         {cuadro && marco ? (
           <>
-            <Image source={{ uri: cuadro.uri }} style={{ position: 'absolute', left: marco.x, top: marco.y, width: marco.w, height: marco.h }} />
-            {cuadro.vano && (
-              <Poligono puntos={cuadro.vano.esquinas.map(aPantalla)} tono={cuadro.valido ? color.exito : color.acento} grosor={3} conPuntos />
-            )}
-            {piezas.map((pieza, i) => (
-              <Poligono key={pieza.part} puntos={pieza.contorno.map(aPantalla)} tono={i === seleccion ? color.acento : color.exito} grosor={i === seleccion ? 3 : 1.5} />
-            ))}
-            {piezas.map((pieza, i) => {
-              const c = aPantalla(pieza.centro);
-              return (
+            <Image source={{ uri: en3d ? en3d.foto : cuadro.uri }} style={{ position: 'absolute', left: marco.x, top: marco.y, width: marco.w, height: marco.h }} />
+            {en3d ? (
+              <>
+                <Image source={{ uri: en3d.capa }} style={{ position: 'absolute', left: marco.x, top: marco.y, width: marco.w, height: marco.h }} />
+                {contornoElegido && <Poligono puntos={contornoElegido.map(aPantalla)} tono={color.acento} grosor={3} />}
                 <Pressable
-                  key={`c-${pieza.part}`}
-                  onPress={() => setSeleccion(i)}
-                  hitSlop={12}
+                  style={StyleSheet.absoluteFill}
                   accessibilityRole="button"
-                  accessibilityLabel={parts[pieza.part][0]}
-                  style={[styles.centroPieza, { left: c.x - 9, top: c.y - 9 }, i === seleccion && { backgroundColor: color.acento }]}
+                  accessibilityLabel="Toca una pieza del modelo"
+                  onPress={(e) => {
+                    const { locationX, locationY } = e.nativeEvent;
+                    setSeleccion(piezaEnPunto(piezas, { x: (locationX - marco.x) / marco.w, y: (locationY - marco.y) / marco.h }));
+                  }}
                 />
-              );
-            })}
+              </>
+            ) : (
+              <>
+                {cuadro.vano && (
+                  <Poligono puntos={cuadro.vano.esquinas.map(aPantalla)} tono={cuadro.valido ? color.exito : color.acento} grosor={3} conPuntos />
+                )}
+                {piezas.map((pieza) => (
+                  <Poligono key={pieza.part} puntos={pieza.contorno.map(aPantalla)} tono={pieza.part === elegida ? color.acento : color.exito} grosor={pieza.part === elegida ? 3 : 1.5} />
+                ))}
+                {piezas.map((pieza) => {
+                  const c = aPantalla(pieza.centro);
+                  return (
+                    <Pressable
+                      key={`c-${pieza.part}`}
+                      onPress={() => setSeleccion(pieza.part)}
+                      hitSlop={12}
+                      accessibilityRole="button"
+                      accessibilityLabel={parts[pieza.part][0]}
+                      style={[styles.centroPieza, { left: c.x - 9, top: c.y - 9 }, pieza.part === elegida && { backgroundColor: color.acento }]}
+                    />
+                  );
+                })}
+              </>
+            )}
           </>
         ) : (
           <View style={styles.vacio}>
@@ -156,20 +205,22 @@ export default function Analizar() {
             </Text>
           </View>
         )}
-        {progreso && (
+        {(progreso || ubicando) && (
           <View style={styles.velo}>
             <ActivityIndicator color={color.acento} size="large" />
-            <Text style={[tipo.cuerpo, styles.centrado]}>{progreso}</Text>
+            <Text style={[tipo.cuerpo, styles.centrado]}>{progreso ?? 'Ubicando el modelo 3D sobre la foto…'}</Text>
           </View>
         )}
       </View>
 
       <ScrollView style={styles.panel} contentContainerStyle={styles.panelContenido}>
         {error && <Text style={styles.error}>{error}</Text>}
-        {cuadro && !progreso && (
+        {cuadro && !progreso && !ubicando && (
           <>
             <Text style={styles.resultado}>
-              {!cuadro.vano
+              {en3d
+                ? 'Modelo 3D ubicado sobre la foto. Toca una pieza para ver qué es.'
+                : !cuadro.vano
                 ? 'No encontré el vano del motor en esta imagen.'
                 : !cuadro.valido
                   ? 'Veo algo que podría ser el vano, pero no con claridad.'
@@ -191,15 +242,17 @@ export default function Analizar() {
             )}
             {piezas.length > 0 && map && (
               <>
-                <Text style={tipo.nota}>{map.referenceVariant} · Ubicación aproximada</Text>
+                <Text style={tipo.nota}>
+                  {map.referenceVariant} · {en3d ? 'Modelo 3D registrado con la foto (sin profundidad)' : 'Ubicación aproximada'}
+                </Text>
                 <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} style={styles.chips}>
-                  {piezas.map(({ part }, i) => (
+                  {botones.map(({ part }) => (
                     <Pressable
                       key={part}
                       accessibilityRole="button"
-                      accessibilityState={{ selected: i === seleccion }}
-                      onPress={() => setSeleccion(i)}
-                      style={[styles.chip, i === seleccion && styles.chipElegido]}
+                      accessibilityState={{ selected: part === elegida }}
+                      onPress={() => setSeleccion(part)}
+                      style={[styles.chip, part === elegida && styles.chipElegido]}
                     >
                       <Text style={tipo.nota}>{parts[part][0]}</Text>
                     </Pressable>

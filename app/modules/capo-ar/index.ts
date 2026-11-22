@@ -6,10 +6,29 @@ import type { ComponentType, Ref } from 'react';
 import type { NativeSyntheticEvent, ViewProps } from 'react-native';
 import { requireNativeView, requireOptionalNativeModule } from 'expo';
 
-type ModuloNativo = { disponibilidad(): Promise<string>; readPlatePreview(viewTag: number): Promise<string[]> };
+type ModuloNativo = {
+  disponibilidad(): Promise<string>;
+  readPlatePreview(viewTag: number): Promise<string[]>;
+  analizarImagen?(uri: string, vano: number[]): Promise<ResultadoImagen>;
+};
 const modulo = requireOptionalNativeModule<ModuloNativo>('CapoAr');
 
 export const readPlatePreview = modulo?.readPlatePreview?.bind(modulo);
+
+/** Pieza del modelo 3D vista en una foto: silueta (envolvente convexa) y centro, normalizados sobre la foto derecha. */
+export type PiezaImagen = { id: string; contorno: number[]; centro: number[]; profundidad: number };
+
+/** Resultado de ubicar el modelo 3D en una foto fija. `foto` y `capa` miden lo mismo (`ancho` × `alto`) y se superponen. */
+export type ResultadoImagen =
+  | { ok: true; foto: string; capa: string; ancho: number; alto: number; marcas: number; piezas: PiezaImagen[]; vano: number[] }
+  | { ok: false; motivo: string };
+
+/**
+ * Ubica el modelo 3D del Outback sobre una foto o un cuadro de video con el mismo registro visual del escáner en vivo
+ * (sin ARCore, sin profundidad). `vano`: esquinas del detector (x0, y0, x1, y1… normalizadas) para recortar alrededor;
+ * lista vacía = imagen completa. undefined si el módulo nativo no está (por ejemplo, en una versión sin esta función).
+ */
+export const analizarImagen = modulo?.analizarImagen?.bind(modulo);
 
 /** Cuadro de la cámara AR, ya derecho, listo para el modelo. */
 export type CapturaAR = {

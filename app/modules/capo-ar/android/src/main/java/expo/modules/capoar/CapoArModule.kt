@@ -17,6 +17,7 @@ import java.util.WeakHashMap
 class CapoArModule : Module() {
   private val plateReader = lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
   private var closed = false
+  private val analisis by lazy { AnalisisImagen(requireNotNull(appContext.reactContext) { "Sin contexto de React" }) }
 
   private fun findCameraPreview(view: View): PreviewView? {
     if (view is PreviewView) return view
@@ -66,6 +67,19 @@ class CapoArModule : Module() {
       if (ctx == null) { promise.resolve("UNKNOWN_ERROR"); return@AsyncFunction }
       promise.resolve(ArCoreApk.getInstance().checkAvailability(ctx).name)
     }
+
+    /**
+     * Ubica el modelo 3D del Outback sobre una foto fija con el mismo registro visual del escáner (sin ARCore).
+     * `vano`: esquinas del detector (x0, y0, x1, y1… normalizadas), para recortar alrededor; lista vacía = imagen completa.
+     * Devuelve { ok, foto, capa, ancho, alto, piezas[{id, contorno, centro}], vano } o { ok: false, motivo }.
+     */
+    AsyncFunction("analizarImagen") { uri: String, vano: List<Double>?, promise: Promise ->
+      try {
+        promise.resolve(analisis.analizar(uri, vano.orEmpty()))
+      } catch (e: Throwable) {
+        promise.reject("ERR_ANALISIS", e.message ?: e.javaClass.simpleName, e)
+      }
+    }.runOnQueue(Queues.DEFAULT)
 
     OnDestroy {
       synchronized(plateReader) {
