@@ -11,7 +11,7 @@ internal data class ModelTriangle(val a: EnginePoint, val b: EnginePoint, val c:
 internal data class ModelPart(val id: String, val center: EnginePoint, val guideCenter: EnginePoint = center)
 internal class OutbackModel(
   val parts: List<ModelPart>, val corners: List<EnginePoint>, val triangles: List<ModelTriangle>,
-  val relativeDepths: List<Float>,
+  val relativeDepths: List<Float>, val openFuseTray: List<ModelTriangle> = emptyList(),
 ) {
   companion object {
     // The bundled GLB has a single scene of identity-transform nodes, indexed triangles,
@@ -56,9 +56,9 @@ internal class OutbackModel(
             val material = doc.getJSONArray("materials").getJSONObject(primitive.getInt("material"))
             val color = material.getJSONObject("pbrMetallicRoughness").getJSONArray("baseColorFactor")
             val rgb = when (parts[part].id) {
-              "washer" -> floatArrayOf(.32f,.89f,.76f)
-              "dipstick" -> floatArrayOf(1f,.82f,.40f)
-              "fuses" -> floatArrayOf(.47f,.73f,1f)
+              "washer" -> if (primitiveIndex == 1) yellow else ivory
+              "dipstick" -> if (primitiveIndex == 1) yellow else floatArrayOf(.64f,.62f,.52f)
+              "fuses" -> if (primitiveIndex == 1) lidPlastic else dark
               else -> FloatArray(3) { Math.pow(color.getDouble(it), 1 / 2.2).toFloat() }
             }
             val (indices, n) = data(primitive.getInt("indices"), 5123, "SCALAR")
@@ -68,7 +68,18 @@ internal class OutbackModel(
         }
       }
       val depths = binding.getJSONArray("relativeDepths")
-      return OutbackModel(parts, corners, triangles, List(4) { depths.getDouble(it).toFloat() })
+      val detailed = triangles.groupBy { it.part }.flatMap { (index, shape) ->
+        when (parts[index].id) {
+          "dipstick" -> dipstickHandle(shape)
+          "oil_cap" -> oilCapMark(shape, parts[index])
+          "brake_cap" -> brakeReservoirCap(shape, parts[index])
+          "positive" -> terminalBoot(shape)
+          else -> shape
+        }
+      }
+      val layout = assets.open("engine-models/outback-fuse-tray.json").bufferedReader().use { JSONObject(it.readText()) }
+      return OutbackModel(parts, corners, detailed, List(4) { depths.getDouble(it).toFloat() },
+        fuseTray(layout, parts.indexOfFirst { it.id == "fuses" }))
     }
 
     private fun JSONArray.objects() = List(length()) { getJSONObject(it) }
@@ -144,7 +155,8 @@ internal class PlacedModel(model: OutbackModel, registration: EngineMesh, ids: L
     )
     inspections = model.triangles.groupBy { it.part }.map { (index, sourceTriangles) ->
       val part = model.parts[index]
-      indices[index] to InspectionPart(part, indices[index], sourceTriangles, ::registered)
+      indices[index] to InspectionPart(part, indices[index], sourceTriangles,
+        openTray = if (part.id == "fuses") model.openFuseTray else emptyList(), register = ::registered)
     }.toMap()
   }
 

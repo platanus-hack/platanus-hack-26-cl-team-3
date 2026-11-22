@@ -11,7 +11,7 @@ test("1: filter p/w returns a search_result with 6 citable blocks with part_id",
   const [sr] = content as any[];
   assert.equal(sr.type, "search_result");
   assert.equal(sr.source, "fusibles://outback-2016-3.6r/cabina");
-  assert.match(sr.title, /tercero/i);
+  assert.match(sr.title, /Outback 2016 para Norteamérica/);
   assert.equal(sr.citations.enabled, true);
   assert.equal(sr.content.length, 6);
   for (const b of sr.content) {
@@ -40,6 +40,7 @@ test("filter by fuse number", async () => {
   const [sr] = content as any[];
   assert.equal(sr.content.length, 1);
   assert.match(sr.content[0].text, /^Fusible 24 /);
+  assert.match(sr.title, /PDF 530$/);
 });
 
 test("a numeric filter compares the exact fuse number", async () => {
@@ -48,11 +49,12 @@ test("a numeric filter compares the exact fuse number", async () => {
   const eleven = (await run({ filter: "11" })).content as any[];
   assert.equal(eleven[0].content.length, 1);
   assert.match(eleven[0].content[0].text, /^Fusible 11 /);
+  assert.match(eleven[0].title, /PDF 529$/);
 });
 
 test("the title names the data source", async () => {
   const [sr] = (await run({ filter: "p/w" })).content as any[];
-  assert.match(sr.title, /fuente: autogenius\.info/);
+  assert.match(sr.title, /MSA5M1603C\), PDF 529 y 530$/);
 });
 
 test("the description explains the manual abbreviations", () => {

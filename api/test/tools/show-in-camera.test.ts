@@ -55,3 +55,13 @@ test("every catalog part supports inspection and only the washer supports refill
     }
   }
 });
+
+test("opening actions are accepted only on mapped service components", async () => {
+  const supported = ["washer", "fuses", "dipstick", "oil_cap", "positive", "brake_cap", "brake_fluid"];
+  for (const { id } of parts) {
+    const input = { part: id, instruction: "Inspect the opening.", action: "open" };
+    const result = await run(input);
+    if (supported.includes(id)) assert.deepEqual(result.events, [{ event: "ar", data: input }]);
+    else assert.equal(result.is_error, true);
+  }
+});

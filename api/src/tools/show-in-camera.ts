@@ -2,6 +2,7 @@ import type { Tool as ToolDefinition } from "@anthropic-ai/sdk/resources/message
 import rows from "../data/parts.json";
 import type { Tool, ToolOutput } from "./index";
 
+const openingParts = new Set(["washer", "fuses", "oil_cap", "dipstick", "positive", "brake_cap", "brake_fluid"]);
 const MAX_INSTRUCTION = 200;
 
 const definition: ToolDefinition = {
@@ -15,8 +16,8 @@ const definition: ToolDefinition = {
       part: { type: "string", enum: rows.map((p) => p.id) },
       instruction: { type: "string" },
       action: {
-        type: "string", enum: ["highlight", "lift", "refill"],
-        description: "Optional 3D inspection after camera registration. Highlight or lift any mapped part. Refill demonstrates the washer only.",
+        type: "string", enum: ["highlight", "lift", "refill", "open"],
+        description: "Optional 3D inspection after camera registration. Highlight or lift any mapped part. Refill demonstrates the washer only. Open demonstrates the observed cover, cap or dipstick movement on supported parts.",
       },
     },
     required: ["part", "instruction"],
@@ -32,7 +33,7 @@ async function run(input: unknown): Promise<ToolOutput> {
   const row = typeof part === "string" ? rows.find((p) => p.id === part) : undefined;
   if (!row) return invalid("Pieza desconocida: usa un part que devolvió lookup_parts.");
   if (typeof instruction !== "string" || instruction.trim() === "") return invalid("Falta la instrucción.");
-  if (action !== undefined && !(action === "highlight" || action === "lift" || (action === "refill" && part === "washer"))) {
+  if (action !== undefined && !(action === "highlight" || action === "lift" || (action === "refill" && part === "washer") || (action === "open" && openingParts.has(row.id)))) {
     return invalid("Unsupported inspection action for this part.");
   }
   const text = instruction.trim().slice(0, MAX_INSTRUCTION);
