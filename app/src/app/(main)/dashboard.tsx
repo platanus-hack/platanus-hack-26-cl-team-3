@@ -4,7 +4,7 @@ import { File } from 'expo-file-system';
 import { CameraView } from 'expo-camera';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Image, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { guide, manualUrl } from '../../dashboard/guide';
@@ -22,6 +22,7 @@ export default function Dashboard() {
 
 function DashboardScanner({ vehicleId }: { vehicleId: string }) {
   const [permission, requestPermission] = useScannerPermission(vehicleId === 'outback');
+  const { height } = useWindowDimensions();
   const camera = useRef<CameraView>(null);
   const mounted = useRef(false);
   const scanning = useRef(false);
@@ -79,7 +80,7 @@ function DashboardScanner({ vehicleId }: { vehicleId: string }) {
         {!supported ? <Text style={tipo.cuerpo}>El escáner tiene referencias del Subaru Outback 2016. Todavía no hay un manual verificado para el vehículo seleccionado.</Text> : <>
           {!result && <Text style={tipo.cuerpo}>Con el auto estacionado, encuadra el tablero completo y comprueba que los símbolos encendidos se vean nítidos.</Text>}
           {(result || permission?.granted) && (
-            <View style={[styles.preview, result && { aspectRatio: result.width / result.height }]}>
+            <View style={[styles.preview, result ? { aspectRatio: result.width / result.height } : { maxHeight: height * 0.46, alignSelf: 'center' }]}>
               {result ? <Image source={{ uri: result.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> :
               <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back" ratio="4:3"
                 onCameraReady={() => setReady(true)}
