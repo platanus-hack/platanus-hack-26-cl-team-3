@@ -531,7 +531,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   else if (anclaje && (!rastreando || (anclaje.mapPlaced && !mapTracking))) status = 'Buscando seguimiento…';
   else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
-  else if (outbackParts && registrationCandidate) status = 'Escaneando motor…';
+  else if (outbackParts && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
 
   let panel;
