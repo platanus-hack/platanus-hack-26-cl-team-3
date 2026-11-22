@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { findOutbackFuses, outbackFuses } from './outback-fuses';
 
 test('distinguishes the numbered circuits in the two diagrams', () => {
@@ -43,5 +44,18 @@ test('each diagram assigns a distinct contained hit area to all 38 numbered posi
           fuse.y + fuse.height <= other.y || other.y + other.height <= fuse.y);
       }
     }
+  }
+});
+
+test('the api fuse table matches the app map', () => {
+  const file = new URL('../../../api/src/data/fuses.json', import.meta.url);
+  const rows: { box: string; number: number; amps: number | null; circuit: string }[] = JSON.parse(readFileSync(file, 'utf8')).fuses;
+  assert.equal(rows.length, 76);
+  assert.equal(rows.length, outbackFuses.length);
+  for (const row of rows) {
+    const slot = outbackFuses.find(f => f.box === (row.box === 'cabina' ? 'cabin' : 'engine') && f.number === row.number);
+    assert.ok(slot, `${row.box} ${row.number}`);
+    assert.equal(row.amps, slot.amps);
+    assert.equal(row.circuit, slot.label);
   }
 });
