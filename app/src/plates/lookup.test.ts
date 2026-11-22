@@ -16,8 +16,21 @@ test('the displayed vehicle preserves the registered year and only assigns a kno
   const record = { plate: 'BCDF12', make: 'SUBARU', model: 'ALL NEW OUTBACK 3.6R', year: 2015 };
   assert.equal(identifiedVehicle(record).name, 'SUBARU ALL NEW OUTBACK 3.6R');
   assert.equal(identifiedVehicle(record).year, 2015);
-  assert.equal(identifiedVehicle(record).id, 'prt-BCDF12');
   assert.equal(identifiedVehicle({ ...record, model: 'OUTBACK 3.6R (EZ36)', year: 2016 }).id, 'outback');
+  assert.equal(identifiedVehicle({ ...record, make: 'RAM', model: '700' }).id, 'prt-BCDF12');
+});
+
+test('the registry spelling of the 3.6R Outback uses the catalog map, but other variants and years do not', () => {
+  const record = { plate: 'HHJL67', make: 'SUBARU', model: 'ALL NEW OUTBACK 3.6R', year: 2015 };
+  const found = identifiedVehicle(record);
+  assert.equal(found.id, 'outback');
+  assert.equal(found.name, 'SUBARU ALL NEW OUTBACK 3.6R'); // se muestra lo que dice el registro
+  assert.equal(found.year, 2015);
+  assert.equal(identifiedVehicle({ ...record, year: 2016 }).id, 'outback');
+  assert.equal(identifiedVehicle({ ...record, model: 'ALL NEW OUTBACK 2.5I' }).id, 'prt-HHJL67');
+  assert.equal(identifiedVehicle({ ...record, year: 2014 }).id, 'prt-HHJL67');
+  assert.equal(identifiedVehicle({ ...record, year: null }).id, 'prt-HHJL67');
+  assert.equal(identifiedVehicle({ ...record, make: 'TOYOTA' }).id, 'prt-HHJL67');
 });
 
 test('a lookup must identify the requested plate and provide a correctly typed descriptor', () => {
