@@ -518,7 +518,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
-  sonnetAnchorRef.current = controls.sonnetAnchor;
+  useEffect(() => { sonnetAnchorRef.current = controls.sonnetAnchor; }, [controls.sonnetAnchor]);
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, focus } = cameraGuide;
