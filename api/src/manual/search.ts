@@ -22,6 +22,14 @@ export interface Hit {
   score: number;
 }
 
+/** Lo que necesitan las herramientas de un índice: no importa si vive en memoria o en un archivo SQLite. */
+export interface ManualIndex {
+  readonly source: ManualSource;
+  search(query: string, limit?: number): Hit[];
+  /** Páginas desde la que lleva esa numeración impresa («11-9») o, si no, esa hoja del PDF («pdf:491»). */
+  from(reference: string, count?: number): ManualPage[];
+}
+
 const STOP = new Set(
   ("the a an of to in on for and or is are be it as at by with from this that what where how do does can i my me " +
     "de la el los las un una que como donde cual mi es en y o para por con se del al lo su sus").split(" "),
@@ -43,19 +51,23 @@ function stem(word: string): string {
   return word;
 }
 
-export function tokenize(text: string): string[] {
-  const words = unaccent(text.toLowerCase()).match(/[a-z0-9]+(?:\.[0-9]+)?/g) ?? [];
-  return words.filter((word) => !STOP.has(word)).map(stem);
+/** Las palabras de un texto, sin tildes ni palabras vacías y sin reducir: SQLite FTS5 hace su propia reducción. */
+function words(text: string): string[] {
+  return (unaccent(text.toLowerCase()).match(/[a-z0-9]+(?:\.[0-9]+)?/g) ?? []).filter((word) => !STOP.has(word));
 }
+
+export const tokenize = (text: string): string[] => words(text).map(stem);
 
 /** Lo que el usuario escribió, más la traducción de las palabras del auto que conocemos. */
-export function expandQuery(query: string): string[] {
-  const words = unaccent(query.toLowerCase()).match(/[a-z0-9]+/g) ?? [];
-  const extra = words.flatMap((word) => (GLOSSARY[word] ? tokenize(GLOSSARY[word]) : []));
-  return [...new Set([...tokenize(query), ...extra])];
+export function expandWords(query: string): string[] {
+  const plain = unaccent(query.toLowerCase()).match(/[a-z0-9]+/g) ?? [];
+  const extra = plain.flatMap((word) => (GLOSSARY[word] ? words(GLOSSARY[word]) : []));
+  return [...new Set([...words(query), ...extra])];
 }
 
-export class ManualIndex {
+export const expandQuery = (query: string): string[] => [...new Set(expandWords(query).map(stem))];
+
+export class MemoryIndex implements ManualIndex {
   readonly source: ManualSource;
   readonly pages: ManualPage[];
   private readonly frequencies: Map<string, number>[];
@@ -77,10 +89,10 @@ export class ManualIndex {
     for (const counts of this.frequencies) for (const token of counts.keys()) this.documentFrequency.set(token, (this.documentFrequency.get(token) ?? 0) + 1);
   }
 
-  static async load(path: string): Promise<ManualIndex> {
+  static async load(path: string): Promise<MemoryIndex> {
     const file = JSON.parse(await readFile(path, "utf8")) as ManualFile;
     if (file.version !== 1 || !Array.isArray(file.pages) || !file.pages.length) throw new Error(`Índice del manual inválido: ${path}`);
-    return new ManualIndex(file);
+    return new MemoryIndex(file);
   }
 
   search(query: string, limit = 4): Hit[] {

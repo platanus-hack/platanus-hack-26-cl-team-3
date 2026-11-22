@@ -4,6 +4,7 @@
 #
 #   scripts/manual/preparar-manual.sh [carpeta-de-salida]            (por defecto api/.manual)
 #   MANUAL_PDF=/ruta/manual.pdf scripts/manual/preparar-manual.sh    usa un PDF que ya tengas, sin bajar nada
+#   MANUAL_FORMATO=sqlite scripts/manual/preparar-manual.sh           deja outback-2016.sqlite (FTS5) en vez del JSON
 #
 # Requiere: curl, sha256sum, pdftotext (paquete poppler-utils) y Node 22 con las dependencias del api (npm ci en api/).
 # Es una copia de terceros del manual de Subaru: ver docs/specs/manual/README.md.
@@ -38,5 +39,6 @@ mkdir -p "$SALIDA"
 pdftotext "$PDF" "$TRABAJO/lectura.txt"
 pdftotext -layout "$PDF" "$TRABAJO/layout.txt"
 cd "$RAIZ/api"
-node_modules/.bin/tsx scripts/manual/construir-indice.ts "$TRABAJO/lectura.txt" "$TRABAJO/layout.txt" "$SALIDA/outback-2016.json" "$OBTENIDO"
-echo "Listo. El api lo lee de MANUAL_INDEX (por defecto api/.manual/outback-2016.json)."
+EXTENSION="${MANUAL_FORMATO:-json}"
+node_modules/.bin/tsx scripts/manual/construir-indice.ts "$TRABAJO/lectura.txt" "$TRABAJO/layout.txt" "$SALIDA/outback-2016.$EXTENSION" "$OBTENIDO"
+echo "Listo. El api lo lee de MANUAL_INDEX (por defecto api/.manual/outback-2016.json; con otro formato, apunta MANUAL_INDEX al archivo)."
