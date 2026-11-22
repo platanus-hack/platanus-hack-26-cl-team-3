@@ -463,7 +463,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val (offset, scale) = engine.alignment
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
-      modelRenderer.draw(engine.model, mvp, animation?.index ?: guidePart, animation, focusedPart?.let(outbackParts::indexOf) ?: -1)
+      val selectedPart = animation?.index ?: guidePart
+      val focus = focusedPart?.let(outbackParts::indexOf) ?: -1
+      val effectiveFocus = if (focus >= 0 && focus == guidePart) selectedPart else focus
+      modelRenderer.draw(engine.model, mvp, selectedPart, animation, effectiveFocus)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
     } else null
     val faces = if (hitFrame == null && engine != null && projector != null) {
