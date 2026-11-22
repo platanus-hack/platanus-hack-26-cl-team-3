@@ -8,15 +8,15 @@ import { resolveProfile } from "../llm/profiles";
 import { tools } from "../tools";
 import { json, openSSE, sendEvent } from "./responses";
 
-const MAX_BODY = 1024 * 1024;
+export const MAX_BODY = 1024 * 1024;
 const MAX_MESSAGES = 200;
 export const HEARTBEAT_MS = 15_000;
 
-class BodyTooLarge extends Error {}
+export class BodyTooLarge extends Error {}
 
 type Validation = { error: string } | { error?: undefined; profile: Profile; messages: MessageParam[] };
 
-function readBody(req: IncomingMessage): Promise<string> {
+export function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let total = 0;
     const parts: Buffer[] = [];

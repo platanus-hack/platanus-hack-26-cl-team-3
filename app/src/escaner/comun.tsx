@@ -1,7 +1,8 @@
 // Piezas compartidas por los dos escáneres (con AR y sin AR).
 import { File } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -40,13 +41,25 @@ export class PuntajeCapo {
   }
 }
 
+const SONNET_KEY = 'capo-ar:anclaje-sonnet:v1';
+
 export function useScannerControls(hasError: boolean) {
   type Mode = 'compact' | 'details' | 'hidden';
   const [view, setView] = useState<{ mode: Mode; hasError: boolean }>({ mode: 'compact', hasError });
   const [diagnostics, setDiagnostics] = useState(false);
+  const [sonnetAnchor, setSonnetAnchor] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(SONNET_KEY).then((value) => setSonnetAnchor(value === '1')).catch(() => {});
+  }, []);
   const mode = hasError === view.hasError ? view.mode : 'compact';
   const setMode = (mode: Mode) => setView({ mode, hasError });
-  return { mode, setMode, hasError, debug: diagnostics && mode !== 'hidden', toggleDebug: () => setDiagnostics(value => !value) };
+  return { mode, setMode, hasError, debug: diagnostics && mode !== 'hidden', toggleDebug: () => setDiagnostics(value => !value),
+    sonnetAnchor,
+    toggleSonnetAnchor: () => setSonnetAnchor((value) => {
+      AsyncStorage.setItem(SONNET_KEY, value ? '0' : '1').catch(() => {});
+      return !value;
+    }),
+  };
 }
 
 export function ScannerControls({ controls, status, children, top, captions, step }: {
@@ -58,7 +71,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
-  const { mode, setMode, debug, toggleDebug, hasError } = controls;
+  const { mode, setMode, debug, toggleDebug, hasError, sonnetAnchor, toggleSonnetAnchor } = controls;
   const expanded = mode === 'details';
   const hidden = mode === 'hidden';
   const { vehicleId, instruction, part } = useLocalSearchParams<{vehicleId?: string; instruction?: string; part?: string}>();
@@ -87,8 +100,16 @@ export function ScannerControls({ controls, status, children, top, captions, ste
                   <Icono nombre="bug-outline" tam={16} tono={debug ? color.acentoTexto : color.texto} />
                   <Text style={[estilos.chipTexto, debug && {color: color.acentoTexto}]}>Diagnóstico</Text>
                 </Pressable>
+                <Pressable accessibilityRole="switch" accessibilityState={{checked: sonnetAnchor}} onPress={toggleSonnetAnchor}
+                  style={[estilos.chip, sonnetAnchor && estilos.chipActivo]}>
+                  <Icono nombre="creation" tam={16} tono={sonnetAnchor ? color.acentoTexto : color.texto} />
+                  <Text style={[estilos.chipTexto, sonnetAnchor && {color: color.acentoTexto}]}>Anclaje con Sonnet</Text>
+                </Pressable>
                 <BotonIcono icono="information-outline" etiqueta="Aviso y fuentes" onPress={() => router.push('/aviso')} />
               </View>
+              {sonnetAnchor && (
+                <Text style={[tipo.nota, estilos.panelDetalle]}>Experimental. Envía el recorte del motor al servidor para ubicar las piezas.</Text>
+              )}
             </ScrollView>
           )}
           {!expanded && captions}
@@ -213,7 +234,7 @@ export const estilos = StyleSheet.create({
   statusText: { color: color.texto, fontSize: 14, fontWeight: '700', flexShrink: 1 },
   panel: { flexShrink: 1, backgroundColor: color.velo, borderRadius: radio.xl },
   details: { padding: espacio.l },
-  options: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: espacio.m },
+  options: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: espacio.s, marginTop: espacio.m },
   fila: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   panelTitulo: { fontSize: 18, fontWeight: '800', color: color.texto, flexShrink: 1 },
   panelDetalle: { marginTop: espacio.s },

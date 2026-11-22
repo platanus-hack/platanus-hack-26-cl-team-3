@@ -5,13 +5,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cameraRoute } from '../chat/camera';
 import { CitationModal } from '../chat/CitationModal';
+import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
 import { runTurn } from '../chat/client';
 import type { AnthropicMessage } from '../chat/contract';
 import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
-import { parts as catalogParts } from '../engine-maps/catalog';
 import { color, espacio, radio, tipo } from '../theme';
-import { BotonIcono, Boton, Icono, Tarjeta } from '../ui';
+import { BotonIcono, Icono, Tarjeta } from '../ui';
 
 const QUICK_REPLIES = [DONE_REPLY, LOST_REPLY];
 
@@ -111,17 +111,11 @@ export default function Ask() {
     <KeyboardAvoidingView style={styles.root} behavior="padding">
       <View style={[styles.bar, { paddingTop: insets.top + espacio.s }]}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
-        <Text style={styles.title}>Manual del Subaru Outback 2016 · 3.6R</Text>
-        <Pressable
-          onPress={reset}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy }}
-          style={[styles.newChat, busy && { opacity: 0.4 }]}
-        >
-          <Icono nombre="square-edit-outline" tam={18} tono={color.textoSuave} />
-          <Text style={styles.newText}>Nueva conversación</Text>
-        </Pressable>
+        <View style={styles.flex}>
+          <Text style={styles.title}>Asistente</Text>
+          <Text style={styles.subtitleBar}>Subaru Outback 2016, motor 3.6R</Text>
+        </View>
+        <BotonIcono icono="square-edit-outline" etiqueta="Nueva conversación" onPress={reset} deshabilitado={busy} />
       </View>
 
       <ScrollView
@@ -153,16 +147,7 @@ export default function Ask() {
         {replies && (
           <View style={styles.replies}>
             {QUICK_REPLIES.map((reply) => (
-              <Pressable
-                key={reply}
-                onPress={() => void send(reply)}
-                disabled={busy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
-                style={[styles.reply, busy && { opacity: 0.4 }]}
-              >
-                <Text style={styles.replyText}>{reply}</Text>
-              </Pressable>
+              <ChoiceButton compacto key={reply} texto={reply} deshabilitado={busy} onPress={() => void send(reply)} />
             ))}
           </View>
         )}
@@ -211,8 +196,8 @@ function BubbleView({
   const uncited =
     !mine && !streaming && bubble.parts.some((p) => p.text.trim()) && bubble.parts.every((p) => p.citations.length === 0);
   let n = 0;
-  return (
-    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant]}>
+  const text = (
+    <>
       <Text style={[tipo.cuerpo, mine && { color: color.acentoTexto }]}>
         {bubble.parts.map((p, i) => (
           <Text key={i}>
@@ -226,17 +211,18 @@ function BubbleView({
         ))}
       </Text>
       {uncited && <Text style={styles.uncited}>Sin cita del manual</Text>}
-      {bubble.cards.map((card, i) => (
-        <View key={i} style={styles.card}>
-          <Boton
-            texto={`Abrir cámara: ${catalogParts[card.part][0]}`}
-            icono="camera"
-            onPress={() => onCamera(card, bubble.cards)}
-            estilo={{ paddingHorizontal: espacio.m }}
-          />
-          <Text style={styles.cardNote}>{card.instruction}</Text>
-        </View>
-      ))}
+    </>
+  );
+  const guided = !mine && bubble.cards.length > 0;
+  return (
+    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleAssistant, guided && styles.bubbleGuide]}>
+      {guided ? (
+        <GuideChoice cards={bubble.cards} disabled={streaming} onCamera={onCamera}>
+          {text}
+        </GuideChoice>
+      ) : (
+        text
+      )}
     </View>
   );
 }
@@ -253,27 +239,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: color.borde,
   },
-  title: { flex: 1, fontSize: 17, fontWeight: '700', color: color.texto },
-  newChat: { flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
-  newText: { fontSize: 12, color: color.textoSuave, fontWeight: '600' },
+  title: { fontSize: 17, fontWeight: '700', color: color.texto },
+  subtitleBar: { fontSize: 12, color: color.textoSuave },
   list: { padding: espacio.l, gap: espacio.m },
   empty: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
   bubble: { maxWidth: '88%', borderRadius: radio.l, paddingVertical: espacio.m, paddingHorizontal: espacio.l },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: color.acento },
   bubbleAssistant: { alignSelf: 'flex-start', backgroundColor: color.superficie, borderWidth: 1, borderColor: color.borde },
   uncited: { fontSize: 12, color: color.textoTenue, marginTop: espacio.xs },
-  card: { marginTop: espacio.m, gap: espacio.s },
-  cardNote: { fontSize: 12, color: color.textoSuave, lineHeight: 17 },
+  bubbleGuide: { alignSelf: 'stretch', maxWidth: '100%' },
   replies: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginBottom: espacio.s },
-  reply: {
-    paddingVertical: espacio.s,
-    paddingHorizontal: espacio.m,
-    borderRadius: radio.l,
-    backgroundColor: color.superficieAlta,
-    borderWidth: 1,
-    borderColor: color.borde,
-  },
-  replyText: { fontSize: 13, fontWeight: '600', color: color.texto },
   chip: { color: color.acento, fontWeight: '800' },
   footer: { paddingHorizontal: espacio.l, paddingTop: espacio.s, borderTopWidth: 1, borderTopColor: color.borde, backgroundColor: color.fondo },
   status: { fontSize: 13, color: color.textoSuave, marginBottom: espacio.s },

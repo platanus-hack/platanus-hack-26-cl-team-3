@@ -86,6 +86,8 @@ class CapoArModule : Module() {
 
       Prop("editingMap") { view: CapoArView, enabled: Boolean? -> view.editMap(enabled == true) }
 
+      Prop("focusedPart") { view: CapoArView, id: String? -> view.focusedPart = id }
+
       Prop("selectedPart") { view: CapoArView, index: Int? ->
         view.capa.selectedPart = index ?: -1
         view.guidePart = index ?: -1

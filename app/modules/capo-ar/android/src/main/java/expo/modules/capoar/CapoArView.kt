@@ -54,6 +54,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   private val onPart by EventDispatcher<Map<String, Int>>()
   private val onGuia by EventDispatcher<Map<String, Any>>()
   @Volatile internal var guidePart = -1
+  @Volatile internal var focusedPart: String? = null
   private data class Inspection(val model: PlacedModel, val part: Int, val action: InspectionAction, val start: Long)
   private var inspection: Inspection? = null
 
@@ -461,7 +462,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       val (offset, scale) = engine.alignment
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
-      modelRenderer.draw(engine.model, mvp, guidePart, animation)
+      modelRenderer.draw(engine.model, mvp, guidePart, animation, focusedPart?.let(outbackParts::indexOf) ?: -1)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
     } else null
     val faces = if (hitFrame == null && engine != null && projector != null) {
