@@ -9,6 +9,7 @@ export function sqliteStore(db: DatabaseSync): ConversationStore {
       id TEXT PRIMARY KEY,
       device_id TEXT NOT NULL REFERENCES devices(id),
       title TEXT,
+      vehicle_id TEXT,
       messages TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -18,17 +19,17 @@ export function sqliteStore(db: DatabaseSync): ConversationStore {
 
   const insertDevice = db.prepare("INSERT INTO devices (id, created_at) VALUES (?, ?)");
   const insertConv = db.prepare(
-    `INSERT INTO conversations (id, device_id, title, messages, created_at, updated_at)
-     SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM devices WHERE id = ?)`,
+    `INSERT INTO conversations (id, device_id, title, vehicle_id, messages, created_at, updated_at)
+     SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM devices WHERE id = ?)`,
   );
   const updateConv = db.prepare(
-    "UPDATE conversations SET title = ?, messages = ?, updated_at = ? WHERE id = ? AND device_id = ?",
+    "UPDATE conversations SET title = ?, vehicle_id = ?, messages = ?, updated_at = ? WHERE id = ? AND device_id = ?",
   );
   const listConv = db.prepare(
-    "SELECT id, title, updated_at FROM conversations WHERE device_id = ? ORDER BY updated_at DESC LIMIT ?",
+    "SELECT id, title, vehicle_id, updated_at FROM conversations WHERE device_id = ? ORDER BY updated_at DESC LIMIT ?",
   );
   const getConv = db.prepare(
-    "SELECT id, title, updated_at, messages FROM conversations WHERE id = ? AND device_id = ?",
+    "SELECT id, title, vehicle_id, updated_at, messages FROM conversations WHERE id = ? AND device_id = ?",
   );
 
   return {
@@ -38,22 +39,22 @@ export function sqliteStore(db: DatabaseSync): ConversationStore {
       return id;
     },
     async list(deviceId, limit) {
-      return listConv.all(deviceId, limit) as unknown as { id: string; title: string | null; updated_at: string }[];
+      return listConv.all(deviceId, limit) as unknown as { id: string; title: string | null; vehicle_id: string | null; updated_at: string }[];
     },
     async get(deviceId, id) {
       const r = getConv.get(id, deviceId) as
-        | { id: string; title: string | null; updated_at: string; messages: string }
+        | { id: string; title: string | null; vehicle_id: string | null; updated_at: string; messages: string }
         | undefined;
       return r ? { ...r, messages: JSON.parse(r.messages) } : null;
     },
     async create(deviceId, data) {
       const id = randomUUID();
       const now = new Date().toISOString();
-      const res = insertConv.run(id, deviceId, data.title, JSON.stringify(data.messages), now, now, deviceId);
+      const res = insertConv.run(id, deviceId, data.title, data.vehicle_id, JSON.stringify(data.messages), now, now, deviceId);
       return Number(res.changes) > 0 ? id : null;
     },
     async update(deviceId, id, data) {
-      const res = updateConv.run(data.title, JSON.stringify(data.messages), new Date().toISOString(), id, deviceId);
+      const res = updateConv.run(data.title, data.vehicle_id, JSON.stringify(data.messages), new Date().toISOString(), id, deviceId);
       return Number(res.changes) > 0;
     },
   };

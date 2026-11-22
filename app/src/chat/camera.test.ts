@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { toCard } from './history';
-import { CHAT_VEHICLE_ID, cameraRoute, fuseCitationRoute } from './camera';
+import { cameraRoute, fuseCitationRoute } from './camera';
 
 test('cameraRoute points to /escanear with the vehicle, part and instruction', () => {
-  assert.equal(CHAT_VEHICLE_ID, 'outback');
-  assert.deepEqual(cameraRoute({ part: 'washer', instruction: 'Busca la tapa amarilla.' }), {
+  const card = { part: 'washer' as const, instruction: 'Busca la tapa amarilla.' };
+  assert.deepEqual(cameraRoute(card, [card], 'outback'), {
     pathname: '/escanear',
     params: { vehicleId: 'outback', part: 'washer', instruction: 'Busca la tapa amarilla.' },
   });
@@ -15,7 +15,8 @@ test('cameraRoute points to /escanear with the vehicle, part and instruction', (
 test('camera cards carry supported inspection actions through history and navigation', () => {
   const card = toCard('washer', 'Inspect the washer.', 'refill');
   assert.ok(card);
-  assert.equal(cameraRoute(card).params.action, 'refill');
+  assert.equal(cameraRoute(card, [card], 'swift').params.action, 'refill');
+  assert.equal(cameraRoute(card, [card], 'swift').params.vehicleId, 'swift');
   assert.equal(toCard('battery', 'Inspect the battery.', 'refill'), null);
 });
 

@@ -2,6 +2,7 @@ export interface TurnLog {
   id: string;
   conversation_id: string | null;
   device_id: string | null;
+  vehicle_id: string | null;
   created_at: string;
   model: string;
   effort: string | null;

@@ -43,7 +43,7 @@ const call = (method: string, path: string, dev?: string, body?: unknown) =>
   });
 const msgs = (text: string): MessageParam[] => [{ role: "user", content: text }, { role: "assistant", content: [{ type: "text", text: "ok" }] }];
 
-const seed = async (dev: string, text: string) => (await store.create(dev, { title: text, messages: msgs(text) }))!;
+const seed = async (dev: string, text: string) => (await store.create(dev, { title: text, messages: msgs(text), vehicle_id: null }))!;
 
 test("flujo completo: device, list ordenado, get", async () => {
   const dev = await device();

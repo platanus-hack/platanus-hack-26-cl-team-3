@@ -5,6 +5,7 @@ import { leerManual } from "./leer-manual";
 import { lookupFuses } from "./lookup-fuses";
 import { lookupParts } from "./lookup-parts";
 import { showInCamera } from "./show-in-camera";
+import { profiles, type VehicleProfile } from "../vehicles/registry";
 
 export interface ToolOutput {
   content: Exclude<ToolResultBlockParam["content"], string | undefined>;
@@ -19,10 +20,13 @@ export interface Tool {
 
 export type ToolRegistry = Record<string, Tool>;
 
-export const tools: ToolRegistry = {
-  [lookupFuses.definition.name]: lookupFuses,
-  [lookupParts.definition.name]: lookupParts,
-  [showInCamera.definition.name]: showInCamera,
-  [buscarManual.definition.name]: buscarManual,
-  [leerManual.definition.name]: leerManual,
-};
+export function toolsFor(profile: VehicleProfile): ToolRegistry {
+  const list: Tool[] = [
+    ...(profile.fuses ? [lookupFuses] : []),
+    ...(profile.parts.length > 0 ? [lookupParts(profile), showInCamera(profile)] : []),
+    ...(profile.manual ? [buscarManual, leerManual] : []),
+  ];
+  return Object.fromEntries(list.map((t) => [t.definition.name, t]));
+}
+
+export const tools: ToolRegistry = toolsFor(profiles.outback);

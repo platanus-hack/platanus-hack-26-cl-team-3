@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tools } from "../../src/tools";
-import parts from "../../src/data/parts.json";
+import parts from "../../src/data/parts/outback.json";
 
 test("1: lookup_parts returns a search_result with 27 citable blocks ending in part: <id>", async () => {
   const { run, definition } = tools.lookup_parts;
