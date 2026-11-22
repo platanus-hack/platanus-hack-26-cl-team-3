@@ -394,7 +394,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           const bay = completeBay(poligonoVano(new Suavizador().agregar(r.vano)), recorte);
           const visual = monitor && cap.rastreando ? visualBay(cap.visualOutline, bay) : null;
           const registered = cap.registeredOutline;
-          const correction = registered && visual && needsVisualCorrection(registered, visual, cap.landmarkGainPx)
+          const correction = registered && visual && needsVisualCorrection(registered, visual, cap.landmarkGainPx, !!bay)
             ? visual.esquinas.flatMap(({ x, y }, i) => [x - registered[2*i], y - registered[2*i+1]])
             : null;
           const confirmed = consistentCorrection(previousCorrection, correction);

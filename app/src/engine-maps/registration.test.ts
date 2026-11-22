@@ -18,6 +18,17 @@ test('corrects noticeable drift on the same engine without chasing jitter or ano
   assert.equal(needsVisualCorrection(outline.map(x => x+.04), current, -4), false);
 });
 
+test('corrects a map that drifted off the engine only when the bay detection corroborates the visual pose', () => {
+  const current = visualBay(outline)!;
+  const drifted = outline.map((x, i) => i % 2 ? x : x + .75);
+  assert.equal(needsVisualCorrection(drifted, current), false);
+  assert.equal(needsVisualCorrection(drifted, current, undefined, true), true);
+  assert.equal(needsVisualCorrection(drifted, current, 3, true), true);
+  assert.equal(needsVisualCorrection(drifted, current, -4, true), false);
+  assert.equal(needsVisualCorrection(outline.map(x => x+.004), current, undefined, true), false);
+  assert.equal(needsVisualCorrection([1,2], current, undefined, true), false);
+});
+
 test('requires consecutive corrections of comparable size and direction', () => {
   const right = [.04,0,.04,0,.04,0,.04,0];
   assert.equal(consistentCorrection(right, right), true);
