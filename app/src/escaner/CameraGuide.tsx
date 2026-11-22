@@ -55,7 +55,25 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     setCaption({ text: guide.steps[guide.index]?.instruction ?? '', citations: [], pensando: false });
   };
 
+  const stepRequest = useRef<AbortController | null>(null);
+  const endConversation = () => {
+    turn.current++;
+    stepRequest.current?.abort();
+    setFuses([]);
+    stop();
+    setBusy(false);
+    setFinished(false);
+    setFocus(null);
+    setGuide(g => ({ steps: [], index: 0, key: g.key + 1 }));
+    setCaption({ text: '', citations: [], pensando: false });
+  };
+
   const ask = async (text: string, keepGuide = false, opts?: TurnOptions) => {
+    if (!opts?.signal) {
+      stepRequest.current?.abort();
+      stepRequest.current = new AbortController();
+      opts = { ...opts, signal: stepRequest.current.signal };
+    }
     const id = ++turn.current;
     setBusy(true);
     setCaption({ text: THINKING, citations: [], pensando: true });
@@ -101,7 +119,11 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const done = () => {
     setFocus(null);
     const next = guide.steps[guide.index + 1];
-    if (!next) return void ask(DONE_REPLY).then(setFinished);
+    if (!next) {
+      const answer = ask(DONE_REPLY);
+      const id = turn.current;
+      return void answer.then(value => { if (id === turn.current) setFinished(value); });
+    }
     setGuide({ ...guide, index: guide.index + 1, key: guide.key + 1 });
     setCaption({ text: next.instruction, citations: [], pensando: false });
     onStep(next);
@@ -118,7 +140,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   return {
     steps: guide.steps, index: guide.index, current, stepKey: guide.key, fuses, caption, busy, playing, focus, finished, refilling,
-    resetCaption, play, stop, done, lost, clearFocus, toggleFocus, ask,
+    resetCaption, endConversation, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
 

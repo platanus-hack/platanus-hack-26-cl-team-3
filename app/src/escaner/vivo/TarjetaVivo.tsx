@@ -23,7 +23,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
   part?: PartId;
   children?: ReactNode;
 }) {
-  const { estado, nivel, cerrando, parcial, pregunta, error, silenciado, alternarSilencio, hablando: asistenteHabla, callar } = vivo;
+  const { estado, nivel, cerrando, parcial, pregunta, error, hablando: asistenteHabla, callar } = vivo;
   const [open, setOpen] = useState(false);
   const chunk = useCaptionChunk(caption.text);
   const pensando = estado === 'escuchando' && caption.pensando;
@@ -35,71 +35,61 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
   const label = citation ? sourceLabel(citation.title) || citation.source : '';
 
   return (
-    <View style={styles.fila}>
-      <Pressable
-        style={styles.tarjeta}
-        disabled={!respondiendo}
-        accessible={respondiendo}
-        onPress={callar}
-        accessibilityRole={respondiendo ? 'button' : undefined}
-        accessibilityLabel={respondiendo ? 'Callar al asistente' : undefined}
-      >
-        <View style={styles.cabecera}>
-          <View style={styles.izquierda}>
-            {pensando || transcribiendo ? (
-              <ActivityIndicator size="small" color={color.acento} />
-            ) : estado === 'silenciado' ? (
-              <View style={[styles.punto, { backgroundColor: color.textoTenue }]} />
-            ) : respondiendo ? (
-              <Icono nombre="volume-high" tam={16} tono={color.acento} />
-            ) : hablando ? null : (
-              <PuntoRespira />
-            )}
-            {estado !== 'silenciado' && !pensando && !transcribiendo && !respondiendo && (
-              <Barras nivel={nivel} tono={hablando ? (cerrando ? 'plano' : 'activo') : 'reposo'} />
-            )}
-            <Text style={styles.etiqueta} numberOfLines={1}>
-              {pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
-            </Text>
-          </View>
-          {guia && (
-            <View style={styles.derecha}>
-              {part && <Text style={styles.pieza} numberOfLines={1}>{parts[part][0]}</Text>}
-              {citation && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Ver cita: ${label}`} onPress={() => setOpen(true)} style={styles.fuente} hitSlop={8}>
-                  <Text style={styles.fuenteTexto} numberOfLines={1}>{label}</Text>
-                </Pressable>
-              )}
-            </View>
+    <Pressable
+      style={styles.tarjeta}
+      disabled={!respondiendo}
+      accessible={respondiendo}
+      onPress={callar}
+      accessibilityRole={respondiendo ? 'button' : undefined}
+      accessibilityLabel={respondiendo ? 'Callar al asistente' : undefined}
+    >
+      <View style={styles.cabecera}>
+        <View style={styles.izquierda}>
+          {pensando || transcribiendo ? (
+            <ActivityIndicator size="small" color={color.acento} />
+          ) : estado === 'silenciado' ? (
+            <View style={[styles.punto, { backgroundColor: color.textoTenue }]} />
+          ) : respondiendo ? (
+            <Icono nombre="volume-high" tam={16} tono={color.acento} />
+          ) : hablando ? null : (
+            <PuntoRespira />
           )}
-        </View>
-        {error ? (
-          <Text style={[styles.cuerpo, { color: color.textoSuave }]} numberOfLines={2}>{error}</Text>
-        ) : hablando ? (
-          <Text style={styles.cuerpo} numberOfLines={3}>
-            {parcial}
-            {!cerrando && <Cursor />}
+          {estado !== 'silenciado' && !pensando && !transcribiendo && !respondiendo && (
+            <Barras nivel={nivel} tono={hablando ? (cerrando ? 'plano' : 'activo') : 'reposo'} />
+          )}
+          <Text style={styles.etiqueta} numberOfLines={1}>
+            {pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
           </Text>
-        ) : transcribiendo ? (
-          <Text style={[styles.cuerpo, !parcial && { color: color.textoTenue }]} numberOfLines={3}>{parcial || '…'}</Text>
-        ) : pensando ? (
-          <Text style={[styles.cuerpo, { color: color.textoSuave }]} numberOfLines={2}>{pregunta}</Text>
-        ) : (
-          <Text style={styles.cuerpo} numberOfLines={2} accessibilityLiveRegion="polite">{chunk}</Text>
+        </View>
+        {guia && (
+          <View style={styles.derecha}>
+            {part && <Text style={styles.pieza} numberOfLines={1}>{parts[part][0]}</Text>}
+            {citation && (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Ver cita: ${label}`} onPress={() => setOpen(true)} style={styles.fuente} hitSlop={8}>
+                <Text style={styles.fuenteTexto} numberOfLines={1}>{label}</Text>
+              </Pressable>
+            )}
+          </View>
         )}
-        {guia && children}
-        {hablando && cerrando && <BarraCierre />}
-        <CitationModal citation={open ? citation : null} onClose={() => setOpen(false)} />
-      </Pressable>
-      <Pressable
-        onPress={alternarSilencio}
-        accessibilityRole="button"
-        accessibilityLabel={silenciado ? 'Reactivar micrófono' : 'Silenciar micrófono'}
-        style={[styles.mic, !silenciado && styles.micAbierto]}
-      >
-        <Icono nombre={silenciado ? 'microphone-off' : 'microphone'} tam={22} tono={silenciado ? color.peligro : color.texto} />
-      </Pressable>
-    </View>
+      </View>
+      {error ? (
+        <Text style={[styles.cuerpo, { color: color.textoSuave }]} numberOfLines={2}>{error}</Text>
+      ) : hablando ? (
+        <Text style={styles.cuerpo} numberOfLines={3}>
+          {parcial}
+          {!cerrando && <Cursor />}
+        </Text>
+      ) : transcribiendo ? (
+        <Text style={[styles.cuerpo, !parcial && { color: color.textoTenue }]} numberOfLines={3}>{parcial || '…'}</Text>
+      ) : pensando ? (
+        <Text style={[styles.cuerpo, { color: color.textoSuave }]} numberOfLines={2}>{pregunta}</Text>
+      ) : (
+        <Text style={styles.cuerpo} numberOfLines={2} accessibilityLiveRegion="polite">{chunk}</Text>
+      )}
+      {guia && children}
+      {hablando && cerrando && <BarraCierre />}
+      <CitationModal citation={open ? citation : null} onClose={() => setOpen(false)} />
+    </Pressable>
   );
 }
 
@@ -176,8 +166,7 @@ function BarraCierre() {
 }
 
 const styles = StyleSheet.create({
-  fila: { flexDirection: 'row', alignItems: 'flex-end', gap: espacio.s },
-  tarjeta: { flex: 1, minWidth: 0, overflow: 'hidden', backgroundColor: color.velo, borderRadius: radio.l, padding: espacio.m, gap: espacio.s },
+  tarjeta: { alignSelf: 'stretch', minWidth: 0, overflow: 'hidden', backgroundColor: color.velo, borderRadius: radio.l, padding: espacio.m, gap: espacio.s },
   cabecera: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, minHeight: 16 },
   izquierda: { flexDirection: 'row', alignItems: 'center', gap: espacio.s, flexShrink: 0 },
   derecha: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: espacio.s, minWidth: 0 },
@@ -192,6 +181,4 @@ const styles = StyleSheet.create({
   cuerpo: { color: color.texto, fontSize: 16, lineHeight: 22, fontWeight: '600', minHeight: 44 },
   cursor: { width: 2, height: 16, marginLeft: 2, backgroundColor: color.acento },
   cierre: { position: 'absolute', left: 0, bottom: 0, height: 2, backgroundColor: color.acento },
-  mic: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: color.velo, borderWidth: 2, borderColor: 'transparent' },
-  micAbierto: { borderColor: color.exito },
 });

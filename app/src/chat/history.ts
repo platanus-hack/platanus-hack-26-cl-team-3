@@ -3,7 +3,7 @@ import { withChatTurn } from './turn-queue';
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
-import { fetchConversation, listConversations } from './remote-history';
+import { fetchConversation, listConversations, type ConversationSummary } from './remote-history';
 
 const KEY = 'capo-ar:chat-v1';
 const ID_KEY = 'capo-ar:chat-id:v1';
@@ -14,6 +14,9 @@ export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: 
 export type ViewCard = { part: PartId; instruction: string; action?: InspectionAction };
 export type ViewFuse = { box: 'cabin' | 'engine'; numbers: number[]; instruction: string };
 export type Bubble = { role: 'user' | 'assistant'; parts: ViewPart[]; cards: ViewCard[]; fuses: ViewFuse[] };
+
+const LOCAL_INDEX = 'capo-ar:local-history:v1';
+const LOCAL_PREFIX = 'local-thread:';
 
 const MAX_INSTRUCTION = 200;
 
@@ -61,7 +64,11 @@ export function clear(vehicleId: string) {
 
 export function open(id: string): Promise<AnthropicMessage[] | null> {
   return withChatTurn(async () => {
-    const conversation = await fetchConversation(id);
+    const local = id.startsWith(LOCAL_PREFIX);
+    if (local && (await (await storage()).getItem(ID_KEY)) === id) return load();
+    const conversation = local ? JSON.parse((await (await storage()).getItem(id)) ?? 'null') as {
+      messages: AnthropicMessage[]; vehicle_id: string;
+    } | null : await fetchConversation(id);
     if (!conversation) return null;
     await selectConversationVehicle(conversation.vehicle_id || 'outback', storage, {
       messages: JSON.stringify(conversation.messages), id,
@@ -96,12 +103,27 @@ export async function selectConversationVehicle(
   const vehicleKey = (id: string) => 'capo-ar:scanner-thread:v1:' + id;
   const saved = await store.getItem(vehicleKey(vehicleId));
   const next: StoredThread = replacement ?? (saved ? JSON.parse(saved) : { messages: '[]', id: '' });
+  // A completed thread can predate device registration and have no server history entry.
+  const outgoing: StoredThread = previous === vehicleId
+    ? { id: values[ID_KEY] || '', messages: values[KEY] || '[]' }
+    : JSON.parse(saved ?? '{"id":"","messages":"[]"}');
+  const archive: [string, string][] = [];
+  if (replacement && (!outgoing.id || outgoing.id.startsWith(LOCAL_PREFIX)) && outgoing.messages !== '[]') {
+    const index: ConversationSummary[] = JSON.parse((await store.getItem(LOCAL_INDEX)) ?? '[]');
+    const updated = new Date().toISOString();
+    const id = outgoing.id || LOCAL_PREFIX + updated + ':' + index.length;
+    const messages: AnthropicMessage[] = JSON.parse(outgoing.messages);
+    const title = messages.find(message => message.role === 'user')?.content;
+    const summary = { id, vehicle_id: vehicleId, updated_at: updated, title: typeof title === 'string' ? title.slice(0, 100) : null };
+    archive.push([id, JSON.stringify({ messages, vehicle_id: vehicleId })],
+      [LOCAL_INDEX, JSON.stringify([summary, ...index.filter(item => item.id !== id)])]);
+  }
   generation++;
   const parked: [string, string][] = previous && previous !== vehicleId && hasThread ? [
     [vehicleKey(previous), JSON.stringify({ messages: values[KEY] || '[]', id: values[ID_KEY] || '' })],
   ] : [];
   await store.multiSet([
-    ...parked, [vehicleKey(vehicleId), JSON.stringify({ messages: '[]', id: '' })],
+    ...archive, ...parked, [vehicleKey(vehicleId), JSON.stringify({ messages: '[]', id: '' })],
     [KEY, next.messages], [ID_KEY, next.id], [VEHICLE_KEY, vehicleId],
   ]);
 }
@@ -109,7 +131,8 @@ export async function selectConversationVehicle(
 export async function currentConversation(): Promise<{ id: string | null; generation: number }> {
   const at = generation;
   try {
-    return { id: (await (await storage()).getItem(ID_KEY)) || null, generation: at };
+    const id = await (await storage()).getItem(ID_KEY);
+    return { id: id && !id.startsWith(LOCAL_PREFIX) ? id : null, generation: at };
   } catch {
     return { id: null, generation: at };
   }
@@ -123,7 +146,17 @@ export async function adoptConversation(id: string, at: number): Promise<void> {
   }
 }
 
-export const list = listConversations;
+export async function list(): Promise<ConversationSummary[] | null> {
+  const remote = await listConversations().catch(() => null);
+  try {
+    const raw = await (await storage()).getItem(LOCAL_INDEX);
+    const local: ConversationSummary[] = JSON.parse(raw ?? '[]');
+    if (!local.length) return remote;
+    return [...local, ...(remote ?? [])].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  } catch {
+    return remote;
+  }
+}
 
 export function toView(messages: AnthropicMessage[]): Bubble[] {
   const rejected = new Set(messages.flatMap(message => message.role === 'user' && Array.isArray(message.content)
