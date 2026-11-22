@@ -2,6 +2,7 @@ package expo.modules.capoar
 
 import android.Manifest
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.opengl.GLES20
@@ -9,6 +10,7 @@ import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.Surface
 import android.view.ViewGroup
@@ -40,6 +42,8 @@ import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
 import kotlin.math.acos
 
+private const val TAG = "CapoAR"
+
 /**
  * Vista AR del vano del motor (ARCore).
  *
@@ -58,6 +62,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   @Volatile internal var focusedPart: String? = null
   private data class Inspection(val model: PlacedModel, val part: Int, val movingPart: Int, val action: InspectionAction, val start: Long)
   private var inspection: Inspection? = null
+  private var orientacionPrevia: Int? = null
+  private var errorUpdate: String? = null
 
   fun playPartAction(id: String, actionName: String) {
     gl.queueEvent {
@@ -217,17 +223,24 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     super.onAttachedToWindow()
     CapoArModule.vistas.add(this)
     (context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).registerDisplayListener(pantallaListener, principal)
-    reanudar()
+    appContext.currentActivity?.let { a ->
+      if (orientacionPrevia == null) orientacionPrevia = a.requestedOrientation
+      a.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
+    reanudar("vista montada")
   }
 
   override fun onDetachedFromWindow() {
     CapoArModule.vistas.remove(this)
     (context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).unregisterDisplayListener(pantallaListener)
-    pausar()
+    pausar("vista desmontada")
+    orientacionPrevia?.let { appContext.currentActivity?.requestedOrientation = it }
+    orientacionPrevia = null
     super.onDetachedFromWindow()
   }
 
-  fun reanudar() {
+  fun reanudar(motivo: String) {
+    Log.i(TAG, "reanudar: $motivo")
     val actividad = appContext.currentActivity ?: return
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
       emitir("error", "Falta el permiso de cámara.")
@@ -265,14 +278,15 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
   }
 
-  fun pausar() {
+  fun pausar(motivo: String) {
+    Log.i(TAG, "pausar: $motivo")
     gl.onPause()
     clearCaptureReference()
     sesion?.pause()
   }
 
   fun destruir() {
-    pausar()
+    pausar("vista destruida")
     synchronized(capturasPendientes) {
       capturasPendientes.forEach { it.promise.reject("ERR_AR", "La vista AR se cerró", null) }
       capturasPendientes.clear()
@@ -429,7 +443,17 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     val s = sesion ?: return
     if (!texturaAsignada) { s.setCameraTextureName(fondo.textura); texturaAsignada = true }
     if (geometriaPendiente && anchoVista > 0) { s.setDisplayGeometry(rotacionPantalla(), anchoVista, altoVista); geometriaPendiente = false }
-    val frame = try { s.update() } catch (e: Exception) { return }
+    val frame = try {
+      s.update()
+    } catch (e: Exception) {
+      val nombre = e.javaClass.simpleName
+      if (nombre != errorUpdate) {
+        errorUpdate = nombre
+        Log.w(TAG, "session.update falló: $nombre", e)
+      }
+      return
+    }
+    errorUpdate = null
     fondo.dibujar(frame)
     val camara = frame.camera
 

@@ -224,7 +224,10 @@ export default function Ask() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } })}
+              onPress={() => {
+                openedCamera.current = true;
+                router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } });
+              }}
               disabled={busy || !loaded}
               accessibilityRole="button"
               accessibilityLabel="Hablar con la cámara"

@@ -1,7 +1,8 @@
-import { AudioModule, setAudioModeAsync, useAudioStream, type AudioStreamBuffer } from 'expo-audio';
+import { setAudioModeAsync, useAudioStream, type AudioStreamBuffer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { pedirTokenRealtime } from '../../chat/transcribe';
+import { permisoMicrofono } from '../../permisoMicrofono';
 import { aBase64, dbDe, leerMensaje, urlRealtime, type MensajeRealtime } from './realtime';
 import { crearVad } from './vad';
 
@@ -173,7 +174,7 @@ export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opcio
 
     void (async () => {
       try {
-        const permiso = await AudioModule.requestRecordingPermissionsAsync();
+        const permiso = await permisoMicrofono();
         if (cancelado) return;
         if (!permiso.granted) return callbacks.current.onError('Necesito permiso de micrófono para escucharte.');
         await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });

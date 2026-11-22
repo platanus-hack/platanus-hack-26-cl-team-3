@@ -74,8 +74,8 @@ class CapoArModule : Module() {
       }
     }
 
-    OnActivityEntersForeground { vistas.toList().forEach { it.reanudar() } }
-    OnActivityEntersBackground { vistas.toList().forEach { it.pausar() } }
+    OnActivityEntersForeground { vistas.toList().forEach { it.reanudar("actividad en primer plano") } }
+    OnActivityEntersBackground { vistas.toList().forEach { it.pausar("actividad en segundo plano") } }
 
     View(CapoArView::class) {
       Events("onEstado", "onPart", "onGuia")

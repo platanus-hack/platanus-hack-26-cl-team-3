@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CONFIANZA_MIN } from '../detector/vano';
@@ -71,6 +71,8 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+  const horizontal = width > height;
   const { mode, setMode, debug, toggleDebug, hasError, sonnetAnchor, toggleSonnetAnchor } = controls;
   const expanded = mode === 'details';
   const hidden = mode === 'hidden';
@@ -80,7 +82,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   const guidePart = part && Object.hasOwn(parts, part) ? part as PartId : undefined;
   return (
     <>
-      <View pointerEvents="box-none" style={[estilos.barra, { paddingTop: insets.top + espacio.s }]}>
+      <View pointerEvents="box-none" style={[estilos.barra, { paddingTop: insets.top + espacio.s, paddingLeft: insets.left + espacio.l, paddingRight: insets.right + espacio.l }]}>
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
         {top && <View pointerEvents="box-none" style={estilos.barraCentro}>{top}</View>}
         <BotonIcono icono={hidden ? 'eye-off-outline' : 'eye-outline'}
@@ -88,7 +90,13 @@ export function ScannerControls({ controls, status, children, top, captions, ste
           onPress={() => setMode(hidden ? 'compact' : 'hidden')} />
       </View>
       {!hidden && (
-        <View pointerEvents="box-none" style={[estilos.dock, { bottom: insets.bottom + espacio.m }]}>
+        <View pointerEvents="box-none" style={[
+          estilos.dock,
+          { bottom: insets.bottom + espacio.m, left: insets.left + espacio.l },
+          horizontal
+            ? { width: Math.min(440, width * 0.5), maxHeight: '80%' }
+            : { right: insets.right + espacio.l, maxHeight: '55%' },
+        ]}>
           {expanded && (
             <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
               {debug && vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
@@ -228,7 +236,7 @@ export const estilos = StyleSheet.create({
   },
   chipActivo: { backgroundColor: color.acento, borderColor: color.acento },
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
-  dock: { position: 'absolute', left: espacio.l, right: espacio.l, maxHeight: '55%', gap: espacio.s },
+  dock: { position: 'absolute', gap: espacio.s },
   status: { alignSelf: 'center', maxWidth: '100%', minHeight: 44, borderRadius: 24, paddingHorizontal: espacio.l,
     flexDirection: 'row', alignItems: 'center', gap: espacio.s, backgroundColor: color.velo },
   statusText: { color: color.texto, fontSize: 14, fontWeight: '700', flexShrink: 1 },

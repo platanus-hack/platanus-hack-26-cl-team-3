@@ -1,7 +1,8 @@
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
+import { RecordingPresets, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
+import { permisoMicrofono } from '../permisoMicrofono';
 import { color } from '../theme';
 import { Icono } from '../ui';
 import { transcribeAudio } from './transcribe';
@@ -65,7 +66,7 @@ export function Dictado({
   const empezar = useCallback(async () => {
     onError('');
     try {
-      const permiso = await AudioModule.requestRecordingPermissionsAsync();
+      const permiso = await permisoMicrofono();
       if (!permiso.granted) return onError('Necesito permiso de micrófono para dictar.');
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
