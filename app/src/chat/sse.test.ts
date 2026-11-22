@@ -61,3 +61,8 @@ test('maps ar into part and instruction', () => {
     { type: 'ar', part: 'washer', instruction: 'Busca la tapa amarilla junto a la batería.' },
   ]);
 });
+
+test('maps conversation_id on done to conversationId', () => {
+  const buffer = 'event: done\ndata: {"messages":[],"conversation_id":"c1","turn_id":"t1"}\n\n';
+  assert.deepEqual(splitEvents(buffer).events, [{ type: 'done', messages: [], conversationId: 'c1' }]);
+});

@@ -9,5 +9,5 @@ export type ChatEvent =
   | { type: 'text'; block: number; text: string }
   | { type: 'citation'; block: number; title: string; source: string; cited_text: string }
   | { type: 'ar'; part: string; instruction: string; action?: unknown }
-  | { type: 'done'; messages: AnthropicMessage[]; truncated?: boolean }
+  | { type: 'done'; messages: AnthropicMessage[]; truncated?: boolean; conversationId?: string }
   | { type: 'error'; code: ErrorCode; message: string };
