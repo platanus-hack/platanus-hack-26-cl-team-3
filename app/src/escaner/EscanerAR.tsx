@@ -76,6 +76,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
 export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
+  const swiftParts = useMemo(() => vehicle?.id === 'swift' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
@@ -183,7 +184,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   useEffect(() => {
     if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
     const generation = registrationGeneration.current;
-    const initialScan = outbackParts && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
+    const initialScan = (outbackParts || swiftParts) && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
@@ -294,7 +295,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           const previous = cap.anclas ? pares(cap.anclas) : [];
           const expanded = !!delEscaneo && extendsPartialMap(previous, delEscaneo);
           const scan = estable && (!anclaje || expanded) ? delEscaneo : null;
-          const bay = scan ?? candidateBay;
+          const bay = swiftParts ? visual : (scan ?? candidateBay);
           const freshTarget = vanoValido(detection) ? candidateBay : visual;
           let candidate: (PlacementCandidate & { visual: boolean }) | undefined;
           if (bay && cap.rastreando) {
@@ -346,7 +347,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       vivo = false;
       releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, targetRevision]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, swiftParts, targetRevision]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
@@ -590,7 +591,8 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     engineHint = 'Vuelve a apuntar al motor';
   } else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
-  else if (outbackParts && registrationCandidate) status = 'Scanning…';
+  else if (swiftParts && !registrationCandidate) status = 'Apunta al depósito de frenos y a la batería. El anclaje requiere profundidad.';
+  else if ((outbackParts || swiftParts) && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
   else engineHint = 'Apunta la cámara al motor';
 
@@ -662,9 +664,9 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                 {map.partDetails?.[selected] ?? parts[selected][1]}
               </Text>
             )}
-            {outbackParts && selected && (
+            {(outbackParts || swiftParts) && selected && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
-                {inspectionActions(selected).map((action) => (
+                {(swiftParts ? ['highlight' as const] : inspectionActions(selected)).map((action) => (
                   <Pressable key={action} accessibilityRole="button" style={styles.part}
                     onPress={() => {
                       controls.setMode('compact');
@@ -779,6 +781,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         editingMap={editingMap && !error && !errorAR}
         debug={debug}
         outbackParts={outbackParts}
+        swiftParts={swiftParts}
         selectedPart={selectedIndex}
         focusedPart={focus}
         onPart={(e) => choosePart(e.nativeEvent.index)}

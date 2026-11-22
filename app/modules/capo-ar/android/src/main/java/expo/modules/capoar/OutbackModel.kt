@@ -16,15 +16,17 @@ internal class OutbackModel(
   companion object {
     // The bundled GLB has a single scene of identity-transform nodes, indexed triangles,
     // packed float positions, unsigned short indices and solid double-sided materials.
-    fun load(assets: AssetManager): OutbackModel {
-      val binding = assets.open("engine-models/outback-registration.json").bufferedReader().use { JSONObject(it.readText()) }
+    fun load(assets: AssetManager, swift: Boolean = false): OutbackModel {
+      val bindingName = if (swift) "swift-registration" else "outback-registration"
+      val modelName = if (swift) "swift-service" else "outback-ez36"
+      val binding = assets.open("engine-models/$bindingName.json").bufferedReader().use { JSONObject(it.readText()) }
       fun point(a: JSONArray) = EnginePoint(a.getDouble(0).toFloat(), a.getDouble(1).toFloat(), a.getDouble(2).toFloat())
       val parts = binding.getJSONArray("parts").objects().map { part ->
         val center = point(part.getJSONArray("center"))
         ModelPart(part.getString("id"), center, part.optJSONArray("guideCenter")?.let(::point) ?: center)
       }
       val corners = binding.getJSONArray("corners").let { a -> List(4) { point(a.getJSONArray(it)) } }
-      val file = ByteBuffer.wrap(assets.open("engine-models/outback-ez36.glb").use { it.readBytes() }).order(ByteOrder.LITTLE_ENDIAN)
+      val file = ByteBuffer.wrap(assets.open("engine-models/$modelName.glb").use { it.readBytes() }).order(ByteOrder.LITTLE_ENDIAN)
       require(file.int == 0x46546c67 && file.int == 2 && file.int == file.capacity())
       val jsonBytes = ByteArray(file.int)
       require(file.int == 0x4e4f534a)
@@ -46,6 +48,7 @@ internal class OutbackModel(
       val triangles = buildList {
         for (part in parts.indices) {
           val node = doc.getJSONArray("nodes").getJSONObject(scene.getInt(part))
+          if (swift) require(node.getString("name") == parts[part].id)
           val mesh = doc.getJSONArray("meshes").getJSONObject(node.getInt("mesh"))
           for ((primitiveIndex, primitive) in mesh.getJSONArray("primitives").objects().withIndex()) {
             val (pos, count) = data(primitive.getJSONObject("attributes").getInt("POSITION"), 5126, "VEC3")
@@ -55,7 +58,7 @@ internal class OutbackModel(
             }
             val material = doc.getJSONArray("materials").getJSONObject(primitive.getInt("material"))
             val color = material.getJSONObject("pbrMetallicRoughness").getJSONArray("baseColorFactor")
-            val rgb = when (parts[part].id) {
+            val rgb = when (if (swift) null else parts[part].id) {
               "washer" -> if (primitiveIndex == 1) yellow else ivory
               "dipstick" -> if (primitiveIndex == 1) yellow else floatArrayOf(.64f,.62f,.52f)
               "fuses" -> if (primitiveIndex == 1) lidPlastic else dark
@@ -68,6 +71,8 @@ internal class OutbackModel(
         }
       }
       val depths = binding.getJSONArray("relativeDepths")
+      val relativeDepths = List(4) { depths.getDouble(it).toFloat() }
+      if (swift) return OutbackModel(parts, corners, triangles, relativeDepths)
       val detailed = triangles.groupBy { it.part }.flatMap { (index, shape) ->
         when (parts[index].id) {
           "dipstick" -> dipstickHandle(shape)
@@ -78,7 +83,7 @@ internal class OutbackModel(
         }
       }
       val layout = assets.open("engine-models/outback-fuse-tray.json").bufferedReader().use { JSONObject(it.readText()) }
-      return OutbackModel(parts, corners, detailed, List(4) { depths.getDouble(it).toFloat() },
+      return OutbackModel(parts, corners, detailed, relativeDepths,
         fuseTray(layout, parts.indexOfFirst { it.id == "fuses" }))
     }
 

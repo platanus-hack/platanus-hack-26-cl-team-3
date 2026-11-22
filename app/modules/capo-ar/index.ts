@@ -110,6 +110,7 @@ export type VistaARProps = ViewProps & {
   debug?: boolean;
   editingMap?: boolean;
   outbackParts?: string[];
+  swiftParts?: string[];
   selectedPart?: number;
   focusedPart?: string | null;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;

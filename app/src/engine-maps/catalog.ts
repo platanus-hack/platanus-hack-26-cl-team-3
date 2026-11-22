@@ -67,6 +67,17 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
     },
     volumes: outbackVolumes,
   },
+  swift: {
+    referenceVariant: "1.2 · Vehículo de referencia de 2017",
+    volumes: [
+      { part: 'brake_fluid', height: 0.052733, outline: [[0.73005, 0.08521], [0.73702, 0.10337], [0.73998, 0.11793], [0.75054, 0.21401], [0.75058, 0.23293], [0.74562, 0.24961], [0.73567, 0.25612], [0.72316, 0.25078], [0.71121, 0.23496], [0.70403, 0.2174], [0.69943, 0.19708], [0.68685, 0.10091], [0.68687, 0.0831], [0.6924, 0.06695], [0.70272, 0.06077], [0.7181, 0.0682]] },
+      { part: 'brake_cap', height: 0.034484, outline: [[0.73891, 0.10529], [0.74052, 0.12647], [0.73769, 0.1424], [0.73093, 0.15246], [0.72129, 0.15496], [0.71032, 0.14949], [0.69978, 0.13696], [0.69133, 0.11945], [0.68583, 0.09777], [0.68416, 0.0772], [0.68624, 0.06112], [0.69244, 0.04947], [0.70314, 0.04567], [0.71568, 0.05272], [0.72611, 0.06671], [0.73387, 0.0842]] },
+    ],
+    partDetails: {
+      brake_fluid: "Depósito de líquido de frenos junto a la batería y al parabrisas.",
+      brake_cap: "Tapa del depósito de líquido de frenos.",
+    },
+  },
   onix: {
     referenceVariant: "LTZ · 1.0 turbo · Brasil",
     fuseUrl: "https://www.chevrolet.cl/content/dam/chevrolet/south-america/chile/espanol/index/fichas-tecnicas/manuales/pdf/manual-onix.pdf#page=192",
