@@ -5,7 +5,7 @@ services:
     rootDir: api
     dockerContext: .
     dockerfilePath: ./Dockerfile.render
-    branch: backup
+    branch: backup/render
     region: virginia
     autoDeployTrigger: commit
     healthCheckPath: /api/health
