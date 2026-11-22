@@ -16,21 +16,23 @@ export class BodyTooLarge extends Error {}
 
 type Validation = { error: string } | { error?: undefined; profile: Profile; messages: MessageParam[] };
 
-export function readBody(req: IncomingMessage): Promise<string> {
+export const readBody = async (req: IncomingMessage): Promise<string> => (await readRaw(req, MAX_BODY)).toString("utf8");
+
+export function readRaw(req: IncomingMessage, max: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     let total = 0;
     const parts: Buffer[] = [];
     req.on("data", (chunk: Buffer) => {
-      if (total > MAX_BODY) return;
+      if (total > max) return;
       total += chunk.length;
-      if (total > MAX_BODY) {
+      if (total > max) {
         parts.length = 0;
         reject(new BodyTooLarge());
         return;
       }
       parts.push(chunk);
     });
-    req.on("end", () => resolve(Buffer.concat(parts).toString("utf8")));
+    req.on("end", () => resolve(Buffer.concat(parts)));
     req.on("error", reject);
   });
 }

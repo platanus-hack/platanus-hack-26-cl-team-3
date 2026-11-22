@@ -31,6 +31,7 @@ services:
     environment:
       PRT_SEED_PATH: /app/prt-seed/vehicles.sqlite
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
     volumes:
       - ${PRT_DATA_DIR:-./api/data}:/app/data:ro
       - prt-seed:/app/prt-seed:ro

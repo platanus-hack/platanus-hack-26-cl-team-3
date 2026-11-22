@@ -7,6 +7,8 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.bergueci
 
 export const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
 
+export const tokenHeaders = (): Record<string, string> => (CHAT_TOKEN ? { 'x-chat-token': CHAT_TOKEN } : {});
+
 const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error', code, message });
 
 export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): AsyncGenerator<ChatEvent> {
@@ -17,7 +19,7 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
       headers: {
         'content-type': 'application/json',
         accept: 'text/event-stream',
-        ...(CHAT_TOKEN ? { 'x-chat-token': CHAT_TOKEN } : {}),
+        ...tokenHeaders(),
       },
       body: JSON.stringify({ messages }),
     });
