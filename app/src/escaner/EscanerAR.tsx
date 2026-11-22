@@ -722,7 +722,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               </ScrollView>
             )}
             {selected === 'fuses' && fuseGuideFor(vehicle?.id) && (
-              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
+              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse={!cameraGuide.waitingForFuseStep} />
             )}
             {fuseLink && (
               <Pressable
