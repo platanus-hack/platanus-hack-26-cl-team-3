@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ContentBlock, Message, MessageParam, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import { contextWindow } from "../../src/chat/context";
 import { runTurn } from "../../src/chat/orchestrator";
 import type { Adapter, AdapterArgs } from "../../src/chat/orchestrator";
 import type { ChatEvent, Profile } from "../../src/chat/contract";
@@ -251,4 +252,61 @@ test("a provider error ends with code provider without retrying", async () => {
   const events = await collect(runTurn({ messages, profile, adapter, tools: registry().tools }));
   assert.equal(n, 1);
   assert.equal((events.at(-1)!.data as { code: string }).code, "provider");
+});
+
+test("replaying a windowed or reopened conversation omits historical search indices only on the wire", async () => {
+  const stored: MessageParam[] = [];
+  for (let i = 0; i < 7; i++) {
+    const source = "fixture-" + i;
+    stored.push(
+      { role: "user", content: "Find " + source },
+      { role: "assistant", content: [toolUse("call-" + i)] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call-" + i, content: [
+        { type: "search_result", title: source, source, content: [{ type: "text", text: source }] },
+      ] }] },
+      { role: "assistant", content: [{ type: "text", text: "Answer " + i, citations: [{
+        type: "search_result_location", search_result_index: i, title: source, source,
+        cited_text: source, start_block_index: 0, end_block_index: 1,
+      }] }] },
+    );
+  }
+  stored.push({ role: "user", content: "Follow up" }, { role: "assistant", content: "OK" }, ...messages);
+  const saved = structuredClone(stored);
+  const window = contextWindow(stored);
+  assert.equal(stored.length, 31);
+  assert.equal(window.length, 27);
+  for (const replay of [window, stored.slice(-4)]) {
+    const { adapter, calls } = fake([{ message: endMsg([]) }]);
+    await collect(runTurn({ messages: replay, profile, adapter, tools: {} }));
+    const sent = calls[0].messages;
+    for (const [i, msg] of replay.entries()) {
+      if (msg.role === "assistant" && Array.isArray(msg.content) && msg.content[0]?.type === "text") {
+        assert.deepEqual(sent[i].content, [{ type: "text", text: msg.content[0].text }]);
+      } else {
+        assert.deepEqual(sent[i], msg);
+      }
+    }
+  }
+  assert.deepEqual(stored, saved);
+});
+
+test("replayed text keeps other citation types and current-round search citations remain available", async () => {
+  const page = { type: "page_location", document_index: 0, document_title: "Manual",
+    cited_text: "Page", start_page_number: 1, end_page_number: 1 } as const;
+  const search = { type: "search_result_location", search_result_index: 0, title: "Manual",
+    source: "fixture", cited_text: "Row", start_block_index: 0, end_block_index: 1 } as const;
+  const current = { type: "text", text: "Current", citations: [search] } as const;
+  const { adapter, calls } = fake([
+    { message: toolMsg({ ...current, citations: [search] }, toolUse("t1")) },
+    { message: endMsg([{ ...current, citations: [search] }]) },
+  ]);
+  const history: MessageParam[] = [{ role: "assistant", content: [
+    { type: "text", text: "Earlier", citations: [search, page] },
+  ] }, ...messages];
+  const events = await collect(runTurn({ messages: history, profile, adapter, tools: registry().tools }));
+  assert.deepEqual(calls[0].messages[0].content, [{ type: "text", text: "Earlier", citations: [page] }]);
+  assert.deepEqual(calls[1].messages[2].content, [current, toolUse("t1")]);
+  const done = events.at(-1);
+  assert.ok(done?.event === "done");
+  assert.deepEqual(done.data.messages.at(-1)?.content, [current]);
 });

@@ -100,8 +100,23 @@ async function* round(
   }
 }
 
+// Search-result indices belong to the request that produced the citation.
+function replayMessage(message: MessageParam): MessageParam {
+  if (message?.role !== "assistant" || !Array.isArray(message.content)) return message;
+  const content = message.content.map(block => {
+    if (block?.type !== "text" || !Array.isArray(block.citations)) return block;
+    const citations = block.citations.filter(citation => citation?.type !== "search_result_location");
+    if (citations.length === block.citations.length) return block;
+    const copy = { ...block };
+    if (citations.length) copy.citations = citations;
+    else delete copy.citations;
+    return copy;
+  });
+  return { ...message, content };
+}
+
 export async function* runTurn({ messages, profile, adapter, tools, system = SYSTEM_PROMPT, signal, log }: TurnArgs): AsyncGenerator<ChatEvent> {
-  const history = [...messages];
+  const history = messages.map(replayMessage);
   const fresh: MessageParam[] = [];
   const definitions = Object.values(tools).map((t) => t.definition);
   let offset = 0;
