@@ -3,17 +3,13 @@ import { fetch } from 'expo/fetch';
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
 import { splitEvents } from './sse';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
 
-const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
+export const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
 
 const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error', code, message });
 
 export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): AsyncGenerator<ChatEvent> {
-  if (!API_URL) {
-    yield failure('config', 'Falta EXPO_PUBLIC_API_URL en app/.env.local.');
-    return;
-  }
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {

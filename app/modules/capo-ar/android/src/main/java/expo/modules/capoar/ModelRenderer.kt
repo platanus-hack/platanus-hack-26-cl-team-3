@@ -6,6 +6,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 internal class ModelHitFrame(private val model: PlacedModel, mvp: FloatArray, private val width: Int, private val height: Int, private val animation: InspectionFrame? = null) {
   private val inverse = FloatArray(16)
@@ -34,7 +36,37 @@ internal class ModelRenderer {
   private lateinit var vertices: FloatBuffer
   private var ranges = emptyMap<Int, IntRange>()
   private var moving: FloatBuffer? = null
-  fun reset() { program = 0; loaded = null }
+  private var veilProgram = 0
+  private var veilPosition = -1
+  private var veilColor = -1
+  private val veilQuad = ByteBuffer.allocateDirect(32).order(ByteOrder.nativeOrder()).asFloatBuffer()
+    .apply { put(floatArrayOf(-1f,-1f,1f,-1f,-1f,1f,1f,1f)); position(0) }
+  private var focusPart = -1
+  private var veilAlpha = 0f
+  private var lastNs = 0L
+  fun reset() { program = 0; veilProgram = 0; loaded = null; focusPart = -1; veilAlpha = 0f; lastNs = 0L }
+  private fun advanceVeil(target: Int) {
+    val now = System.nanoTime()
+    val dt = if (lastNs == 0L) 0f else ((now - lastNs) / 1e9f).coerceAtMost(.05f)
+    lastNs = now
+    if (target >= 0) focusPart = target
+    val goal = if (target >= 0) VEIL_ALPHA else 0f
+    val step = VEIL_ALPHA * dt / VEIL_SECONDS
+    veilAlpha = if (veilAlpha < goal) min(goal, veilAlpha + step) else max(goal, veilAlpha - step)
+    if (target < 0 && veilAlpha == 0f) focusPart = -1
+  }
+  private fun drawVeil() {
+    GL.glUseProgram(veilProgram)
+    GL.glEnable(GL.GL_DEPTH_TEST); GL.glDepthFunc(GL.GL_LEQUAL); GL.glDepthMask(false)
+    GL.glEnable(GL.GL_BLEND); GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
+    GL.glUniform4f(veilColor,0f,0f,0f,veilAlpha)
+    veilQuad.position(0)
+    GL.glEnableVertexAttribArray(veilPosition)
+    GL.glVertexAttribPointer(veilPosition,2,GL.GL_FLOAT,false,0,veilQuad)
+    GL.glDrawArrays(GL.GL_TRIANGLE_STRIP,0,4)
+    GL.glDisableVertexAttribArray(veilPosition)
+    GL.glUseProgram(program)
+  }
   private fun shader(type: Int, code: String): Int {
     val shader = GL.glCreateShader(type)
     GL.glShaderSource(shader,code); GL.glCompileShader(shader)
@@ -61,6 +93,13 @@ internal class ModelRenderer {
     check(ok[0]!=0) { GL.glGetProgramInfoLog(program) }
     matrix=GL.glGetUniformLocation(program,"matrix"); selected=GL.glGetUniformLocation(program,"selected")
     brightness=GL.glGetUniformLocation(program,"brightness")
+    val veilVertex=shader(GL.GL_VERTEX_SHADER,"attribute vec2 position; void main(){gl_Position=vec4(position,0.9999,1.0);}")
+    val veilFragment=shader(GL.GL_FRAGMENT_SHADER,"precision mediump float; uniform vec4 color; void main(){gl_FragColor=color;}")
+    veilProgram=GL.glCreateProgram(); GL.glAttachShader(veilProgram,veilVertex); GL.glAttachShader(veilProgram,veilFragment)
+    GL.glLinkProgram(veilProgram); GL.glDeleteShader(veilVertex); GL.glDeleteShader(veilFragment)
+    val veilOk=IntArray(1); GL.glGetProgramiv(veilProgram,GL.GL_LINK_STATUS,veilOk,0)
+    check(veilOk[0]!=0) { GL.glGetProgramInfoLog(veilProgram) }
+    veilPosition=GL.glGetAttribLocation(veilProgram,"position"); veilColor=GL.glGetUniformLocation(veilProgram,"color")
     position=GL.glGetAttribLocation(program,"position"); color=GL.glGetAttribLocation(program,"color"); part=GL.glGetAttribLocation(program,"part")
   }
   private fun buffer(count: Int) = ByteBuffer.allocateDirect(count * 3 * 28).order(ByteOrder.nativeOrder()).asFloatBuffer()
@@ -77,7 +116,7 @@ internal class ModelRenderer {
     }
   }
 
-  fun draw(model: PlacedModel, mvp: FloatArray, selectedPart: Int, animation: InspectionFrame? = null) {
+  fun draw(model: PlacedModel, mvp: FloatArray, selectedPart: Int, animation: InspectionFrame? = null, focus: Int = -1) {
     if (program == 0) initialize()
     if (model !== loaded) {
       vertices = buffer(model.triangles.size)
@@ -89,6 +128,7 @@ internal class ModelRenderer {
       }
       loaded = model
     }
+    advanceVeil(focus)
     val count = (animation?.surface?.size ?: 0) + (animation?.effects?.size ?: 0)
     if (animation != null) {
       val target = moving?.takeIf { it.capacity() >= count * 21 } ?: buffer(count + 64).also { moving = it }
@@ -110,15 +150,21 @@ internal class ModelRenderer {
       attribute(color,3,3)
       attribute(part,1,6)
     }
-    fun pass(geometry: () -> Unit) {
+    fun depthPass(geometry: () -> Unit) {
       GL.glEnable(GL.GL_DEPTH_TEST); GL.glDepthFunc(GL.GL_LESS); GL.glDepthMask(true); GL.glDisable(GL.GL_BLEND)
       GL.glColorMask(false,false,false,false)
       geometry()
-      GL.glColorMask(true,true,true,true); GL.glDepthFunc(GL.GL_EQUAL); GL.glDepthMask(false)
+      GL.glColorMask(true,true,true,true)
+    }
+    fun colorPass(geometry: () -> Unit) {
+      GL.glDepthFunc(GL.GL_EQUAL); GL.glDepthMask(false)
       GL.glEnable(GL.GL_BLEND); GL.glBlendFunc(GL.GL_SRC_ALPHA,GL.GL_ONE_MINUS_SRC_ALPHA)
       geometry()
     }
-    val range = animation?.let { ranges[it.index] }
+    fun pass(geometry: () -> Unit) { depthPass(geometry); colorPass(geometry) }
+    val animatedRange = animation?.let { ranges[it.index] }
+    val focusRange = focusPart.takeIf { it >= 0 && (animation == null || animation.index == it) }?.let { ranges[it] }
+    val range = animatedRange ?: focusRange
     val total = model.triangles.size * 3
     pass {
       bind(vertices)
@@ -130,12 +176,17 @@ internal class ModelRenderer {
     }
     if (range != null) {
       GL.glDepthMask(true); GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
-      pass {
-        bind(checkNotNull(moving))
-        GL.glDrawArrays(GL.GL_TRIANGLES,0,count*3)
+      val separate = {
+        if (animation != null) { bind(checkNotNull(moving)); GL.glDrawArrays(GL.GL_TRIANGLES,0,count*3) }
+        else { bind(vertices); GL.glDrawArrays(GL.GL_TRIANGLES,range.first,range.last-range.first+1) }
       }
+      if (focusRange != null && veilAlpha > 0f) { depthPass(separate); drawVeil(); colorPass(separate) }
+      else pass(separate)
     }
     GL.glDisable(GL.GL_BLEND); GL.glDepthMask(true); GL.glDepthFunc(GL.GL_LESS); GL.glDisable(GL.GL_DEPTH_TEST)
     GL.glDisableVertexAttribArray(position); GL.glDisableVertexAttribArray(color); GL.glDisableVertexAttribArray(part)
   }
 }
+
+private const val VEIL_ALPHA = .62f
+private const val VEIL_SECONDS = .25f

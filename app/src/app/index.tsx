@@ -134,10 +134,10 @@ export default function Menu() {
         accessibilityRole="button"
         style={({ pressed }) => [styles.secundaria, pressed && { opacity: 0.88 }]}
       >
-        <Icono nombre="book-open-variant" tam={26} tono={color.acento} />
+        <Icono nombre="message-text-outline" tam={26} tono={color.acento} />
         <View style={styles.flex}>
-          <Text style={styles.secundariaTitulo}>Manual del Subaru Outback 2016</Text>
-          <Text style={tipo.nota}>Consulta el manual del motor 3.6R.</Text>
+          <Text style={styles.secundariaTitulo}>Pregúntale al asistente</Text>
+          <Text style={tipo.nota}>Responde con el manual de tu Outback 3.6R.</Text>
         </View>
         <Icono nombre="chevron-right" tam={24} tono={color.textoSuave} />
       </Pressable>

@@ -111,6 +111,7 @@ export type VistaARProps = ViewProps & {
   editingMap?: boolean;
   outbackParts?: string[];
   selectedPart?: number;
+  focusedPart?: string | null;
   onPart?: (e: NativeSyntheticEvent<{ index: number }>) => void;
   onEstado?: (e: NativeSyntheticEvent<EstadoAR>) => void;
   onGuia?: (e: NativeSyntheticEvent<GuiaAR>) => void;

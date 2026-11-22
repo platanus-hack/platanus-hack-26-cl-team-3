@@ -1,12 +1,14 @@
 import http from "node:http";
 import type { Adapter } from "../chat/orchestrator";
+import type { Locator } from "../locate/contract";
+import { handleLocate } from "../locate/handler";
 import { handleChat } from "./chat-handler";
 import { json } from "./responses";
 import { defaultVehicleDatabase, handleVehicleLookup } from "./vehicle-lookup";
 
 export function createServer({
-  adapter, heartbeatMs, vehicleDatabase = defaultVehicleDatabase,
-}: { adapter?: Adapter; heartbeatMs?: number; vehicleDatabase?: string } = {}): http.Server {
+  adapter, locator, heartbeatMs, vehicleDatabase = defaultVehicleDatabase,
+}: { adapter?: Adapter; locator?: Locator; heartbeatMs?: number; vehicleDatabase?: string } = {}): http.Server {
   return http.createServer((req, res) => {
     let pathname: string;
     try {
@@ -19,6 +21,7 @@ export function createServer({
       return handleVehicleLookup(res, pathname.slice("/api/vehicles/".length), vehicleDatabase);
     }
     if (req.method === "POST" && pathname === "/api/chat") return void handleChat(req, res, adapter, heartbeatMs);
+    if (req.method === "POST" && pathname === "/api/locate") return void handleLocate(req, res, locator);
     json(res, 404, { error: "No encontrado" });
   });
 }
