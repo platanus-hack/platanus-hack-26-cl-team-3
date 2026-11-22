@@ -1,5 +1,6 @@
 import { useIsFocused } from 'expo-router';
 import { useRef, useState } from 'react';
+import { useAgentSpeech } from '../chat/AgentSpeech';
 import { confirmsGuideStep } from '../chat/guide';
 import { clear, conversationVehicle } from '../chat/history';
 import { parts, type PartId } from '../engine-maps/catalog';
@@ -7,6 +8,7 @@ import type { useCameraGuide } from './CameraGuide';
 
 export function useScannerConversation(initialLive: boolean, foreground: boolean, guide: ReturnType<typeof useCameraGuide>, vehicleId?: string, selected?: PartId) {
   const [enabled, setEnabled] = useState(initialLive);
+  const { end, clearError } = useAgentSpeech();
   const focused = useIsFocused();
   const [ended, setEnded] = useState(false);
   const [error, setError] = useState('');
@@ -22,6 +24,7 @@ export function useScannerConversation(initialLive: boolean, foreground: boolean
   };
   const toggle = async () => {
     if (enabled) {
+      end();
       setEnabled(false);
       setEnded(true);
       setError('');
@@ -36,6 +39,7 @@ export function useScannerConversation(initialLive: boolean, foreground: boolean
   };
   const ask = async (text: string, image: string | null, signal: AbortSignal) => {
     if (signal.aborted) return;
+    clearError();
     if (!guide.busy && guide.steps[guide.index + 1] && confirmsGuideStep(text)) {
       guide.done();
       return;

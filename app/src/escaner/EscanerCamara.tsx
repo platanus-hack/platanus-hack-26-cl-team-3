@@ -55,7 +55,7 @@ export default function EscanerCamara({ vehicleId, initialLive, steps, initialSt
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
 
-  const guide = useCameraGuide(steps, initialStep, () => {}, vehicleId);
+  const guide = useCameraGuide(steps, initialStep, () => {}, vehicleId, initialLive);
   const conversation = useScannerConversation(initialLive, activa, guide, vehicleId);
   const pendingFrame = useRef<((uri: string, bay: Vano) => Promise<void>) | null>(null);
   const captureBay = () => new Promise<string | null>(resolve => {
@@ -159,7 +159,7 @@ export default function EscanerCamara({ vehicleId, initialLive, steps, initialSt
   const mostrarVano = detectado && !!foto && !!vista;
 
   return (
-    <ProveedorVivo enabled={conversation.enabled} activo={conversation.listening} capturarVano={captureBay} preguntar={conversation.ask}>
+    <ProveedorVivo enabled={conversation.enabled} activo={conversation.listening} caption={guide.caption} busy={guide.busy} capturarVano={captureBay} preguntar={conversation.ask}>
       <View style={estilos.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
         <CameraView
           ref={camara}

@@ -9,7 +9,7 @@ test('cameraRoute points to /escanear with the vehicle, part and instruction', (
   const card = { part: 'washer' as const, instruction: 'Busca la tapa amarilla.' };
   assert.deepEqual(cameraRoute(card, [card], 'outback'), {
     pathname: '/escanear',
-    params: { vehicleId: 'outback', part: 'washer', instruction: 'Busca la tapa amarilla.' },
+    params: { vivo: '1', vehicleId: 'outback', part: 'washer', instruction: 'Busca la tapa amarilla.' },
   });
 });
 

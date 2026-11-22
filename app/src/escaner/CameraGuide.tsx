@@ -1,6 +1,6 @@
 import { withChatTurn } from '../chat/turn-queue';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FuseLinks } from '../chat/FuseLinks';
@@ -17,20 +17,38 @@ import { TarjetaVivo } from './vivo/TarjetaVivo';
 
 type Caption = { text: string; citations: ViewCitation[]; pensando: boolean };
 
-export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, onStep: (card: ViewCard) => void, vehicleId?: string) {
+export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, onStep: (card: ViewCard) => void, vehicleId?: string, resumeChat = false) {
   const [guide, setGuide] = useState({ steps: initialSteps, index: initialStep, key: 0 });
   const [caption, setCaption] = useState<Caption>({ text: initialSteps[initialStep]?.instruction ?? '', citations: [], pensando: false });
   const [fuses, setFuses] = useState<ViewFuse[]>([]);
+  const turn = useRef(0);
+  const [previousCaption, setPreviousCaption] = useState<Caption | null>(null);
+  const restoreSteps = useEffectEvent((cards: ViewCard[]) => {
+    if (!cards.length || guide.steps.length) return;
+    setGuide(g => ({ steps: cards, index: 0, key: g.key + 1 }));
+    onStep(cards[0]);
+  });
   useEffect(() => {
-    if (!fuseGuideFor(vehicleId)) return;
+    if (!resumeChat && !fuseGuideFor(vehicleId)) return;
     let active = true;
     void withChatTurn(async () => {
       if (((await conversationVehicle()) ?? 'outback') !== vehicleId) return;
-      const previous = toView(await load()).reverse().find(bubble => bubble.fuses.length)?.fuses;
-      if (active && previous) setFuses(current => current.length ? current : previous);
+      const bubbles = toView(await load()).reverse();
+      if (!active || turn.current !== 0) return;
+      const reply = bubbles.find(bubble => bubble.role === 'assistant');
+      if (resumeChat && reply) {
+        restoreSteps(reply.cards);
+        setPreviousCaption({
+          text: reply.cards[0]?.instruction || reply.parts.map(part => part.text).join('\n'),
+          citations: reply.parts.flatMap(part => part.citations),
+          pensando: false,
+        });
+      }
+      const previous = bubbles.find(bubble => bubble.fuses.length)?.fuses;
+      if (previous) setFuses(current => current.length ? current : previous);
     }).catch(() => {});
     return () => { active = false; };
-  }, [vehicleId]);
+  }, [vehicleId, resumeChat]);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<InspectionAction | null>(null);
   const [focus, setFocus] = useState<PartId | null>(null);
@@ -49,7 +67,6 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     setPlaying(null);
   }, []);
 
-  const turn = useRef(0);
   const resetCaption = () => {
     turn.current++;
     setBusy(false);
@@ -58,6 +75,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   const stepRequest = useRef<AbortController | null>(null);
   const endConversation = () => {
+    setPreviousCaption(null);
     turn.current++;
     stepRequest.current?.abort();
     setFuses([]);
@@ -75,6 +93,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
       stepRequest.current = new AbortController();
       opts = { ...opts, signal: stepRequest.current.signal };
     }
+    setPreviousCaption(null);
     const id = ++turn.current;
     setBusy(true);
     setCaption({ text: THINKING, citations: [], pensando: true });
@@ -147,7 +166,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   return {
     vehicleId, steps: guide.steps, index: guide.index, current, stepKey: guide.key,
-    waitingForFuseStep, fuses: waitingForFuseStep ? [] : current?.fuseTargets ?? fuses, caption, busy, playing, focus, finished, refilling,
+    waitingForFuseStep, fuses: waitingForFuseStep ? [] : current?.fuseTargets ?? fuses, previousCaption, caption, busy, playing, focus, finished, refilling,
     resetCaption, endConversation, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
@@ -156,7 +175,8 @@ export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGui
   const vivo = useVivo();
   const { current, caption, busy, playing, focus, finished, done, lost, clearFocus } = guide;
   const links = <FuseLinks vehicleId={guide.vehicleId} fuses={guide.fuses} disabled={busy} />;
-  if (!current && vivo) return <TarjetaVivo vivo={vivo} caption={caption}>{links}</TarjetaVivo>;
+  const liveCaption = caption.text ? caption : guide.previousCaption ?? caption;
+  if (!current && vivo) return <TarjetaVivo vivo={vivo} caption={liveCaption}>{links}</TarjetaVivo>;
   if (!current) return caption.text || guide.fuses.length ? <LiveCaptions text={caption.text} citations={caption.citations}>{links}</LiveCaptions> : null;
   const botones = (
     <>
@@ -178,7 +198,7 @@ export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGui
       )}
     </>
   );
-  if (vivo) return <TarjetaVivo vivo={vivo} caption={caption} part={current.part}>{botones}</TarjetaVivo>;
+  if (vivo) return <TarjetaVivo vivo={vivo} caption={liveCaption} part={current.part}>{botones}</TarjetaVivo>;
   return <LiveCaptions part={current.part} text={caption.text} citations={caption.citations}>{botones}</LiveCaptions>;
 }
 

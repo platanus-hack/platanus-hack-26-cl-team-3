@@ -25,8 +25,8 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
 }) {
   const { estado, nivel, cerrando, parcial, pregunta, error, hablando: asistenteHabla, callar } = vivo;
   const [open, setOpen] = useState(false);
-  const chunk = useCaptionChunk(caption.text);
-  const pensando = estado === 'escuchando' && caption.pensando;
+  const chunk = useCaptionChunk(vivo.agentPhrase || caption.text);
+  const pensando = vivo.waitingForAgent || (estado === 'escuchando' && caption.pensando);
   const hablando = estado === 'oyendo';
   const transcribiendo = estado === 'transcribiendo';
   const guia = !error && !hablando && !transcribiendo && !pensando;
@@ -47,7 +47,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
         <View style={styles.izquierda}>
           {pensando || transcribiendo ? (
             <ActivityIndicator size="small" color={color.acento} />
-          ) : estado === 'silenciado' ? (
+          ) : estado === 'silenciado' && !respondiendo ? (
             <View style={[styles.punto, { backgroundColor: color.textoTenue }]} />
           ) : respondiendo ? (
             <Icono nombre="volume-high" tam={16} tono={color.acento} />
@@ -58,7 +58,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
             <Barras nivel={nivel} tono={hablando ? (cerrando ? 'plano' : 'activo') : 'reposo'} />
           )}
           <Text style={styles.etiqueta} numberOfLines={1}>
-            {pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
+            {vivo.waitingForAgent ? 'Pensando…' : pensando ? caption.text : respondiendo ? 'Hablando · toca para callar' : etiqueta(estado, cerrando)}
           </Text>
         </View>
         {guia && (
