@@ -6,6 +6,7 @@ import type { Server } from "node:http";
 import type { Message } from "@anthropic-ai/sdk/resources/messages";
 import { createServer } from "../../src/server/server";
 import type { Adapter } from "../../src/chat/orchestrator";
+import { SYSTEM_PROMPT, VIVO_PROMPT } from "../../src/chat/system-prompt";
 
 let server: Server;
 let base: string;
@@ -137,4 +138,31 @@ test("a client disconnect aborts the signal passed to the adapter", async () => 
   ac.abort();
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.equal(aborted, true);
+});
+
+test("1-3: mode vivo adds VIVO_PROMPT to the system, no mode keeps it, unknown mode responds 400", async () => {
+  const systems: string[] = [];
+  const spy: Adapter = async function* ({ system }) {
+    systems.push(system);
+    return { stop_reason: "end_turn", content: [{ type: "text", text: "hola" }] } as Message;
+  };
+  const spyServer = createServer({ adapter: spy });
+  await new Promise<void>((r) => spyServer.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(spyServer.address() as AddressInfo).port}/api/chat`;
+  const send = (extra: object) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "hola" }], ...extra }),
+    });
+  try {
+    await (await send({ mode: "vivo" })).text();
+    await (await send({})).text();
+    assert.deepEqual(systems, [SYSTEM_PROMPT + "\n\n" + VIVO_PROMPT, SYSTEM_PROMPT]);
+    const bad = await send({ mode: "otro" });
+    assert.equal(bad.status, 400);
+    assert.equal(((await bad.json()) as { error: string }).error, "mode no existe");
+  } finally {
+    await new Promise((r) => spyServer.close(r));
+  }
 });
