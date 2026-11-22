@@ -1,6 +1,7 @@
 import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { cargarAjustes, type VozId } from '../ajustes';
 import { API_URL, CHAT_TOKEN } from './client';
 import { fuenteVoz } from './voz';
 
@@ -20,11 +21,12 @@ export function useVoz() {
   const precargados = useRef<Reproductor[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const vigilante = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const voz = useRef<VozId>('jorge');
   const avanzarRef = useRef<() => void>(() => {});
 
   const crear = useCallback((frase: string): Reproductor | null => {
     try {
-      const player = createAudioPlayer(fuenteVoz(frase, { apiUrl: API_URL, token: CHAT_TOKEN }));
+      const player = createAudioPlayer(fuenteVoz(frase, { apiUrl: API_URL, token: CHAT_TOKEN, voz: voz.current }));
       const suscripcion = player.addListener('playbackStatusUpdate', (estado) => {
         if (!estado.didJustFinish && !estado.error) return;
         if (actual.current?.player !== player) return;
@@ -91,6 +93,12 @@ export function useVoz() {
     }, limiteFraseMs(siguiente.frase));
     precargar();
   }, [precargar]);
+
+  useEffect(() => {
+    void cargarAjustes().then((a) => {
+      voz.current = a.voz;
+    });
+  }, []);
 
   useEffect(() => {
     avanzarRef.current = avanzar;
