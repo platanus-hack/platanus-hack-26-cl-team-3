@@ -40,11 +40,11 @@ after(async () => {
 
 const device = async () => ((await (await fetch(`${base}/api/devices`, { method: "POST" })).json()) as { id: string }).id;
 
-async function chat(messages: MessageParam[], opts: { device?: string; conversation_id?: string } = {}) {
+async function chat(messages: MessageParam[], opts: { device?: string; conversation_id?: string; vehicle_id?: string } = {}) {
   const res = await fetch(`${base}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(opts.device ? { "x-device-id": opts.device } : {}) },
-    body: JSON.stringify({ messages, ...(opts.conversation_id ? { conversation_id: opts.conversation_id } : {}) }),
+    body: JSON.stringify({ messages, ...(opts.conversation_id ? { conversation_id: opts.conversation_id } : {}), ...(opts.vehicle_id ? { vehicle_id: opts.vehicle_id } : {}) }),
   });
   if (res.status !== 200) return { status: res.status, done: null as null | Record<string, unknown>, body: await res.json() };
   const text = await res.text();
@@ -134,4 +134,17 @@ test("el modelo recibe como máximo 30 mensajes y la conversación guarda la his
   assert.equal(t.context_messages, 29);
   const conv = (await (await fetch(`${base}/api/conversations/${r.done?.conversation_id}`, { headers: { "x-device-id": dev } })).json()) as { messages: unknown[] };
   assert.equal(conv.messages.length, 41 + 3);
+});
+
+test("guarda vehicle_id en la conversación y en el turno, y GET lo devuelve", async () => {
+  const dev = await device();
+  const first = await chat([{ role: "user", content: "hola" }], { device: dev, vehicle_id: "swift" });
+  const convId = first.done?.conversation_id as string;
+  const conv = (await (await fetch(`${base}/api/conversations/${convId}`, { headers: { "x-device-id": dev } })).json()) as { vehicle_id: string | null };
+  assert.equal(conv.vehicle_id, "swift");
+  const list = (await (await fetch(`${base}/api/conversations`, { headers: { "x-device-id": dev } })).json()) as { conversations: { vehicle_id: string | null }[] };
+  assert.equal(list.conversations[0].vehicle_id, "swift");
+  assert.equal(rows("SELECT vehicle_id FROM turns WHERE id = ?", first.done?.turn_id as string)[0].vehicle_id, "swift");
+  const legacy = await chat([{ role: "user", content: "hola" }], { device: dev });
+  assert.equal(rows("SELECT vehicle_id FROM conversations WHERE id = ?", legacy.done?.conversation_id as string)[0].vehicle_id, "outback");
 });

@@ -5,6 +5,7 @@ import { fetchConversation, listConversations } from './remote-history';
 
 const KEY = 'capo-ar:chat-v1';
 const ID_KEY = 'capo-ar:chat-id:v1';
+const VEHICLE_KEY = 'capo-ar:chat-vehicle:v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
@@ -47,21 +48,40 @@ export async function clear(): Promise<void> {
     const store = await storage();
     await store.removeItem(KEY);
     await store.removeItem(ID_KEY);
+    await store.removeItem(VEHICLE_KEY);
   } catch {
   }
 }
 
 export async function open(id: string): Promise<AnthropicMessage[] | null> {
-  const messages = await fetchConversation(id);
-  if (!messages) return null;
+  const conversation = await fetchConversation(id);
+  if (!conversation) return null;
+  const { messages, vehicle_id } = conversation;
   generation++;
   try {
     const store = await storage();
     await store.setItem(KEY, JSON.stringify(messages));
     await store.setItem(ID_KEY, id);
+    if (vehicle_id) await store.setItem(VEHICLE_KEY, vehicle_id);
+    else await store.removeItem(VEHICLE_KEY);
   } catch {
   }
   return messages;
+}
+
+export async function conversationVehicle(): Promise<string | null> {
+  try {
+    return await (await storage()).getItem(VEHICLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setConversationVehicle(id: string): Promise<void> {
+  try {
+    await (await storage()).setItem(VEHICLE_KEY, id);
+  } catch {
+  }
 }
 
 export async function currentConversation(): Promise<{ id: string | null; generation: number }> {

@@ -1,4 +1,7 @@
-import rows from "../data/parts.json";
+import outbackParts from "../data/parts/outback.json";
+import swiftParts from "../data/parts/swift.json";
+
+const rows = [...outbackParts, ...swiftParts];
 
 const COLLOQUIAL = [
   "sapito", "varilla del aceite", "tapa del aceite", "refrigerante", "líquido de frenos",

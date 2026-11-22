@@ -2,7 +2,7 @@ import { fetch } from 'expo/fetch';
 
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
 import { cargarAjustes } from '../ajustes';
-import { adoptConversation, currentConversation } from './history';
+import { adoptConversation, conversationVehicle, currentConversation } from './history';
 import { deviceId } from './remote-history';
 import { splitEvents } from './sse';
 
@@ -26,6 +26,7 @@ export async function* runTurn({
   const { modelo, esfuerzo } = await cargarAjustes();
   const device = await deviceId();
   const { id: conversationId, generation } = await currentConversation();
+  const vehicleId = await conversationVehicle();
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {
@@ -36,7 +37,7 @@ export async function* runTurn({
         ...tokenHeaders(),
         ...(device ? { 'x-device-id': device } : {}),
       },
-      body: JSON.stringify({ messages, ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
+      body: JSON.stringify({ messages, ...(vehicleId ? { vehicle_id: vehicleId } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
       signal,
     });
   } catch {

@@ -1,9 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tools } from "../../src/tools";
-import rows from "../../src/data/parts.json";
-
-const parts = rows.filter(row => !row.vehicles || row.vehicles.includes("outback"));
+import parts from "../../src/data/parts/outback.json";
+import swiftParts from "../../src/data/parts/swift.json";
 
 const { run, definition } = tools.show_in_camera;
 
@@ -33,9 +32,8 @@ test("3: an unknown part or a missing instruction returns is_error and no events
   }
 });
 
-test("the part enum exposes all 27 components mapped on the chat vehicle", () => {
+test("5: the part enum equals the ids in parts.json", () => {
   const schema = definition.input_schema as unknown as { properties: { part: { type: string; enum: string[] }; instruction: { type: string } }; required: string[]; additionalProperties: boolean };
-  assert.equal(parts.length, 27);
   assert.deepEqual(schema.properties.part.enum, parts.map((p) => p.id));
   assert.equal(schema.properties.part.type, "string");
   assert.equal(schema.properties.instruction.type, "string");
@@ -69,8 +67,11 @@ test("opening actions are accepted only on mapped service components", async () 
   }
 });
 
-test("camera guidance rejects parts exclusive to other vehicles", async () => {
-  for (const { id } of rows.filter(row => row.vehicles && !row.vehicles.includes("outback"))) {
+test("the Outback camera exposes its 27 components and rejects parts exclusive to other vehicles", async () => {
+  assert.equal(parts.length, 27);
+  const outbackIds = new Set(parts.map((p) => p.id));
+  const ram700Only = ["battery_terminal", "terminal_boot", "valve_cover", "wiring_harness", "steering_fluid", "steering_cap"];
+  for (const id of [...swiftParts.map((p) => p.id).filter((id) => !outbackIds.has(id)), ...ram700Only]) {
     const response = await run({ part: id, instruction: "Locate this part." });
     assert.equal(response.is_error, true, id);
     assert.equal(response.events, undefined, id);

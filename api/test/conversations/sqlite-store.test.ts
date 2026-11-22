@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { openDatabase } from "../../src/db/sqlite";
 import { sqliteStore } from "../../src/conversations/sqlite-store";
 
-const data = (title: string) => ({ title, messages: [{ role: "user" as const, content: title }] });
+const data = (title: string) => ({ title, messages: [{ role: "user" as const, content: title }], vehicle_id: null });
 
 test("los datos sobreviven a cerrar y reabrir", async () => {
   const dir = mkdtempSync(join(tmpdir(), "historial-"));

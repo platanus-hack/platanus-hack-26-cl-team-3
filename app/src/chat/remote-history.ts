@@ -1,6 +1,6 @@
 import type { AnthropicMessage } from './contract';
 
-export type ConversationSummary = { id: string; title: string | null; updated_at: string };
+export type ConversationSummary = { id: string; title: string | null; vehicle_id: string | null; updated_at: string };
 
 const DEVICE_KEY = 'capo-ar:device-id:v1';
 
@@ -57,14 +57,14 @@ export async function listConversations(): Promise<ConversationSummary[] | null>
   }
 }
 
-export async function fetchConversation(id: string): Promise<AnthropicMessage[] | null> {
+export async function fetchConversation(id: string): Promise<{ messages: AnthropicMessage[]; vehicle_id: string | null } | null> {
   try {
     const device = await deviceId();
     if (!device) return null;
     const res = await request(`/api/conversations/${id}`, { device });
     if (!res.ok) return null;
-    const { messages } = (await res.json()) as { messages?: AnthropicMessage[] };
-    return Array.isArray(messages) ? messages : null;
+    const { messages, vehicle_id } = (await res.json()) as { messages?: AnthropicMessage[]; vehicle_id?: unknown };
+    return Array.isArray(messages) ? { messages, vehicle_id: typeof vehicle_id === 'string' ? vehicle_id : null } : null;
   } catch {
     return null;
   }

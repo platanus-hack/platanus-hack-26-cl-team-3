@@ -7,16 +7,18 @@ import { stripImages, titleFrom } from "../conversations/sanitize";
 import type { ConversationStore } from "../conversations/store";
 import { createTurnRecorder } from "../runlog/recorder";
 import type { RunLogStore } from "../runlog/store";
-import { SYSTEM_PROMPT, VIVO_PROMPT } from "../chat/system-prompt";
+import { systemPrompt, VIVO_PROMPT } from "../chat/system-prompt";
 import type { Adapter } from "../chat/orchestrator";
 import { anthropic } from "../llm/anthropic";
 import { resolveProfile } from "../llm/profiles";
-import { tools } from "../tools";
+import { toolsFor, type ToolRegistry } from "../tools";
+import { resolveVehicle, type VehicleProfile } from "../vehicles/registry";
 import { json, openSSE, sendEvent } from "./responses";
 
 export const MAX_BODY = 1024 * 1024;
 const MAX_MESSAGES = 200;
 export const HEARTBEAT_MS = 15_000;
+const VEHICLE_ID = /^[a-z0-9-]{1,40}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ChatStores {
@@ -26,7 +28,7 @@ export interface ChatStores {
 
 export class BodyTooLarge extends Error {}
 
-type Validation = { error: string } | { error?: undefined; profile: Profile; messages: MessageParam[]; system: string };
+type Validation = { error: string } | { error?: undefined; profile: Profile; messages: MessageParam[]; system: string; vehicle: VehicleProfile; tools: ToolRegistry };
 
 export const readBody = async (req: IncomingMessage): Promise<string> => (await readRaw(req, MAX_BODY)).toString("utf8");
 
@@ -51,7 +53,7 @@ export function readRaw(req: IncomingMessage, max: number): Promise<Buffer> {
 
 export function validate(body: unknown): Validation {
   if (body === null || typeof body !== "object") return { error: "Cuerpo inválido" };
-  const { messages, profile_id, mode, effort } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown; effort?: unknown };
+  const { messages, profile_id, mode, effort, vehicle_id } = body as { messages?: unknown; profile_id?: unknown; mode?: unknown; effort?: unknown; vehicle_id?: unknown };
   if (!Array.isArray(messages)) return { error: "Falta `messages` (array)" };
   if (messages.length > MAX_MESSAGES) return { error: "La conversación está muy larga. Toca «Nueva conversación»." };
   const last = messages.at(-1) as { role?: unknown } | undefined;
@@ -61,8 +63,11 @@ export function validate(body: unknown): Validation {
   if (effort !== undefined && !EFFORTS.includes(effort as Effort)) return { error: "effort no existe" };
   const profile = effort === undefined ? base : { ...base, effort: effort as Effort };
   if (mode !== undefined && mode !== "vivo") return { error: "mode no existe" };
-  const system = mode === "vivo" ? `${SYSTEM_PROMPT}\n\n${VIVO_PROMPT}` : SYSTEM_PROMPT;
-  return { profile, messages: messages as MessageParam[], system };
+  if (vehicle_id !== undefined && (typeof vehicle_id !== "string" || !VEHICLE_ID.test(vehicle_id))) return { error: "vehicle_id inválido" };
+  const vehicle = resolveVehicle(vehicle_id);
+  const basePrompt = systemPrompt(vehicle);
+  const system = mode === "vivo" ? `${basePrompt}\n\n${VIVO_PROMPT}` : basePrompt;
+  return { profile, messages: messages as MessageParam[], system, vehicle, tools: toolsFor(vehicle) };
 }
 
 export async function handleChat(
@@ -101,6 +106,7 @@ export async function handleChat(
     if (!finished) controller.abort();
   });
   const window = contextWindow(v.messages);
+  const { tools } = v;
   const definitions = Object.values(tools).map((t) => t.definition);
   const recorder = createTurnRecorder({
     model: v.profile.model,
@@ -111,6 +117,7 @@ export async function handleChat(
     contextMessages: window.length,
     messages: v.messages,
     deviceId,
+    vehicleId: v.vehicle.id,
   });
   let outcome: string | null = null;
   let savedId: string | null = null;
@@ -129,7 +136,7 @@ export async function handleChat(
       if (e.event === "done") {
         outcome = e.data.truncated ? "truncated" : "done";
         fresh = e.data.messages;
-        savedId = await saveConversation(conversations, deviceId, conversationId, v.messages, e.data.messages);
+        savedId = await saveConversation(conversations, deviceId, conversationId, v.messages, e.data.messages, v.vehicle.id);
         e.data = { ...e.data, ...(savedId ? { conversation_id: savedId } : {}), turn_id: recorder.id };
       } else if (e.event === "error") {
         outcome = `error:${e.data.code}`;
@@ -160,10 +167,11 @@ async function saveConversation(
   conversationId: string | undefined,
   sent: MessageParam[],
   fresh: MessageParam[],
+  vehicleId: string,
 ): Promise<string | null> {
   if (!store || !deviceId) return null;
   try {
-    const data = { title: titleFrom(sent), messages: stripImages([...sent, ...fresh]) };
+    const data = { title: titleFrom(sent), messages: stripImages([...sent, ...fresh]), vehicle_id: vehicleId };
     if (conversationId && (await store.update(deviceId, conversationId, data))) return conversationId;
     return await store.create(deviceId, data);
   } catch (e) {
