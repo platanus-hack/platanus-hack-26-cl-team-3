@@ -12,6 +12,7 @@ export interface RecorderInit {
   contextMessages: number;
   messages: MessageParam[];
   deviceId: string | null;
+  vehicleId: string | null;
 }
 
 export interface TurnRecorder {
@@ -72,6 +73,7 @@ export function createTurnRecorder(init: RecorderInit): TurnRecorder {
         id,
         conversation_id: conversationId,
         device_id: init.deviceId,
+        vehicle_id: init.vehicleId,
         created_at: createdAt,
         model: init.model,
         effort: init.effort ?? null,

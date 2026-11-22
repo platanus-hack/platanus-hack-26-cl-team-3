@@ -148,24 +148,16 @@ export default function EscanerCamara() {
         ) : cargando ? (
           <>
             <Encabezado cargando titulo={modeloListo ? 'Iniciando cámara…' : 'Preparando el reconocimiento…'} />
-            <Detalle>{modeloListo ? 'Un momento.' : 'La primera vez tarda unos segundos.'}</Detalle>
           </>
         ) : (
           <>
             <Encabezado
               icono={detectado ? 'vector-polygon' : 'line-scan'}
               tono={tono}
-              titulo={detectado ? 'Vano del motor detectado' : 'Buscando el vano del motor'}
+              titulo={!detectado ? 'Encuadra el motor desde arriba' : vano.cortado ? 'Aléjate para ver todo el motor' : 'Motor detectado'}
             />
-            <Detalle>
-              {!detectado
-                ? 'Abre el capó y apunta al motor desde arriba, a un paso de distancia.'
-                : vano.cortado
-                  ? 'Parte del vano queda fuera de la imagen: aléjate un poco para verlo completo.'
-                  : 'El contorno marca todo lo que hay bajo el capó.'}
-              {' Este teléfono no tiene ARCore: el contorno no queda fijo si mueves la cámara.'}
-            </Detalle>
-            <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />
+            <Detalle>{debug ? 'Sin ARCore: el contorno sigue la cámara.' : 'El contorno sigue la cámara.'}</Detalle>
+            {debug && <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />}
             {debug && (
               <LineaDebug
                 texto={`Debug · sin AR · vano ${vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'} · capó ${Math.round(

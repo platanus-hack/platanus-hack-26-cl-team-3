@@ -29,6 +29,7 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
       id TEXT PRIMARY KEY,
       conversation_id TEXT,
       device_id TEXT,
+      vehicle_id TEXT,
       created_at TEXT NOT NULL,
       model TEXT NOT NULL,
       effort TEXT,
@@ -63,9 +64,9 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
   `);
 
   const insertTurn = db.prepare(
-    `INSERT INTO turns (id, conversation_id, device_id, created_at, model, effort, mode, prompt_version, context_messages,
+    `INSERT INTO turns (id, conversation_id, device_id, vehicle_id, created_at, model, effort, mode, prompt_version, context_messages,
        question, answer, fresh, outcome, rounds, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, duration_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertTool = db.prepare(
     `INSERT INTO tool_runs (turn_id, round, tool_use_id, name, input, output, is_error, duration_ms)
@@ -125,7 +126,7 @@ export function sqliteRunLog(db: DatabaseSync): RunLogStore {
       db.exec("BEGIN");
       try {
         insertTurn.run(
-          t.id, t.conversation_id, t.device_id, t.created_at, t.model, t.effort, t.mode, t.prompt_version, t.context_messages,
+          t.id, t.conversation_id, t.device_id, t.vehicle_id, t.created_at, t.model, t.effort, t.mode, t.prompt_version, t.context_messages,
           t.question, t.answer, t.fresh, t.outcome, t.rounds, t.input_tokens, t.output_tokens, t.cache_read_tokens,
           t.cache_creation_tokens, t.duration_ms,
         );

@@ -1,8 +1,8 @@
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 
-export interface ConversationSummary { id: string; title: string | null; updated_at: string }
+export interface ConversationSummary { id: string; title: string | null; updated_at: string; vehicle_id: string | null }
 export interface Conversation extends ConversationSummary { messages: MessageParam[] }
-export type ConversationData = { title: string | null; messages: MessageParam[] };
+export type ConversationData = { title: string | null; messages: MessageParam[]; vehicle_id: string | null };
 
 export interface ConversationStore {
   createDevice(): Promise<string>;

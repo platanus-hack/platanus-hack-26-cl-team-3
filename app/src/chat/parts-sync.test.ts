@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { parts } from '../engine-maps/catalog';
+import { engineMaps } from '../engine-maps/catalog';
 
-test('api parts.json ids match the keys of parts in catalog.ts', () => {
-  const file = join(__dirname, '../../../api/src/data/parts.json');
-  const ids = (JSON.parse(readFileSync(file, 'utf8')) as { id: string }[]).map((p) => p.id);
-  assert.deepEqual([...ids].sort(), Object.keys(parts).sort());
-});
+for (const id of ['outback', 'swift'] as const) {
+  test(`api parts/${id}.json ids match the distinct parts of engineMaps.${id}.volumes`, () => {
+    const file = join(__dirname, `../../../api/src/data/parts/${id}.json`);
+    const ids = (JSON.parse(readFileSync(file, 'utf8')) as { id: string }[]).map((p) => p.id);
+    const expected = [...new Set(engineMaps[id].volumes.map((v) => v.part))];
+    assert.deepEqual([...ids].sort(), expected.sort());
+  });
+}

@@ -16,7 +16,7 @@ const originalToken = process.env.LOGS_TOKEN;
 const auth = { authorization: "Bearer secreto" };
 
 const turn = (id: string, created_at: string, conversation_id: string | null, extra: Partial<TurnLog> = {}): TurnLog => ({
-  id, conversation_id, device_id: null, created_at, model: "m", effort: null, mode: null, prompt_version: "v1",
+  id, conversation_id, device_id: null, vehicle_id: null, created_at, model: "m", effort: null, mode: null, prompt_version: "v1",
   context_messages: 1, question: "q", answer: "a", fresh: null, outcome: "ok", rounds: 1, input_tokens: null,
   output_tokens: null, cache_read_tokens: null, cache_creation_tokens: null, duration_ms: 5, ...extra,
 });

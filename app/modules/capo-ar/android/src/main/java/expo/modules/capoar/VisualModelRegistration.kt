@@ -48,19 +48,21 @@ internal fun measuredSceneScale(ratios: Collection<Float>): Float? {
 internal fun visualMetricScale(ratios: List<Float>): Float =
   measuredSceneScale(ratios.filter { it in .5f..2f }) ?: 1f
 
-private class MatScope : AutoCloseable {
+internal class MatScope : AutoCloseable {
   private val mats = ArrayList<Mat>()
   fun <T : Mat> own(mat: T): T { mats.add(mat); return mat }
   override fun close() = mats.forEach { it.release() }
 }
 
+internal data class ModelFeatureReference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
+internal data class ModelFeatureMatch(val point: Point3, val pixel: Point, val ratio: Float)
+
 /** Match the capture to the feature bank and colored landmarks of the selected vehicle. */
 internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: List<Landmark>,
   private val templates: OutbackLandmarkTemplates?, private val requireMeasuredScale: Boolean = false,
-  private val poseSupport: List<EnginePoint>? = null) {
-  private data class Reference(val xyz: List<Point3>, val uv: List<Point>, val descriptors: Mat)
-  private data class Match(val point: Point3, val pixel: Point, val ratio: Float)
-  private val references: List<Reference>
+  private val poseSupport: List<EnginePoint>? = null, guideBytes: ByteArray? = null) {
+  private val guide: ColorGuidedRegistration?
+  private val references: List<ModelFeatureReference>
   private val orb = ORB.create(5200).apply { setFastThreshold(9) }
   private val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
   private val matcher = BFMatcher.create(Core.NORM_HAMMING, false)
@@ -77,58 +79,26 @@ internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: 
         uv.add(Point(data.float.toDouble(), data.float.toDouble()))
         data.get(descriptors, i * 32, 32)
       }
-      Reference(xyz, uv, Mat(count, 32, CvType.CV_8U).apply { put(0,0,descriptors) })
+      ModelFeatureReference(xyz, uv, Mat(count, 32, CvType.CV_8U).apply { put(0,0,descriptors) })
     }
     require(!data.hasRemaining())
+    guide = guideBytes?.let { ColorGuidedRegistration(it,references) }
   }
 
   fun locate(path: String, degrees: Int, intrinsics: EngineCaptureIntrinsics, depth: Profundidad? = null): VisualModelPose? = MatScope().use { scope ->
     val image = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_GRAYSCALE))
     if (image.empty()) return null
-    val enhanced = scope.own(Mat())
-    clahe.apply(image, enhanced)
-    val keys = scope.own(MatOfKeyPoint())
-    val descriptors = scope.own(Mat())
-    orb.detectAndCompute(enhanced, scope.own(Mat()), keys, descriptors)
-    if (descriptors.rows() < 8) return null
-    val pixels = keys.toArray()
-    val matches = HashMap<Int, Match>()
-    for (ref in references) {
-      val reverse = scope.own(MatOfDMatch())
-      matcher.match(ref.descriptors, descriptors, reverse)
-      val reverseIndex = reverse.toArray().associate { it.queryIdx to it.trainIdx }
-      val forward = ArrayList<MatOfDMatch>()
-      val pairs = try {
-        matcher.knnMatch(descriptors, ref.descriptors, forward, 2)
-        forward.mapNotNull { row ->
-          val pair = row.toArray()
-          if (pair.size != 2) return@mapNotNull null
-          val (a,b) = pair
-          if (a.distance < .87f*b.distance && reverseIndex[a.trainIdx] == a.queryIdx) a to (a.distance/b.distance) else null
-        }
-      } finally { forward.forEach { it.release() } }
-      if (pairs.size < 8) continue
-      val source = scope.own(MatOfPoint2f()).apply { fromList(pairs.map { ref.uv[it.first.trainIdx] }) }
-      val target = scope.own(MatOfPoint2f()).apply { fromList(pairs.map { pixels[it.first.queryIdx].pt }) }
-      val mask = scope.own(Mat())
-      val homography = scope.own(Calib3d.findHomography(source,target,Calib3d.USAC_MAGSAC,7.0,mask,7000,.999))
-      if (homography.empty()) continue
-      val flags = ByteArray(pairs.size)
-      mask.get(0,0,flags)
-      for ((i,pair) in pairs.withIndex()) {
-        val (m,ratio) = pair
-        if (flags[i].toInt() == 0 || ratio >= (matches[m.queryIdx]?.ratio ?: 1f)) continue
-        matches[m.queryIdx] = Match(ref.xyz[m.trainIdx], pixels[m.queryIdx].pt, ratio)
-      }
-    }
-    if (matches.size < 8) return null
-    val pairs = matches.toSortedMap().values
+    val color by lazy { scope.own(Imgcodecs.imread(path,Imgcodecs.IMREAD_COLOR)) }
+    // A configured shape guide is required for this bank. An ambiguous truck must keep scanning.
+    val guided = guide?.let { it.locate(image,color,degrees,intrinsics,scope) ?: return null }
+    val pairs = guided?.features ?: matchFeatures(image, scope) ?: return null
     val objectPoints = pairs.map { it.point }
     // Solve in original sensor pixel coordinates with that capture's ARCore intrinsics.
-    val sensor = pairs.map {
-      val (x,y) = Imagen.desgirar(((it.pixel.x+.5)/image.cols()).toFloat(), ((it.pixel.y+.5)/image.rows()).toFloat(), degrees)
-      Point(x.toDouble()*intrinsics.width-.5, y.toDouble()*intrinsics.height-.5)
+    fun sensorPixel(point: Point): Point {
+      val (x,y) = Imagen.desgirar(((point.x+.5)/image.cols()).toFloat(), ((point.y+.5)/image.rows()).toFloat(), degrees)
+      return Point(x.toDouble()*intrinsics.width-.5, y.toDouble()*intrinsics.height-.5)
     }
+    val sensor = pairs.map { sensorPixel(it.pixel) }
     val xyz = scope.own(MatOfPoint3f()).apply { fromList(objectPoints) }
     val uv = scope.own(MatOfPoint2f()).apply { fromList(sensor) }
     val calibration = scope.own(Mat.eye(3,3,CvType.CV_64F)).apply {
@@ -138,18 +108,28 @@ internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: 
     val r = scope.own(Mat())
     val t = scope.own(Mat())
     val inliers = scope.own(Mat())
-    if (!Calib3d.solvePnPRansac(xyz,uv,calibration,distortion,r,t,false,700,7f,.999,inliers,Calib3d.SOLVEPNP_EPNP)
-      || inliers.rows() < (if (requireMeasuredScale) 18 else 8)) return null
-    val indices = IntArray(inliers.rows())
-    inliers.get(0,0,indices)
+    val indices = if (guided == null) {
+      if (!Calib3d.solvePnPRansac(xyz,uv,calibration,distortion,r,t,false,700,7f,.999,inliers,Calib3d.SOLVEPNP_EPNP)
+        || inliers.rows() < (if (requireMeasuredScale) 18 else 8)) return null
+      IntArray(inliers.rows()).also { inliers.get(0,0,it) }
+    } else {
+      // The guided matcher verifies distinct ORB inliers independently of the colored seed.
+      val controls = guided.controls
+      val points = scope.own(MatOfPoint3f()).apply { fromList(controls.map { it.point }) }
+      val measurements = scope.own(MatOfPoint2f()).apply { fromList(controls.map { sensorPixel(it.pixel) }) }
+      if (!Calib3d.solvePnP(points,measurements,calibration,distortion,r,t,false,Calib3d.SOLVEPNP_SQPNP)) return null
+      IntArray(pairs.size) { it }
+    }
     val inlierPixels = indices.map(sensor::get)
     val hull = scope.own(MatOfInt())
     val points = scope.own(MatOfPoint()).apply { fromList(inlierPixels) }
     Imgproc.convexHull(points,hull)
     points.fromList(hull.toArray().map(inlierPixels::get))
     if (Imgproc.contourArea(points) < 900.0) return null
-    xyz.fromList(indices.map(objectPoints::get))
-    uv.fromList(inlierPixels)
+    val controls = guided?.controls.orEmpty()
+    val weightedControls = List(3) { controls }.flatten()
+    xyz.fromList(indices.map(objectPoints::get) + weightedControls.map { it.point })
+    uv.fromList(inlierPixels + weightedControls.map { sensorPixel(it.pixel) })
     Calib3d.solvePnPRefineLM(xyz,uv,calibration,distortion,r,t)
     val rot = scope.own(Mat())
     Calib3d.Rodrigues(r,rot)
@@ -157,9 +137,20 @@ internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: 
     val translation = DoubleArray(3).also { t.get(0,0,it) }
     if (!rotation.all(Double::isFinite) || !translation.all(Double::isFinite) ||
       indices.any { val p = objectPoints[it]; rotation[6]*p.x+rotation[7]*p.y+rotation[8]*p.z+translation[2] <= .05 }) return null
+    if (guided != null) {
+      val fitted = VisualModelPose(rotation,translation)
+      fun residual(m: ModelFeatureMatch): Double {
+        val p = m.point
+        val uv = intrinsics.project(fitted.cameraPoint(EnginePoint(p.x.toFloat(),p.y.toFloat(),p.z.toFloat()))) ?: return Double.POSITIVE_INFINITY
+        val pixel = sensorPixel(m.pixel)
+        val sideways = degrees.mod(180) == 90
+        val scale = 800.0 / (if (sideways) intrinsics.height else intrinsics.width)
+        return hypot(uv.x * intrinsics.width - pixel.x, uv.y * intrinsics.height - pixel.y) * scale
+      }
+      if (controls.any { residual(it) > 18 } || pairs.count { residual(it) < 7 } < 18) return null
+    }
     var observations = emptyList<OutbackLandmarkObservation>()
     if (landmarks.isNotEmpty()) try {
-      val color = scope.own(Imgcodecs.imread(path, Imgcodecs.IMREAD_COLOR))
       val candidate = translation.copyOf()
       val candidateRotation = rotation.copyOf()
       if (!color.empty()) observations = observeOutbackLandmarks(color,degrees,intrinsics,VisualModelPose(rotation,translation),landmarks,templates)
@@ -200,5 +191,46 @@ internal class VisualModelRegistration(bytes: ByteArray, private val landmarks: 
       measuredSceneScale(ratios.values) ?: return null
     } else visualMetricScale(ratios.values.toList())
     VisualModelPose(rotation,translation,scale,observations)
+  }
+
+  private fun matchFeatures(image: Mat, scope: MatScope): List<ModelFeatureMatch>? {
+    val enhanced = scope.own(Mat())
+    clahe.apply(image, enhanced)
+    val keys = scope.own(MatOfKeyPoint())
+    val descriptors = scope.own(Mat())
+    orb.detectAndCompute(enhanced, scope.own(Mat()), keys, descriptors)
+    if (descriptors.rows() < 8) return null
+    val pixels = keys.toArray()
+    val matches = HashMap<Int, ModelFeatureMatch>()
+    for (ref in references) {
+      val reverse = scope.own(MatOfDMatch())
+      matcher.match(ref.descriptors, descriptors, reverse)
+      val reverseIndex = reverse.toArray().associate { it.queryIdx to it.trainIdx }
+      val forward = ArrayList<MatOfDMatch>()
+      val pairs = try {
+        matcher.knnMatch(descriptors, ref.descriptors, forward, 2)
+        forward.mapNotNull { row ->
+          val pair = row.toArray()
+          if (pair.size != 2) return@mapNotNull null
+          val (a,b) = pair
+          if (a.distance < .87f*b.distance && reverseIndex[a.trainIdx] == a.queryIdx) a to (a.distance/b.distance) else null
+        }
+      } finally { forward.forEach { it.release() } }
+      if (pairs.size < 8) continue
+      val source = scope.own(MatOfPoint2f()).apply { fromList(pairs.map { ref.uv[it.first.trainIdx] }) }
+      val target = scope.own(MatOfPoint2f()).apply { fromList(pairs.map { pixels[it.first.queryIdx].pt }) }
+      val mask = scope.own(Mat())
+      val homography = scope.own(Calib3d.findHomography(source,target,Calib3d.USAC_MAGSAC,7.0,mask,7000,.999))
+      if (homography.empty()) continue
+      val flags = ByteArray(pairs.size)
+      mask.get(0,0,flags)
+      for ((i,pair) in pairs.withIndex()) {
+        val (m,ratio) = pair
+        if (flags[i].toInt() == 0 || ratio >= (matches[m.queryIdx]?.ratio ?: 1f)) continue
+        matches[m.queryIdx] = ModelFeatureMatch(ref.xyz[m.trainIdx], pixels[m.queryIdx].pt, ratio)
+      }
+    }
+    if (matches.size < 8) return null
+    return matches.toSortedMap().values.toList()
   }
 }

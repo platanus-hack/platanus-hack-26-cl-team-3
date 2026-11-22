@@ -1,23 +1,33 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CHAT_VEHICLE_ID, cameraRoute } from '../chat/camera';
-import { CitationModal } from '../chat/CitationModal';
-import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
-import { runTurn } from '../chat/client';
-import { Dictado } from '../chat/Dictado';
-import type { AnthropicMessage } from '../chat/contract';
-import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
-import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
-import { color, espacio, radio, tipo } from '../theme';
-import { BotonIcono, Icono, Tarjeta } from '../ui';
+import { cameraRoute } from '../../chat/camera';
+import { CitationModal } from '../../chat/CitationModal';
+import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
+import { runTurn } from '../../chat/client';
+import { Dictado } from '../../chat/Dictado';
+import type { AnthropicMessage } from '../../chat/contract';
+import { clear, conversationVehicle, load, save, setConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
+import { useVehicleSelection } from '../../plates/selection';
+import { vehicles } from '../../vehicles';
+import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../../chat/turn';
+import { color, espacio, radio, tipo } from '../../theme';
+import { BotonIcono, Icono, Tarjeta } from '../../ui';
 
 const QUICK_REPLIES = [DONE_REPLY, LOST_REPLY];
+const LEGACY_VEHICLE = 'outback';
+
+type Described = { name: string; year: number | null; engine: string };
+const describe = (v: Described) => `${v.name}${v.year ? ` ${v.year}` : ''}, motor ${v.engine}`;
+const nameOf = (v: Described) => `${v.name}${v.year ? ` ${v.year}` : ''}`;
 
 export default function Ask() {
   const insets = useSafeAreaInsets();
+  const focused = useIsFocused();
+  const { vehicle: selected } = useVehicleSelection();
+  const [storedVehicle, setStoredVehicle] = useState<string | null>(null);
   const scroll = useRef<ScrollViewInstance>(null);
   const [messages, setMessages] = useState<AnthropicMessage[]>([]);
   const [question, setQuestion] = useState<string | null>(null);
@@ -37,8 +47,9 @@ export default function Ask() {
   const [citation, setCitation] = useState<ViewCitation | null>(null);
 
   useEffect(() => {
-    load().then((stored) => {
+    Promise.all([load(), conversationVehicle()]).then(([stored, vehicleId]) => {
       setMessages((current) => current.length === 0 ? stored : current);
+      setStoredVehicle(vehicleId);
       setLoaded(true);
     });
   }, []);
@@ -54,14 +65,20 @@ export default function Ask() {
         openedHistory.current = false;
         setReplies(false);
         void load().then(setMessages);
+        void conversationVehicle().then(setStoredVehicle);
       }
     }, []),
   );
 
+  const fresh = messages.length === 0 && question === null;
+  const chatVehicleId = fresh ? selected.id : (storedVehicle ?? LEGACY_VEHICLE);
+  const chatVehicle = vehicles.find((v) => v.id === chatVehicleId) ?? selected;
+  const otherVehicle = !fresh && selected.id !== chatVehicleId;
+
   const openCamera = useCallback((card: ViewCard, cards: ViewCard[]) => {
     openedCamera.current = true;
-    router.push(cameraRoute(card, cards));
-  }, []);
+    router.push(cameraRoute(card, cards, chatVehicleId));
+  }, [chatVehicleId]);
 
   const openHistory = useCallback(() => {
     openedHistory.current = true;
@@ -80,6 +97,10 @@ export default function Ask() {
     if (!text || busyRef.current || !loaded) return;
     busyRef.current = true;
     const previous = messages;
+    if (previous.length === 0) {
+      await setConversationVehicle(selected.id);
+      setStoredVehicle(selected.id);
+    }
 
     setInput('');
     setReplies(false);
@@ -111,11 +132,12 @@ export default function Ask() {
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
-  }, [input, loaded, messages]);
+  }, [input, loaded, messages, selected.id]);
 
   const reset = useCallback(() => {
     setMessages([]);
     void clear();
+    setStoredVehicle(null);
     setError(null);
     setNote(null);
     setReplies(false);
@@ -127,7 +149,7 @@ export default function Ask() {
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.back()} />
         <View style={styles.flex}>
           <Text style={styles.title}>Asistente</Text>
-          <Text style={styles.subtitleBar}>Subaru Outback 2016, motor 3.6R</Text>
+          <Text style={styles.subtitleBar}>{describe(chatVehicle)}</Text>
         </View>
         <BotonIcono icono="history" etiqueta="Conversaciones anteriores" onPress={openHistory} deshabilitado={busy} />
         <BotonIcono icono="square-edit-outline" etiqueta="Nueva conversación" onPress={reset} deshabilitado={busy} />
@@ -140,10 +162,15 @@ export default function Ask() {
         onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
         keyboardShouldPersistTaps="handled"
       >
+        {otherVehicle && (
+          <Text style={styles.status}>
+            {`Esta conversación es del ${nameOf(chatVehicle)}. Toca «Nueva conversación» para preguntar por el ${nameOf(selected)}.`}
+          </Text>
+        )}
         {bubbles.length === 0 && (
           <Tarjeta estilo={styles.empty}>
             <Icono nombre="book-open-variant" tam={26} tono={color.textoSuave} />
-            <Text style={tipo.nota}>Cuéntame qué le pasa al Outback. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
+            <Text style={[tipo.nota, styles.flex]}>Cuéntame qué le pasa a tu auto. Por ejemplo: «no sale agua del limpiaparabrisas».</Text>
           </Tarjeta>
         )}
         {bubbles.map((b, i) => (
@@ -155,7 +182,7 @@ export default function Ask() {
         ))}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + espacio.s }]}>
+      <View style={[styles.footer, { paddingBottom: espacio.s }]}>
         {error && <Text style={styles.error}>{error}</Text>}
         {dictationError && <Text style={styles.error}>{dictationError}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
@@ -180,11 +207,11 @@ export default function Ask() {
             returnKeyType="send"
             onSubmitEditing={() => void send()}
           />
-          <Dictado
+          {focused && <Dictado
             deshabilitado={busy || !loaded}
             onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
             onError={(message) => setDictationError(message || null)}
-          />
+          />}
           {input.trim() ? (
             <Pressable
               onPress={() => void send()}
@@ -197,7 +224,7 @@ export default function Ask() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: CHAT_VEHICLE_ID, vivo: '1' } })}
+              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } })}
               disabled={busy || !loaded}
               accessibilityRole="button"
               accessibilityLabel="Hablar con la cámara"

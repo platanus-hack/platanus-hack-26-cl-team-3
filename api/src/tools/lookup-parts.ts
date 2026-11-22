@@ -1,8 +1,6 @@
 import type { Tool as ToolDefinition } from "@anthropic-ai/sdk/resources/messages";
-import rows from "../data/parts.json";
+import type { VehicleProfile } from "../vehicles/registry";
 import type { Tool, ToolOutput } from "./index";
-
-const SOURCE = "piezas://outback-2016-3.6r/vano";
 
 const definition: ToolDefinition = {
   name: "lookup_parts",
@@ -12,18 +10,23 @@ const definition: ToolDefinition = {
   input_schema: { type: "object", properties: {}, additionalProperties: false },
 };
 
-async function run(): Promise<ToolOutput> {
+export function lookupParts(profile: VehicleProfile): Tool {
+  const rows = profile.parts;
+  const sources = [...new Set(rows.map((p) => p.source))].join("; ");
   return {
-    content: [
-      {
-        type: "search_result",
-        source: SOURCE,
-        title: `Piezas del vano del motor — Outback 2016 3.6R (fuente: ${[...new Set(rows.map((p) => p.source))].join("; ")})`,
-        content: rows.map((p) => ({ type: "text", text: `${p.name} — ${p.detail} part: ${p.id}` })),
-        citations: { enabled: true },
-      },
-    ],
+    definition,
+    async run(): Promise<ToolOutput> {
+      return {
+        content: [
+          {
+            type: "search_result",
+            source: profile.partsSource,
+            title: `${profile.partsTitle} — ${profile.label} (fuente: ${sources})`,
+            content: rows.map((p) => ({ type: "text", text: `${p.name} — ${p.detail} part: ${p.id}` })),
+            citations: { enabled: true },
+          },
+        ],
+      };
+    },
   };
 }
-
-export const lookupParts: Tool = { definition, run };

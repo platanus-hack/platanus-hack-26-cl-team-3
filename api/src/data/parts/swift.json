@@ -1,0 +1,116 @@
+[
+  {
+    "id": "brake_fluid",
+    "name": "Depósito de líquido de frenos",
+    "detail": "Depósito de líquido de frenos junto a la batería y al parabrisas.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "brake_cap",
+    "name": "Tapa del líquido de frenos",
+    "detail": "Tapa del depósito de líquido de frenos.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "washer",
+    "name": "Sapito",
+    "detail": "Tapa azul del lavaparabrisas, cerca del extremo abierto del conducto de admisión.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "radiator_cap",
+    "name": "Tapa de presión del radiador",
+    "detail": "Tapa de presión con pestañas y etiqueta de advertencia. Ábrela solo con el motor completamente frío.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "dipstick",
+    "name": "Varilla de aceite",
+    "detail": "Manilla amarilla de la varilla, detrás del conducto curvo de admisión.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "battery",
+    "name": "Batería",
+    "detail": "Ubicación de la batería de 12 V.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "positive",
+    "name": "Borne positivo",
+    "detail": "Cubierta roja del borne positivo junto al borde de la batería.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "negative",
+    "name": "Borne negativo",
+    "detail": "Terminal metálico sin cubierta roja, conectado al cable de masa de la batería.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "battery_hold_down",
+    "name": "Abrazadera de la batería",
+    "detail": "Barra transversal que sujeta la batería a su bandeja.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "air_filter",
+    "name": "Caja del filtro de aire",
+    "detail": "Caja estriada del filtro de aire en el centro del vano.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "intake_resonator",
+    "name": "Resonador de admisión",
+    "detail": "Cámara frontal unida al conducto de admisión.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "intake_snorkel",
+    "name": "Toma frontal de aire",
+    "detail": "Conducto curvo con la boca abierta junto al llenado del lavaparabrisas.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "radiator_support",
+    "name": "Cubierta del soporte del radiador",
+    "detail": "Travesaño frontal que pasa bajo el borde de la toma de aire.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "hood_latch",
+    "name": "Cierre del capó",
+    "detail": "Mecanismo de enganche situado al centro del travesaño delantero.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "cowl_panel",
+    "name": "Panel bajo el parabrisas",
+    "detail": "Panel transversal en el borde trasero del vano.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "coolant",
+    "name": "Depósito de refrigerante",
+    "detail": "Parte superior visible del depósito de expansión, conectada con la manguera del radiador.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "coolant_cap",
+    "name": "Tapa del depósito de expansión",
+    "detail": "Tapa del depósito de expansión del Swift. Identifica el depósito con el motor frío.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "fuses",
+    "name": "Caja de fusibles del motor",
+    "detail": "Tapa de la caja de fusibles exterior, junto al guardabarros y la batería. El guardabarros oculta el borde exterior en la grabación. Verifica los circuitos en la etiqueta de la unidad.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  },
+  {
+    "id": "oil_cap",
+    "name": "Tapa de aceite",
+    "detail": "Tapa oscura con agarre transversal, al costado de la caja del filtro.",
+    "source": "catalog.ts del Swift (ficha de Hoodini, sin manual verificado)"
+  }
+]

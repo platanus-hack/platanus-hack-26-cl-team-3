@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tools } from "../../src/tools";
-import parts from "../../src/data/parts.json";
+import parts from "../../src/data/parts/outback.json";
+import swiftParts from "../../src/data/parts/swift.json";
 
 const { run, definition } = tools.show_in_camera;
 
@@ -63,5 +64,16 @@ test("opening actions are accepted only on mapped service components", async () 
     const result = await run(input);
     if (supported.includes(id)) assert.deepEqual(result.events, [{ event: "ar", data: input }]);
     else assert.equal(result.is_error, true);
+  }
+});
+
+test("the Outback camera exposes its 27 components and rejects parts exclusive to other vehicles", async () => {
+  assert.equal(parts.length, 27);
+  const outbackIds = new Set(parts.map((p) => p.id));
+  const ram700Only = ["battery_terminal", "terminal_boot", "valve_cover", "wiring_harness", "steering_fluid", "steering_cap"];
+  for (const id of [...swiftParts.map((p) => p.id).filter((id) => !outbackIds.has(id)), ...ram700Only]) {
+    const response = await run({ part: id, instruction: "Locate this part." });
+    assert.equal(response.is_error, true, id);
+    assert.equal(response.events, undefined, id);
   }
 });

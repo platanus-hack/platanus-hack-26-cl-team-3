@@ -91,7 +91,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
         <View pointerEvents="box-none" style={[estilos.dock, { bottom: insets.bottom + espacio.m }]}>
           {expanded && (
             <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
-              {vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
+              {debug && vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
               {(step?.instruction ?? instruction) && <GuideBanner part={step?.part ?? guidePart} instruction={step?.instruction ?? instruction ?? ''} />}
               {children}
               <View style={estilos.options}>
