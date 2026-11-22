@@ -14,13 +14,15 @@ export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string
 
 /** The fuse tool cites whole rows. A citation spanning multiple rows opens the panel without selecting one. */
 export function fuseCitationRoute(citation: ViewCitation) {
-  if (citation.source !== 'fusibles://outback-2016-3.6r/cabina') return null;
-  const tokens = (citation.cited_text ?? '').matchAll(/\b(?:fusible-cabina-|fusible\s+)(\d+)\b/gi);
-  const numbers = [...new Set(Array.from(tokens, match => Number(match[1])))];
-  const slot = numbers.length === 1 ? outbackFuses.find(item => item.box === 'cabin' && item.number === numbers[0]) : undefined;
+  const match = /^fusibles:\/\/outback-2016-3\.6r\/(cabina|motor)$/.exec(citation.source ?? '');
+  if (!match) return null;
+  const box = match[1] === 'motor' ? 'engine' : 'cabin';
+  const tokens = (citation.cited_text ?? '').matchAll(/\b(?:fusible-(?:cabina|motor)-|fusible\s+)(\d+)\b/gi);
+  const numbers = [...new Set(Array.from(tokens, token => Number(token[1])))];
+  const slot = numbers.length === 1 ? outbackFuses.find(item => item.box === box && item.number === numbers[0]) : undefined;
   return {
     pathname: '/outback-fuses' as const,
-    params: { box: 'cabin', ...(slot && { fuse: String(slot.number) }) },
+    params: { box, ...(slot && { fuse: String(slot.number) }) },
   };
 }
 
