@@ -1,4 +1,5 @@
 import type { ContentBlockParam, Message, MessageParam, ToolResultBlockParam, ToolUseBlock, ToolUnion } from "@anthropic-ai/sdk/resources/messages";
+import { replayManualResult } from "../manual/results";
 import { ProviderError } from "../llm/errors";
 import type { ToolRegistry } from "../tools";
 import type { ChatEvent, ErrorCode, Profile } from "./contract";
@@ -100,9 +101,14 @@ async function* round(
   }
 }
 
-// Search-result indices belong to the request that produced the citation.
 function replayMessage(message: MessageParam): MessageParam {
-  if (message?.role !== "assistant" || !Array.isArray(message.content)) return message;
+  if (!Array.isArray(message?.content)) return message;
+  if (message.role === "user") {
+    return { ...message, content: message.content.map(block =>
+      block?.type === "tool_result" ? replayManualResult(block) : block) };
+  }
+  // Search-result indices belong to the request that produced the citation.
+  if (message.role !== "assistant") return message;
   const content = message.content.map(block => {
     if (block?.type !== "text" || !Array.isArray(block.citations)) return block;
     const citations = block.citations.filter(citation => citation?.type !== "search_result_location");
