@@ -92,12 +92,6 @@ export default function Menu() {
       {!vehicleOptionsOpen && photo !== undefined && (
         <Image accessible={false} source={photo} style={styles.photo} resizeMode="contain" />
       )}
-      <Pressable accessibilityRole="button" style={styles.mediaAction}
-        onPress={() => router.push({ pathname: '/analizar', params: { vehicleId: vehicle.id } })}>
-        <Icono nombre="image-search-outline" tono={color.acento} />
-        <Text style={[styles.optionName, styles.flex]}>Analizar foto o video</Text>
-        <Icono nombre="chevron-right" tono={color.textoSuave} />
-      </Pressable>
       <Text style={styles.upcoming}>Próximamente</Text>
       <View style={styles.upcomingRow}><Icono nombre="lightbulb-outline" tono={color.textoSuave} /><Text style={tipo.subtitulo}>Ampolletas</Text></View>
       <View style={styles.upcomingRow}><Icono nombre="fuse" tono={color.textoSuave} /><Text style={tipo.subtitulo}>Fusibles</Text></View>
@@ -126,7 +120,6 @@ const styles = StyleSheet.create({
   vehicleOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, minHeight: 48 },
   selected: { backgroundColor: color.acentoSuave, borderRadius: 12 },
   optionName: { color: color.texto, fontSize: 16, fontWeight: '600' },
-  mediaAction: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   upcoming: { ...tipo.nota, marginTop: 14, marginBottom: 8 },
   upcomingRow: { flexDirection: 'row', gap: 12, alignItems: 'center', minHeight: 36 },
   version: { ...tipo.nota, fontSize: 11, marginTop: 12, textAlign: 'center' },
