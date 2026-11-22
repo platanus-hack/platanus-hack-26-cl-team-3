@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cameraRoute } from '../chat/camera';
+import { CHAT_VEHICLE_ID, cameraRoute } from '../chat/camera';
 import { CitationModal } from '../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
 import { runTurn } from '../chat/client';
@@ -89,7 +89,7 @@ export default function Ask() {
     if ('error' in result) {
       setError(result.error);
       setInput(text);
-    } else {
+    } else if ('messages' in result) {
       setMessages(result.messages);
       void save(result.messages);
       if (result.truncated) setNote('La respuesta se cortó.');
@@ -173,15 +173,27 @@ export default function Ask() {
             onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
             onError={(message) => setDictationError(message || null)}
           />
-          <Pressable
-            onPress={() => void send()}
-            disabled={busy || !loaded || !input.trim()}
-            accessibilityRole="button"
-            accessibilityLabel="Enviar"
-            style={[styles.send, (busy || !loaded || !input.trim()) && { opacity: 0.4 }]}
-          >
-            <Icono nombre="send" tam={22} tono={color.acentoTexto} />
-          </Pressable>
+          {input.trim() ? (
+            <Pressable
+              onPress={() => void send()}
+              disabled={busy || !loaded}
+              accessibilityRole="button"
+              accessibilityLabel="Enviar"
+              style={[styles.send, (busy || !loaded) && { opacity: 0.4 }]}
+            >
+              <Icono nombre="send" tam={22} tono={color.acentoTexto} />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => router.push({ pathname: '/escanear', params: { vehicleId: CHAT_VEHICLE_ID, vivo: '1' } })}
+              disabled={busy || !loaded}
+              accessibilityRole="button"
+              accessibilityLabel="Hablar con la cámara"
+              style={[styles.send, styles.video, (busy || !loaded) && { opacity: 0.4 }]}
+            >
+              <Icono nombre="video" tam={22} tono={color.textoSuave} />
+            </Pressable>
+          )}
         </View>
       </View>
 
@@ -280,4 +292,5 @@ const styles = StyleSheet.create({
     color: color.texto,
   },
   send: { width: 40, height: 40, borderRadius: 20, margin: 4, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
+  video: { backgroundColor: 'transparent' },
 });
