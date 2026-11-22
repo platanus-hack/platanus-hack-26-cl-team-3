@@ -21,7 +21,8 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
-import { inspectionActions, inspectionLabels, inspectionSeconds } from '../engine-maps/inspection';
+import swiftBinding from '../../modules/capo-ar/android/src/main/assets/engine-models/swift-registration.json';
+import { inspectionActions, inspectionLabels, inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
@@ -40,6 +41,20 @@ import type { Vehicle } from '../vehicles';
 import {
   ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO,
 } from './comun';
+
+const swiftMotions = new Map(
+  (swiftBinding.parts as { id: string; inspection?: { kind: string } }[])
+    .map(part => [part.id, part.inspection?.kind])
+);
+
+function swiftInspectionActions(part: PartId): InspectionAction[] {
+  const motion = swiftMotions.get(part === 'brake_fluid' ? 'brake_cap' : part);
+  const actions: InspectionAction[] = ['highlight', 'lift'];
+  if (motion === 'separate') actions.push('separate');
+  if (motion === 'twist') actions.push('open');
+  if (part === 'washer' && motion === 'separate') actions.push('refill');
+  return actions;
+}
 
 type PlacementCandidate = {
   capture: CapturaAR; bay: Vano; centers: PartCenter[]; partial: boolean;
@@ -76,6 +91,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
 export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
+  const swiftParts = useMemo(() => vehicle?.id === 'swift' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
@@ -177,13 +193,14 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
 
   const sesionActiva = estadoAR?.estado === 'rastreando' || estadoAR?.estado === 'sin-rastreo';
 
+  const swiftDepthUnavailable = !!swiftParts && sesionActiva && estadoAR?.profundidad === false;
   const awaitingVisual = vehicle?.id === 'outback' && anclaje?.mapPlaced && anclaje.metodo !== 'visual' && !anclaje.manual;
 
   // Bucle de detección: solo mientras NO está anclado (después, ARCore sostiene el polígono solo).
   useEffect(() => {
-    if (!modeloListo || !sesionActiva || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
+    if (!modeloListo || !sesionActiva || swiftDepthUnavailable || !activa || (anclaje && ((!anclaje.partial && !awaitingVisual) || anclaje.manual)) || recalibrando || error) return;
     const generation = registrationGeneration.current;
-    const initialScan = outbackParts && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
+    const initialScan = (outbackParts || swiftParts) && !anclaje ? new InitialVisualScan<PlacementCandidate & { visual: boolean }>() : null;
     let vivo = true;
     let fallos = 0;
     let seguidos = 0;
@@ -294,7 +311,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           const previous = cap.anclas ? pares(cap.anclas) : [];
           const expanded = !!delEscaneo && extendsPartialMap(previous, delEscaneo);
           const scan = estable && (!anclaje || expanded) ? delEscaneo : null;
-          const bay = scan ?? candidateBay;
+          const bay = swiftParts ? visual : (scan ?? candidateBay);
           const freshTarget = vanoValido(detection) ? candidateBay : visual;
           let candidate: (PlacementCandidate & { visual: boolean }) | undefined;
           if (bay && cap.rastreando) {
@@ -346,7 +363,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       vivo = false;
       releaseOutbackEncoder();
     };
-  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, targetRevision]);
+  }, [modeloListo, sesionActiva, activa, anclaje, error, fijar, lookForPartCenters, volumes.length, recalibrando, awaitingVisual, outbackParts, swiftParts, swiftDepthUnavailable, targetRevision]);
 
   // Con el contorno anclado: «calce» periódico entre las anclas y lo que el modelo ve ahora (promedio de los últimos 3).
   useEffect(() => {
@@ -529,33 +546,36 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, stop, focus } = cameraGuide;
-  const refillLoop = !!(cameraGuide.refilling && mapTracking && outbackParts && selected === 'washer');
+  const detailedParts = swiftParts ?? outbackParts;
+  const refillLoop = !!(cameraGuide.refilling && mapTracking && selected === 'washer' &&
+    (outbackParts || (swiftParts && swiftInspectionActions('washer').includes('refill'))));
   const choosePart = (index: number) => {
     setSelectedIndex(index);
     const part = map?.volumes[index]?.part;
-    if (outbackParts && part) cameraGuide.toggleFocus(part);
+    if (detailedParts && part) cameraGuide.toggleFocus(part);
     else if (part !== focus) cameraGuide.clearFocus();
   };
   const playedFocus = useRef<string | null>(null);
   useEffect(() => {
     if (!focus) playedFocus.current = null;
-    else if (playedFocus.current !== focus && mapTracking && outbackParts && selected === focus && ar.current) {
+    else if (playedFocus.current !== focus && mapTracking && detailedParts && selected === focus && ar.current) {
       playedFocus.current = focus;
       play('highlight');
       void ar.current.playPartAction(focus, 'highlight').catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [focus, mapTracking, outbackParts, selected, play]);
+  }, [focus, mapTracking, detailedParts, selected, play]);
   useEffect(() => {
     if (refillLoop) {
       playedStep.current = stepKey;
       return;
     }
-    if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
+    if (playedStep.current !== stepKey && mapTracking && detailedParts && step?.action && selected === step.part && ar.current &&
+        (!swiftParts || swiftInspectionActions(step.part).includes(step.action))) {
       playedStep.current = stepKey;
       play(step.action);
       void ar.current.playPartAction(step.part, step.action).catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [refillLoop, mapTracking, outbackParts, selected, step, stepKey, play]);
+  }, [refillLoop, mapTracking, detailedParts, swiftParts, selected, step, stepKey, play]);
   useEffect(() => {
     if (!refillLoop) return;
     const cycle = () => {
@@ -590,7 +610,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     engineHint = 'Vuelve a apuntar al motor';
   } else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
-  else if (outbackParts && registrationCandidate) status = 'Scanning…';
+  else if (swiftDepthUnavailable) {
+    status = 'Profundidad no disponible';
+    engineHint = 'Este dispositivo no admite la profundidad necesaria para anclar el mapa del Swift.';
+  } else if (swiftParts && !registrationCandidate) status = 'Apunta al depósito de frenos y a la batería. El anclaje requiere profundidad.';
+  else if ((outbackParts || swiftParts) && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
   else engineHint = 'Apunta la cámara al motor';
 
@@ -608,6 +632,13 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
       <>
         <Encabezado cargando titulo="Preparando la realidad aumentada…" />
         <Detalle>Android pide instalar o actualizar «Servicios de Google Play para RA». Acéptalo y vuelve a la app.</Detalle>
+      </>
+    );
+  } else if (swiftDepthUnavailable) {
+    panel = (
+      <>
+        <Encabezado icono="information-outline" titulo="Profundidad no disponible" />
+        <Detalle>Para ubicar estas piezas del Swift se necesita un teléfono compatible con profundidad ARCore.</Detalle>
       </>
     );
   } else if (!modeloListo || !sesionActiva) {
@@ -662,16 +693,16 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                 {map.partDetails?.[selected] ?? parts[selected][1]}
               </Text>
             )}
-            {outbackParts && selected && (
+            {(outbackParts || swiftParts) && selected && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.parts}>
-                {inspectionActions(selected).map((action) => (
+                {(swiftParts ? swiftInspectionActions(selected) : inspectionActions(selected)).map((action) => (
                   <Pressable key={action} accessibilityRole="button" style={styles.part}
                     onPress={() => {
                       controls.setMode('compact');
                       cameraGuide.play(action);
                       void ar.current?.playPartAction(selected, action).catch(() => setAviso('No se pudo mostrar la acción.'));
                     }}>
-                    <Text style={tipo.nota}>{inspectionLabels[action]}</Text>
+                    <Text style={tipo.nota}>{action === 'separate' && selected === 'brake_fluid' ? 'Separar tapa en 3D' : inspectionLabels[action]}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -779,6 +810,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         editingMap={editingMap && !error && !errorAR}
         debug={debug}
         outbackParts={outbackParts}
+        swiftParts={swiftParts}
         selectedPart={selectedIndex}
         focusedPart={focus}
         onPart={(e) => choosePart(e.nativeEvent.index)}

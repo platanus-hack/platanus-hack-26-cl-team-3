@@ -4,6 +4,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ModelAlignmentTest {
+  @Test
+  fun unscaledReconstructionRequiresConsistentMeasuredDepth() {
+    org.junit.Assert.assertNull(measuredSceneScale(List(5) { .19f }))
+    org.junit.Assert.assertNull(measuredSceneScale(listOf(.15f, .19f, .24f, .29f, .31f, .41f)))
+    assertEquals(.19f, measuredSceneScale(listOf(.19f, .19f, .18f, .20f, .19f, .21f))!!, .001f)
+  }
+
   @Test fun pinchingKeepsTheGrabbedPointUnderTheMovingFingers() {
     val point = EnginePoint(.25f, -.125f, .5f)
     val from = EnginePoint(.5f, -.25f, .75f)

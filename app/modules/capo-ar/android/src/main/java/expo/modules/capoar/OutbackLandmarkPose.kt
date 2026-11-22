@@ -51,7 +51,7 @@ private fun solveNormal(matrix: Array<DoubleArray>, rhs: DoubleArray): DoubleArr
 /** Refines the rigid OpenCV model-to-sensor pose from distinct colored surface correspondences. */
 internal fun refineOutbackLandmarkPose(
   observations: List<OutbackLandmarkObservation>, intrinsics: EngineCaptureIntrinsics,
-  rotation: DoubleArray, translation: DoubleArray,
+  rotation: DoubleArray, translation: DoubleArray, support: List<EnginePoint>? = null,
 ): Boolean {
   if (observations.size < 2 || !intrinsics.fx.isFinite() || !intrinsics.fy.isFinite() ||
     intrinsics.fx <= 0 || intrinsics.fy <= 0) return false
@@ -67,7 +67,7 @@ internal fun refineOutbackLandmarkPose(
   val count = sites.size
   if (count < 2) return false
   val pivot = DoubleArray(3) { i -> sites.sumOf { it.camera[i] } / count }
-  for (p in engineSupport) {
+  for (p in support ?: engineSupport) {
     val q = camera(p)
     if (q[2] > .05 && abs(q[0]/q[2]) < 1.5 && abs(q[1]/q[2]) < 1.5) {
       sites.add(PoseSite(q,1000*q[0]/q[2],1000*q[1]/q[2],true))

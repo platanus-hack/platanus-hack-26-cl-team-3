@@ -1,3 +1,4 @@
+import { swiftVolumes } from './swift-volumes';
 import { outbackVolumes } from './outback-volumes';
 import type { Vehicle } from '../vehicles';
 
@@ -13,6 +14,8 @@ export const parts = {
   positive: ["Borne positivo","Terminal positivo de la batería."],
   engine_cover: ["Cubierta del motor", "Cubierta central con el emblema Subaru sobre el motor bóxer de seis cilindros."],
   intake_snorkel: ["Toma frontal de aire", "Conducto ancho que lleva aire desde el frente del auto hasta la caja del filtro."],
+  cowl_panel: ["Panel bajo el parabrisas", "Panel transversal en el borde trasero del vano."],
+  intake_resonator: ["Resonador de admisión", "Cámara frontal unida al conducto de admisión."],
   intake_hose: ["Manguito de admisión", "Tramo que une la salida de la caja del filtro con la admisión bajo la cubierta."],
   abs_unit: ["Unidad hidráulica ABS", "Bloque hidráulico y bomba a los que llegan las tuberías rígidas de freno."],
   left_strut_mount: ["Copela delantera izquierda", "Soporte superior de la suspensión izquierda del vehículo, junto al depósito de frenos."],
@@ -66,6 +69,25 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
       positive: "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
     },
     volumes: outbackVolumes,
+  },
+  swift: {
+    referenceVariant: "1.2 · Vehículo de referencia de 2017",
+    volumes: swiftVolumes,
+    partDetails: {
+      fuses: "Tapa de la caja de fusibles exterior, junto al guardabarros y la batería. El guardabarros oculta el borde exterior en la grabación. Verifica los circuitos en la etiqueta de la unidad.",
+      coolant: "Parte superior visible del depósito de expansión, conectada con la manguera del radiador.",
+      air_filter: "Caja estriada del filtro de aire en el centro del vano.",
+      intake_snorkel: "Conducto curvo con la boca abierta junto al llenado del lavaparabrisas.",
+      radiator_support: "Travesaño frontal que pasa bajo el borde de la toma de aire.",
+      washer: "Tapa azul del lavaparabrisas, cerca del extremo abierto del conducto de admisión.",
+      dipstick: "Manilla amarilla de la varilla, detrás del conducto curvo de admisión.",
+      oil_cap: "Tapa oscura con agarre transversal, al costado de la caja del filtro.",
+      radiator_cap: "Tapa de presión con pestañas y etiqueta de advertencia. Ábrela solo con el motor completamente frío.",
+      coolant_cap: "Tapa del depósito de expansión del Swift. Identifica el depósito con el motor frío.",
+      positive: "Cubierta roja del borne positivo junto al borde de la batería.",
+      brake_fluid: "Depósito de líquido de frenos junto a la batería y al parabrisas.",
+      brake_cap: "Tapa del depósito de líquido de frenos.",
+    },
   },
   onix: {
     referenceVariant: "LTZ · 1.0 turbo · Brasil",
