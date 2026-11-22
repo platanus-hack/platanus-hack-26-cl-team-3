@@ -1,0 +1,11 @@
+Ford Ranger 2.2 TDCi filter cartridge dimensional reference
+
+MANN-FILTER C 22 024 catalog
+https://www.mann-filter.com/en/catalog/search-results/product.html/c22024_mann-filter.html
+The catalog specifies 222 mm outside diameter, 135 mm inside diameter and 138 mm height. MANN lists the Ford Ranger TKE 2.2 TDCi application and Ford OE cross-reference AB39-9601-AB. Fitment of the vehicle's installed part requires confirmation.
+
+Ford Ranger MY2022 owner's manual, printed pages 239–240
+https://www.fordservicecontent.com/Ford_Content/Catalog/owner_information/Manual_de_Propietario_Ranger_MY2022.pdf#page=241
+Ford describes removing the filter element after opening its housing. Animation travel and timing are illustrative. An in-vehicle anchor requires measurements.
+
+The GLB and PNG represent only the nominal dimensional envelope. The top annulus locates the opening. Pleats, seals, underside, housing and internal geometry are omitted. Colors distinguish reference surfaces. The files contain no manufacturer imagery.
