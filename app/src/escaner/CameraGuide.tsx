@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { runTurn } from '../chat/client';
 import { load, save, type ViewCard, type ViewCitation } from '../chat/history';
-import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
+import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING, type TurnOptions } from '../chat/turn';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
 import { color, video } from '../theme';
@@ -27,9 +27,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     timer.current = setTimeout(() => setPlaying(null), inspectionSeconds[action] * 1000);
   }, []);
 
-  useEffect(() => setFocus(null), [guide.key, guide.index]);
-
-  const ask = async (text: string, keepGuide = false) => {
+  const ask = async (text: string, keepGuide = false, opts?: TurnOptions) => {
     setBusy(true);
     setCaption({ text: THINKING, citations: [] });
     let spoke = false;
@@ -39,10 +37,17 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
       spoke ||= said.trim() !== '';
       setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations) });
       if (keepGuide || progress.cards.length === 0) return;
-      if (replaced.length === 0) onStep(progress.cards[0]);
+      if (replaced.length === 0) {
+        setFocus(null);
+        onStep(progress.cards[0]);
+      }
       setGuide((g) => ({ steps: progress.cards, index: replaced.length ? g.index : 0, key: replaced.length ? g.key : g.key + 1 }));
       replaced = progress.cards;
-    });
+    }, opts);
+    if ('aborted' in result) {
+      setBusy(false);
+      return;
+    }
     if ('error' in result) setCaption({ text: result.error, citations: [] });
     else {
       if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [] });
@@ -69,12 +74,12 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   };
   const clearFocus = useCallback(() => setFocus(null), []);
 
-  return { steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, play, done, lost, clearFocus };
+  return { steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, play, done, lost, clearFocus, ask };
 }
 
 export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGuide> }) {
   const { current, caption, busy, playing, focus, done, lost, clearFocus } = guide;
-  if (!current) return null;
+  if (!current) return caption.text ? <LiveCaptions text={caption.text} citations={caption.citations} /> : null;
   return (
     <LiveCaptions part={current.part} text={caption.text} citations={caption.citations}>
       {playing === 'refill' && <Text style={styles.caveat}>Ilustración: no muestra el nivel real del depósito.</Text>}

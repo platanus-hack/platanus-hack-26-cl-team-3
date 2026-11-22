@@ -13,21 +13,36 @@ export const DONE_REPLY = 'Listo, ¿qué sigue?';
 export const LOST_REPLY = 'No lo encuentro';
 
 export type TurnProgress = { parts: ViewPart[]; cards: ViewCard[]; status: string | null };
-export type TurnResult = { messages: AnthropicMessage[]; truncated: boolean } | { error: string };
+export type TurnResult = { messages: AnthropicMessage[]; truncated: boolean } | { error: string } | { aborted: true };
+export type TurnOptions = { image?: string; mode?: 'vivo'; signal?: AbortSignal };
 
 export async function sendTurn(
   history: AnthropicMessage[],
   text: string,
   run: typeof runTurn,
   onProgress: (progress: TurnProgress) => void,
+  opts?: TurnOptions,
 ): Promise<TurnResult> {
   const userMessage: AnthropicMessage = { role: 'user', content: text };
+  const requestMessage: AnthropicMessage = opts?.image
+    ? {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: opts.image } },
+          { type: 'text', text },
+        ],
+      }
+    : userMessage;
+  const aborted = () => opts?.signal?.aborted === true;
   const parts: ViewPart[] = [];
   const cards: ViewCard[] = [];
   let status: string | null = THINKING;
   let breakNext = false;
   try {
-    for await (const ev of run({ messages: [...history, userMessage] })) {
+    const request = { messages: [...history, requestMessage], ...(opts?.mode ? { mode: opts.mode } : {}), ...(opts?.signal ? { signal: opts.signal } : {}) };
+    for await (const ev of run(request)) {
+      if (ev.type === 'done') return { messages: [...history, userMessage, ...ev.messages], truncated: ev.truncated === true };
+      if (aborted()) return { aborted: true };
       if (ev.type === 'tool') {
         status = TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS;
         breakNext = true;
@@ -47,13 +62,12 @@ export async function sendTurn(
         parts[ev.block] ??= { text: '', citations: [] };
         const { title, source, cited_text } = ev;
         parts[ev.block] = { ...parts[ev.block], citations: [...parts[ev.block].citations, { title, source, cited_text }] };
-      } else if (ev.type === 'done') {
-        return { messages: [...history, userMessage, ...ev.messages], truncated: ev.truncated === true };
       } else {
         return { error: ev.message };
       }
       onProgress({ parts: parts.filter(Boolean), cards: [...cards], status });
     }
   } catch {}
+  if (aborted()) return { aborted: true };
   return { error: 'Error inesperado.' };
 }

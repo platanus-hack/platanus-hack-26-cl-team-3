@@ -6,11 +6,15 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 internal enum class InspectionAction(val duration: Float) {
-  HIGHLIGHT(3.2f), LIFT(5f), REFILL(10f);
+  HIGHLIGHT(3.2f), LIFT(5f), REFILL(10f), OPEN(6f);
 
   companion object {
     fun resolve(part: String, name: String) = entries.firstOrNull {
-      it.name.equals(name, ignoreCase = true) && (it != REFILL || part == "washer")
+      it.name.equals(name, ignoreCase = true) && when (it) {
+        OPEN -> part in openingParts
+        REFILL -> part == "washer"
+        else -> true
+      }
     }
   }
 }
@@ -20,14 +24,21 @@ internal data class InspectionFrame(
   val effects: List<ModelTriangle>, val brightness: Float,
 )
 
-private fun ease(time: Float, start: Float, end: Float): Float {
+internal fun ease(time: Float, start: Float, end: Float): Float {
   val t = ((time - start) / (end - start)).coerceIn(0f, 1f)
   return t * t * (3f - 2f * t)
+}
+
+internal fun swingWasherLid(point: EnginePoint, hinge: EnginePoint, amount: Float): EnginePoint {
+  val d = point - hinge
+  val angle = amount * 1.88f
+  return hinge + EnginePoint(d.x*cos(angle) - d.y*sin(angle), d.x*sin(angle) + d.y*cos(angle), d.z)
 }
 
 /** Animate in asset coordinates, then apply the same registration as the stationary mesh. */
 internal class InspectionPart(
   private val part: ModelPart, private val index: Int, private val source: List<ModelTriangle>,
+  private val openTray: List<ModelTriangle> = emptyList(),
   private val register: (EnginePoint) -> EnginePoint,
 ) {
   private val points = source.flatMap { listOf(it.a, it.b, it.c) }.distinct()
@@ -48,14 +59,17 @@ internal class InspectionPart(
   private val liquid = floatArrayOf(.13f,.73f,.89f)
   private val marker = floatArrayOf(.35f,.94f,.81f)
 
+  private val opening by lazy { ServiceOpening(part, index, source, register, hinge, mouthRing, openTray) }
+
   fun frame(action: InspectionAction, time: Float): InspectionFrame? {
     if (time < 0 || time >= action.duration) return null
     val pulse = sin(PI * time / 1.2).toFloat()
     val brightness = (.12f + .58f*pulse*pulse*(1-ease(time,2.1f,2.8f))) *
       (1 - ease(time, action.duration-.4f, action.duration))
     if (action == InspectionAction.HIGHLIGHT) return InspectionFrame(index, restingCenter, restingSurface, emptyList(), brightness)
+    if (action == InspectionAction.OPEN) return opening.frame(time, brightness)
     val lift = when (action) {
-      InspectionAction.HIGHLIGHT -> 0f
+      InspectionAction.HIGHLIGHT, InspectionAction.OPEN -> 0f
       InspectionAction.LIFT -> ease(time, .35f, 2f) * (1 - ease(time, 3.65f, 5f))
       InspectionAction.REFILL -> ease(time, 1.05f, 3.1f) * (1 - ease(time, 7.8f, 9.6f))
     }
@@ -65,18 +79,12 @@ internal class InspectionPart(
     val scale = 1 + lift * (.12f / size.coerceAtLeast(.07f)).coerceAtMost(1.35f)
     val offset = EnginePoint(-part.center.x * .62f, .17f, 0f) * lift
     fun place(p: EnginePoint) = register(part.center + (p - part.center) * scale + offset)
-    val cosine = cos(open * 1.88f)
-    val sine = sin(open * 1.88f)
-    fun lid(p: EnginePoint): EnginePoint {
-      val d = p - hinge
-      return hinge + EnginePoint(d.x*cosine - d.y*sine, d.x*sine + d.y*cosine, d.z)
-    }
     val surface = ArrayList<ModelTriangle>(source.size)
     val waterline = mutableSetOf<EnginePoint>()
     for (triangle in source) {
       if (open > 0f && triangle.primitive == 0 &&
         triangle.a in mouthRing && triangle.b in mouthRing && triangle.c in mouthRing) continue
-      fun vertex(p: EnginePoint) = place(if (open > 0 && triangle.primitive == 1) lid(p) else p)
+      fun vertex(p: EnginePoint) = place(if (open > 0 && triangle.primitive == 1) swingWasherLid(p, hinge, open) else p)
       if (refill && time > 4.35f && triangle.primitive == 0 && level > bottom) {
         // Split at the level so it rises continuously even on long, sparsely tessellated faces.
         val vertices = listOf(triangle.a, triangle.b, triangle.c)

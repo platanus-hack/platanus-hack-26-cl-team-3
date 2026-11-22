@@ -11,7 +11,15 @@ export const tokenHeaders = (): Record<string, string> => (CHAT_TOKEN ? { 'x-cha
 
 const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error', code, message });
 
-export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): AsyncGenerator<ChatEvent> {
+export async function* runTurn({
+  messages,
+  mode,
+  signal,
+}: {
+  messages: AnthropicMessage[];
+  mode?: 'vivo';
+  signal?: AbortSignal;
+}): AsyncGenerator<ChatEvent> {
   let res;
   try {
     res = await fetch(`${API_URL}/api/chat`, {
@@ -21,12 +29,15 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
         accept: 'text/event-stream',
         ...tokenHeaders(),
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, ...(mode ? { mode } : {}) }),
+      signal,
     });
   } catch {
+    if (signal?.aborted) return;
     yield failure('network', 'No me pude conectar con el servidor. Revisa tu conexión.');
     return;
   }
+  if (signal?.aborted) return;
   if (!res.ok || !res.body) {
     const message = await res
       .json()
@@ -52,5 +63,5 @@ export async function* runTurn({ messages }: { messages: AnthropicMessage[] }): 
       }
     }
   } catch {}
-  if (!finished) yield failure('network', 'La respuesta se cortó. Inténtalo de nuevo.');
+  if (!finished && !signal?.aborted) yield failure('network', 'La respuesta se cortó. Inténtalo de nuevo.');
 }

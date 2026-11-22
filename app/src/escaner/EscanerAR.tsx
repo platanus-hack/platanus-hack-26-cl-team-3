@@ -11,6 +11,7 @@
  *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas.
  *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -29,6 +30,8 @@ import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, ne
 import { InitialVisualScan } from './initial-visual-scan';
 import { PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
+import { vanoParaChat } from './vivo/foto';
+import { ModoVivo } from './vivo/ModoVivo';
 import { StepCounter } from './StepCounter';
 import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
@@ -70,7 +73,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0 }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number }) {
+export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const volumes = useMemo(() => map ? encodeVolumes(map.volumes) : [], [map]);
@@ -87,6 +90,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [targetRevision, setTargetRevision] = useState(0);
   const [capo, setCapo] = useState(0); // puntaje «capó abierto» de CLIP (solo debug)
   const [vano, setVano] = useState<Vano | null>(null); // en coordenadas del cuadro completo
+  const capturarVano = async () => {
+    if (!vano || !ar.current) return null;
+    const cap = await ar.current.capturar();
+    return vanoParaChat(cap.uri, vano);
+  };
   const [valido, setValido] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [tasa, setTasa] = useState({ validos: 0, total: 0 }); // análisis con contorno válido / análisis hechos
@@ -517,7 +525,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const errorAR = estadoAR?.estado === 'error' ? estadoAR.detalle : null;
   const controls = useScannerControls(!!(error || errorAR));
   const { debug } = controls;
-  sonnetAnchorRef.current = controls.sonnetAnchor;
+  useEffect(() => { sonnetAnchorRef.current = controls.sonnetAnchor; }, [controls.sonnetAnchor]);
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, focus } = cameraGuide;
@@ -640,6 +648,10 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                 ))}
               </ScrollView>
             )}
+            {outbackParts && selected === 'fuses' && (
+              <Boton texto="Ver fusibles por circuito" icono="fuse" variante="secundario"
+                onPress={() => router.push('/outback-fuses')} />
+            )}
             {fuseLink && (
               <Pressable
                 accessibilityRole="link"
@@ -759,6 +771,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           accessibilityLabel="Mantén presionado sobre el motor para ayudar a la detección"
         />
       )}
+      {vivo && <ModoVivo capturarVano={capturarVano} preguntar={(t, img, signal) => cameraGuide.ask(t, false, { image: img ?? undefined, mode: 'vivo', signal })} />}
       {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
       {editingMap && !error && !errorAR ? (
         <View style={[styles.editBar, { bottom: insets.bottom + espacio.m }]}>
