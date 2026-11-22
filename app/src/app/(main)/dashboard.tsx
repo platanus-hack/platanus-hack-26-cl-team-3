@@ -13,9 +13,11 @@ import { readDashboardPhoto } from '../../dashboard/photo';
 import { borrar } from '../../escaner/comun';
 import { color, espacio, tipo } from '../../theme';
 import { Boton, BotonIcono } from '../../ui';
+import { useGiroLibre } from '../../useGiroLibre';
 
 export default function Dashboard() {
   const { vehicle } = useVehicleSelection();
+  useGiroLibre(); // la cámara del tablero gira con el teléfono
   const { vehicleId = vehicle.id } = useLocalSearchParams<{ vehicleId?: string }>();
   const focused = useIsFocused();
   return focused && <DashboardScanner key={vehicleId} vehicleId={vehicleId} />;
