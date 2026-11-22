@@ -10,6 +10,7 @@ import { CONFIANZA_MIN } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
 import { useVehicleSelection } from '../plates/selection';
+import { useVivo } from './vivo/ModoVivo';
 import { GuideBanner } from './GuideBanner';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { vehicles } from '../vehicles';
@@ -62,21 +63,24 @@ export function useScannerControls(hasError: boolean) {
   };
 }
 
-export function ScannerControls({ controls, status, children, top, captions, step }: {
+export function ScannerControls({ controls, status, children, top, captions, step, conversation }: {
   controls: ReturnType<typeof useScannerControls>;
   status: string;
   children: ReactNode;
   top?: ReactNode;
   captions?: ReactNode;
+  conversation?: { enabled: boolean; ended: boolean; error: string; toggle: () => void };
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
+  const liveVoice = useVivo();
   const { mode, setMode, debug, toggleDebug, hasError, sonnetAnchor, toggleSonnetAnchor } = controls;
   const expanded = mode === 'details';
   const hidden = mode === 'hidden';
   const { vehicleId, instruction, part } = useLocalSearchParams<{vehicleId?: string; instruction?: string; part?: string}>();
   const { vehicle: selected } = useVehicleSelection();
   const vehicle = selected.id === vehicleId ? selected : vehicles.find((option) => option.id === vehicleId);
+  const guideInstruction = step?.instruction ?? (conversation?.ended ? undefined : instruction);
   const guidePart = part && Object.hasOwn(parts, part) ? part as PartId : undefined;
   return (
     <>
@@ -92,7 +96,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
           {expanded && (
             <ScrollView style={estilos.panel} contentContainerStyle={estilos.details} keyboardShouldPersistTaps="handled">
               {debug && vehicle && <Text style={tipo.nota}>{vehicle.name} {vehicle.year} · {vehicle.engine}</Text>}
-              {(step?.instruction ?? instruction) && <GuideBanner part={step?.part ?? guidePart} instruction={step?.instruction ?? instruction ?? ''} />}
+              {guideInstruction && <GuideBanner part={step?.part ?? guidePart} instruction={guideInstruction} />}
               {children}
               <View style={estilos.options}>
                 <Pressable accessibilityRole="switch" accessibilityState={{checked: debug}} onPress={toggleDebug}
@@ -113,13 +117,37 @@ export function ScannerControls({ controls, status, children, top, captions, ste
             </ScrollView>
           )}
           {!expanded && captions}
-          <Pressable accessibilityRole="button" accessibilityState={{expanded}}
-            accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
-            onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
-            <Icono nombre={hasError ? 'alert-circle-outline' : instruction ? 'message-text-outline' : 'line-scan'} tam={18} tono={hasError ? color.peligro : color.acento} />
-            <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
-            <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
-          </Pressable>
+          {!!conversation?.error && <Text accessibilityLiveRegion="polite" style={tipo.nota}>{conversation.error}</Text>}
+          {conversation && !conversation.enabled && (
+            <Boton texto={conversation.ended ? 'Empezar nueva conversación' : 'Empezar conversación'}
+              icono="message-processing-outline"
+              onPress={() => { setMode('compact'); conversation.toggle(); }} />
+          )}
+          <View pointerEvents="box-none" style={conversation?.enabled && estilos.liveFooter}>
+            {conversation?.enabled && (
+              <Pressable accessibilityRole="button" accessibilityLabel="Terminar conversación"
+                onPress={() => { setMode('compact'); conversation.toggle(); }}
+                style={({ pressed }) => [estilos.callControl, estilos.hangUp, pressed && { opacity: 0.75 }]}>
+                <Icono nombre="phone-hangup" tam={24} tono={color.peligro} />
+              </Pressable>
+            )}
+            <Pressable accessibilityRole="button" accessibilityState={{expanded}}
+              accessibilityLabel={expanded ? 'Cerrar detalles' : status + (instruction ? '. Abrir indicación y detalles' : '. Abrir detalles')}
+              onPress={() => setMode(expanded ? 'compact' : 'details')} style={estilos.status}>
+              <Icono nombre={hasError ? 'alert-circle-outline' : instruction ? 'message-text-outline' : 'line-scan'} tam={18} tono={hasError ? color.peligro : color.acento} />
+              <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
+              <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
+            </Pressable>
+            {conversation?.enabled && liveVoice && (
+              <Pressable accessibilityRole="button"
+                accessibilityLabel={liveVoice.silenciado ? 'Reactivar micrófono' : 'Silenciar micrófono'}
+                onPress={liveVoice.alternarSilencio}
+                style={({ pressed }) => [estilos.callControl, estilos.microphone, !liveVoice.silenciado && estilos.liveMic, pressed && { opacity: 0.75 }]}>
+                <Icono nombre={liveVoice.silenciado ? 'microphone-off' : 'microphone'} tam={24}
+                  tono={liveVoice.silenciado ? color.peligro : color.texto} />
+              </Pressable>
+            )}
+          </View>
         </View>
       )}
     </>
@@ -229,6 +257,12 @@ export const estilos = StyleSheet.create({
   chipActivo: { backgroundColor: color.acento, borderColor: color.acento },
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
   dock: { position: 'absolute', left: espacio.l, right: espacio.l, maxHeight: '55%', gap: espacio.s },
+  liveFooter: { justifyContent: 'center', minHeight: 48, paddingHorizontal: 48 + espacio.s },
+  hangUp: { left: 0 },
+  microphone: { right: 0 },
+  liveMic: { borderWidth: 2, borderColor: color.exito },
+  callControl: { position: 'absolute', top: 0, width: 48, height: 48, borderRadius: 24,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.velo },
   status: { alignSelf: 'center', maxWidth: '100%', minHeight: 44, borderRadius: 24, paddingHorizontal: espacio.l,
     flexDirection: 'row', alignItems: 'center', gap: espacio.s, backgroundColor: color.velo },
   statusText: { color: color.texto, fontSize: 14, fontWeight: '700', flexShrink: 1 },

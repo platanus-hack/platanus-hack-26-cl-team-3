@@ -8,9 +8,11 @@ import { identifiedVehicle, lookupPlate, normalizePlate, type PlateRecord } from
 import { useVehicleSelection } from '../plates/selection';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono } from '../ui';
+import { useGiroLibre } from '../useGiroLibre';
 
 export default function RecognizeVehicle() {
   const insets = useSafeAreaInsets();
+  useGiroLibre(); // la cámara de la patente gira con el teléfono
   const focused = useIsFocused();
   const { setVehicle } = useVehicleSelection();
   const [scanning, setScanning] = useState(true);

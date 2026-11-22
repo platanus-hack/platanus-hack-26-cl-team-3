@@ -1,20 +1,21 @@
 import type { runTurn } from './client';
 import type { AnthropicMessage } from './contract';
-import { toCard, type ViewCard, type ViewPart } from './history';
+import { toCard, type ViewCard, type ViewFuse, type ViewPart } from './history';
 
 const TOOL_STATUS: Record<string, string> = {
   lookup_fuses: 'Revisando la tabla de fusibles…',
   lookup_parts: 'Buscando la pieza…',
   show_in_camera: 'Preparando la cámara…',
+  show_fuse: 'Marcando el fusible…',
 };
 const DEFAULT_TOOL_STATUS = 'Consultando el manual…';
 export const THINKING = 'Pensando…';
 export const DONE_REPLY = 'Listo, ¿qué sigue?';
 export const LOST_REPLY = 'No lo encuentro';
 
-export type TurnProgress = { parts: ViewPart[]; cards: ViewCard[]; status: string | null };
+export type TurnProgress = { parts: ViewPart[]; cards: ViewCard[]; fuses: ViewFuse[]; status: string | null };
 export type TurnResult = { messages: AnthropicMessage[]; truncated: boolean } | { error: string } | { aborted: true };
-export type TurnOptions = { image?: string; mode?: 'vivo'; signal?: AbortSignal };
+export type TurnOptions = { vehicleId?: string; image?: string; mode?: 'vivo'; signal?: AbortSignal };
 
 export async function sendTurn(
   history: AnthropicMessage[],
@@ -36,6 +37,7 @@ export async function sendTurn(
   const aborted = () => opts?.signal?.aborted === true;
   const parts: ViewPart[] = [];
   const cards: ViewCard[] = [];
+  const fuses: ViewFuse[] = [];
   let status: string | null = THINKING;
   let breakNext = false;
   try {
@@ -50,6 +52,8 @@ export async function sendTurn(
         const card = toCard(ev.part, ev.instruction, ev.action);
         if (!card) continue;
         cards.push(card);
+      } else if (ev.type === 'fuse') {
+        fuses.push({ box: ev.box, numbers: ev.numbers, instruction: ev.instruction });
       } else if (ev.type === 'text') {
         status = null;
         if (!parts[ev.block]) {
@@ -65,7 +69,7 @@ export async function sendTurn(
       } else {
         return { error: ev.message };
       }
-      onProgress({ parts: parts.filter(Boolean), cards: [...cards], status });
+      onProgress({ parts: parts.filter(Boolean), cards: [...cards], fuses: [...fuses], status });
     }
   } catch {}
   if (aborted()) return { aborted: true };

@@ -9,6 +9,11 @@ import { AppState, StyleSheet, View } from 'react-native';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { poligonoVano, Suavizador, tramos, type Vano } from '../detector/vano';
 import { color } from '../theme';
+import { GuideCaptions, useCameraGuide } from './CameraGuide';
+import { useScannerConversation } from './useScannerConversation';
+import { ProveedorVivo } from './vivo/ModoVivo';
+import { EstadoVozPantalla } from './vivo/EstadoVozPantalla';
+import { vanoParaChat } from './vivo/foto';
 import { Boton } from '../ui';
 import {
   ScannerControls, useScannerControls, borrar, Detalle, Encabezado, esperar, estilos, LineaDebug, Medidor, PuntajeCapo, SUAVIZADO, vanoValido,
@@ -31,7 +36,7 @@ function elegirTamano(tamanos: string[]): string | undefined {
 
 type Tam = { ancho: number; alto: number };
 
-export default function EscanerCamara() {
+export default function EscanerCamara({ vehicleId, initialLive }: { vehicleId?: string; initialLive: boolean }) {
   const camara = useRef<CameraView>(null);
   const [camaraLista, setCamaraLista] = useState(false);
   const [tamanoFoto, setTamanoFoto] = useState<string>();
@@ -45,6 +50,22 @@ export default function EscanerCamara() {
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
+
+  const guide = useCameraGuide([], 0, () => {}, vehicleId);
+  const conversation = useScannerConversation(initialLive, activa, guide, vehicleId);
+  const pendingFrame = useRef<((uri: string, bay: Vano) => Promise<void>) | null>(null);
+  const captureBay = () => new Promise<string | null>(resolve => {
+    if (!vanoValido(vano)) return resolve(null);
+    const capture = async (uri: string, bay: Vano) => {
+      clearTimeout(timeout);
+      resolve(await vanoParaChat(uri, bay).catch(() => null));
+    };
+    const timeout = setTimeout(() => {
+      if (pendingFrame.current === capture) pendingFrame.current = null;
+      resolve(null);
+    }, 1000);
+    pendingFrame.current = capture;
+  });
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => setActiva(s === 'active'));
@@ -84,13 +105,21 @@ export default function EscanerCamara() {
           let r;
           try {
             r = await analizarFoto(captura.uri);
+            const bay = poligonoVano(suavizador.agregar(r.vano));
+            if (vivo) {
+              setVano(bay);
+              if (pendingFrame.current && bay && vanoValido(bay)) {
+                const capture = pendingFrame.current;
+                pendingFrame.current = null;
+                await capture(captura.uri, bay);
+              }
+            }
           } finally {
             borrar(captura.uri);
           }
           if (!vivo) break;
           fallos = 0;
           setCapo(puntajeCapo.agregar(r.puntaje).media);
-          setVano(poligonoVano(suavizador.agregar(r.vano)));
           setFoto({ ancho: r.ancho, alto: r.alto });
           setMs(Date.now() - t0);
         } catch (e) {
@@ -126,49 +155,53 @@ export default function EscanerCamara() {
   const mostrarVano = detectado && !!foto && !!vista;
 
   return (
-    <View style={estilos.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
-      <CameraView
-        ref={camara}
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        active={activa}
-        animateShutter={false}
-        pictureSize={tamanoFoto}
-        onCameraReady={alEstarLista}
-        onMountError={(e) => setError(`No se pudo abrir la cámara. ${e.message}`)}
-      />
-      {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
-      <ScannerControls controls={controls} status={status}>
-        {error ? (
-          <>
-            <Encabezado icono="alert-circle-outline" tono={color.peligro} titulo="Algo falló" />
-            <Detalle>{error}</Detalle>
-            <Boton texto="Reintentar" icono="refresh" onPress={reintentar} estilo={{ marginTop: 12 }} />
-          </>
-        ) : cargando ? (
-          <>
-            <Encabezado cargando titulo={modeloListo ? 'Iniciando cámara…' : 'Preparando el reconocimiento…'} />
-          </>
-        ) : (
-          <>
-            <Encabezado
-              icono={detectado ? 'vector-polygon' : 'line-scan'}
-              tono={tono}
-              titulo={!detectado ? 'Encuadra el motor desde arriba' : vano.cortado ? 'Aléjate para ver todo el motor' : 'Motor detectado'}
-            />
-            <Detalle>{debug ? 'Sin ARCore: el contorno sigue la cámara.' : 'El contorno sigue la cámara.'}</Detalle>
-            {debug && <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />}
-            {debug && (
-              <LineaDebug
-                texto={`Debug · sin AR · vano ${vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'} · capó ${Math.round(
-                  (capo ?? 0) * 100,
-                )} %${ms !== null ? ` · ${ms} ms` : ''}`}
+    <ProveedorVivo enabled={conversation.enabled} activo={conversation.listening} capturarVano={captureBay} preguntar={conversation.ask}>
+      <View style={estilos.raiz} onLayout={(e) => setVista({ ancho: e.nativeEvent.layout.width, alto: e.nativeEvent.layout.height })}>
+        <CameraView
+          ref={camara}
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          active={activa}
+          animateShutter={false}
+          pictureSize={tamanoFoto}
+          onCameraReady={alEstarLista}
+          onMountError={(e) => setError(`No se pudo abrir la cámara. ${e.message}`)}
+        />
+        {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
+        {conversation.listening && <EstadoVozPantalla pensando={guide.caption.pensando} />}
+        <ScannerControls controls={controls} status={status} conversation={conversation}
+          captions={<GuideCaptions guide={guide} />} step={guide.current}>
+          {error ? (
+            <>
+              <Encabezado icono="alert-circle-outline" tono={color.peligro} titulo="Algo falló" />
+              <Detalle>{error}</Detalle>
+              <Boton texto="Reintentar" icono="refresh" onPress={reintentar} estilo={{ marginTop: 12 }} />
+            </>
+          ) : cargando ? (
+            <>
+              <Encabezado cargando titulo={modeloListo ? 'Iniciando cámara…' : 'Preparando el reconocimiento…'} />
+            </>
+          ) : (
+            <>
+              <Encabezado
+                icono={detectado ? 'vector-polygon' : 'line-scan'}
+                tono={tono}
+                titulo={!detectado ? 'Encuadra el motor desde arriba' : vano.cortado ? 'Aléjate para ver todo el motor' : 'Motor detectado'}
               />
-            )}
-          </>
-        )}
-      </ScannerControls>
-    </View>
+              <Detalle>{debug ? 'Sin ARCore: el contorno sigue la cámara.' : 'El contorno sigue la cámara.'}</Detalle>
+              {debug && <Medidor puntaje={vano?.confianza ?? 0} tono={tono} />}
+              {debug && (
+                <LineaDebug
+                  texto={`Debug · sin AR · vano ${vano ? `${Math.round(vano.area * 100)} % · ${vano.esquinas.length} esquinas` : '–'} · capó ${Math.round(
+                    (capo ?? 0) * 100,
+                  )} %${ms !== null ? ` · ${ms} ms` : ''}`}
+                />
+              )}
+            </>
+          )}
+        </ScannerControls>
+      </View>
+    </ProveedorVivo>
   );
 }
 

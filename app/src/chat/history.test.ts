@@ -98,3 +98,29 @@ test('toView creates an assistant bubble when a card has no bubble to join', () 
   assert.deepEqual(v[1].parts, []);
   assert.deepEqual(v[1].cards, [{ part: 'oil_cap', instruction: 'Busca la tapa.' }]);
 });
+
+test('toView reads show_fuse tool_use into the assistant bubble', () => {
+  const fuseCall = (input: unknown) => ({ type: 'tool_use', id: 'f1', name: 'show_fuse', input });
+  const v = toView([
+    { role: 'user', content: 'no sale agua' },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Revisa el fusible.' },
+        fuseCall({ box: 'motor', numbers: [37], instruction: '  Revisa este.  ' }),
+        fuseCall({ box: 'techo', numbers: [1], instruction: 'x' }),
+      ],
+    },
+  ]);
+  assert.deepEqual(v[0].fuses, []);
+  assert.deepEqual(v[1].fuses, [{ box: 'engine', numbers: [37], instruction: 'Revisa este.' }]);
+});
+
+test('rejected calls and unknown slots cannot create fuse links on replay', () => {
+  const call = (id: string, number: number) => ({ type: 'tool_use', id, name: 'show_fuse', input: { box: 'motor', numbers: [number], instruction: 'Inspect' } });
+  const bubbles = toView([
+    { role: 'assistant', content: [call('invalid', 999), call('rejected', 5), call('accepted', 6)] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'rejected', is_error: true }] },
+  ]);
+  assert.deepEqual(bubbles[0].fuses.map(fuse => fuse.numbers), [[6]]);
+});

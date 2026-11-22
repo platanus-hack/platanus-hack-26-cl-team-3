@@ -37,9 +37,8 @@ el índice con él ya corriendo.
   si llega en español se traducen 162 palabras y 33 expresiones del auto (`api/src/manual/glossary.ts`: sapito, varilla, ampolleta, «luz de reserva»…).
 - `leer_manual { page, count? }`: desde una página y hasta 2 siguientes. `page` es la numeración impresa («11-9»); las
   portadas, el índice y la contratapa no la traen y se piden como `pdf:566`.
-- Cada página sale como un `search_result` con cita habilitada: `source` `manual://subaru-outback-2016-us/11-11` y título
-  «… — p. 11-11 · Maintenance and service/Engine oil». Antes de las páginas va un aviso con la edición, que es copia de
-  terceros y que el auto es 3.6 L (reglas 5 y 6).
+- Each returned page is a citation-enabled `search_result` with its manual URI and printed page title.
+  A separate application source follows the pages with the edition, third-party provenance and engine guidance.
 - `api/src/chat/system-prompt.ts` les pide buscar en inglés, usar solo lo marcado 3.6 L o común, citar la página impresa
   y confirmar los datos críticos con el manual físico.
 

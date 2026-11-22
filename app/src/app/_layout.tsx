@@ -25,8 +25,8 @@ export default function Layout() {
                 animationDuration: 155,
               }}
             />
+            <AvisoPrimerUso />
           </VehicleSelection>
-          <AvisoPrimerUso />
         </View>
       </ProveedorAviso>
     </SafeAreaProvider>

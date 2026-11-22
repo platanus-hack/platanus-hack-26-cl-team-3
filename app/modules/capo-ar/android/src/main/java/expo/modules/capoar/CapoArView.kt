@@ -675,6 +675,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           )
           if (previousVisualOutlines.isNotEmpty()) r["previousVisualOutlines"] = previousVisualOutlines
           if (measure && referenceId != null) r["captureReference"] = referenceId
+          // Posición de la cámara (m) en esa referencia: el escaneo inicial mide cuánto se movió el usuario (paralaje).
+          pose?.let { r["camaraRef"] = it.cameraInReference.translation.map { v -> v.toDouble() } }
           val visual = capture?.visualPose
           if (visual != null && capture != null) {
             r["visualLandmarks"] = visual.observations.size
