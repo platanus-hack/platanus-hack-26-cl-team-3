@@ -16,6 +16,7 @@ const boxNames = { engine: 'Motor', cabin: 'Habitáculo' };
 const boxIds = ['engine', 'cabin'] as const;
 
 function fuseName(fuse: OutbackFuse) {
+  if (fuse.number === 'A') return 'Fusible principal A';
   return fuse.amps == null ? `Posición ${fuse.number}` : `Fusible ${fuse.number} · ${fuse.amps} A`;
 }
 
@@ -29,7 +30,7 @@ export default function OutbackFuses() {
 function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: FuseBox; initialFuse?: OutbackFuse; initialQuery: string }) {
   const [box, setBox] = useState(initialBox);
   const [selected, setSelected] = useState(initialFuse);
-  const [engineView, setEngineView] = useState<'photo' | 'diagram'>('photo');
+  const [engineView, setEngineView] = useState<'photo' | 'diagram'>(initialFuse ? 'diagram' : 'photo');
   const [zoomed, setZoomed] = useState(false);
   const [query, setQuery] = useState(initialQuery);
   const [linkError, setLinkError] = useState(false);
@@ -41,13 +42,14 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
   const photo = box === 'engine' && engineView === 'photo';
   const diagram = photo ? engineFusePhoto : guide;
   const viewport = photo && zoomed ? { x: .30, y: .24, width: .40, height: .61 } : { x: 0, y: 0, width: 1, height: 1 };
-  const regionName = (fuse: OutbackFuse) => fuse.amps == null ? 'Posición vacía' : fuse.label;
+  const regionName = (fuse: OutbackFuse) => fuse.label === 'Empty' ? 'Posición vacía' : fuse.label;
 
   function select(fuse: OutbackFuse) {
     Keyboard.dismiss();
     setQuery('');
     setBox(fuse.box);
     setSelected(fuse);
+    if (fuse.number === 'A') setEngineView('diagram');
     scroll.current?.scrollTo({ y: 0, animated: false });
   }
 
@@ -95,7 +97,7 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
                 top: `${-100 * viewport.y / viewport.height}%`, width: `${100 / viewport.width}%`,
                 height: `${100 / viewport.height}%` }} resizeMode="stretch" accessible={false} />
             {slots.map(fuse => {
-              const bounds = photo ? engineFusePhoto.bounds[fuse.number] : fuse;
+              const bounds = photo ? (typeof fuse.number === 'number' ? engineFusePhoto.bounds[fuse.number] : undefined) : fuse;
               if (!bounds) return null;
               return <Pressable key={fuse.number}
               accessibilityRole="button" accessibilityLabel={`${fuseName(fuse)}, ${fuse.description}`}
@@ -111,7 +113,7 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
             <Text style={styles.selectedTitle}>{fuseName(selected)} · {boxNames[selected.box]}</Text>
             <Text style={tipo.cuerpo}>{selected.description}</Text>
             {selected.amps != null && <Text style={tipo.nota}>{selected.label}</Text>}
-            {selected.box === 'engine' && engineFusePhoto.emptySlots.includes(selected.number) &&
+            {selected.box === 'engine' && typeof selected.number === 'number' && engineFusePhoto.emptySlots.includes(selected.number) &&
               <Text style={tipo.nota}>Esta posición está vacía en la foto del auto de prueba. La asignación y el amperaje corresponden al manual.</Text>}
           </View> : <Text style={tipo.nota}>Toca una posición del diagrama o un circuito de la lista.</Text>}
           <Pressable accessibilityRole="link" onPress={() => {

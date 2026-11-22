@@ -1,3 +1,4 @@
+import { resolveFuseSource } from '../../../api/src/data/fuse-catalog';
 import { outbackFuses } from '../engine-maps/outback-fuses';
 import { toCard, type ViewCard, type ViewCitation } from './history';
 
@@ -14,6 +15,10 @@ export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string
 
 /** The fuse tool cites whole rows. A citation spanning multiple rows opens the panel without selecting one. */
 export function fuseCitationRoute(citation: ViewCitation) {
+  const target = resolveFuseSource(citation.source);
+  if (target?.vehicle === 'outback') {
+    return { pathname: '/outback-fuses' as const, params: { box: target.slot.box, fuse: String(target.slot.number) } };
+  }
   if (citation.source !== 'fusibles://outback-2016-3.6r/cabina') return null;
   const tokens = (citation.cited_text ?? '').matchAll(/\b(?:fusible-cabina-|fusible\s+)(\d+)\b/gi);
   const numbers = [...new Set(Array.from(tokens, match => Number(match[1])))];

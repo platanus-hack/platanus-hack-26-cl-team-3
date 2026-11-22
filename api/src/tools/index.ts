@@ -2,6 +2,7 @@ import type { Tool as ToolDefinition, ToolResultBlockParam } from "@anthropic-ai
 import type { ChatEvent } from "../chat/contract";
 import { buscarManual } from "./buscar-manual";
 import { leerManual } from "./leer-manual";
+import { catalogForVehicle } from "../data/fuse-catalog";
 import { lookupFuses } from "./lookup-fuses";
 import { lookupParts } from "./lookup-parts";
 import { showInCamera } from "./show-in-camera";
@@ -21,8 +22,9 @@ export interface Tool {
 export type ToolRegistry = Record<string, Tool>;
 
 export function toolsFor(profile: VehicleProfile): ToolRegistry {
+  const catalog = catalogForVehicle(profile.id);
   const list: Tool[] = [
-    ...(profile.fuses ? [lookupFuses] : []),
+    ...(catalog ? [lookupFuses(catalog)] : []),
     ...(profile.parts.length > 0 ? [lookupParts(profile), showInCamera(profile)] : []),
     ...(profile.manual ? [buscarManual, leerManual] : []),
   ];

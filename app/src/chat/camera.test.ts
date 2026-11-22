@@ -27,3 +27,11 @@ test('a window citation opens its cabin slot and preserves ambiguous references'
   assert.deepEqual(fuseCitationRoute({ ...citation, cited_text: 'Fusible 11, Fusible 24' })?.params, { box: 'cabin' });
   assert.equal(fuseCitationRoute({ ...citation, source: 'unrelated' }), null);
 });
+
+test('an exact citation opens the original panel and position independently of quoted text', () => {
+  const route = (key: string) => fuseCitationRoute({ source: 'fusibles://outback-2016-3.6r/' + key, title: '', cited_text: '' });
+  assert.deepEqual(route('engine/17')?.params, { box: 'engine', fuse: '17' });
+  assert.deepEqual(route('cabin/17')?.params, { box: 'cabin', fuse: '17' });
+  assert.deepEqual(route('engine/A')?.params, { box: 'engine', fuse: 'A' });
+  for (const invalid of ['cabin/A', 'engine/017', 'engine/99', 'cabin/17/extra']) assert.equal(route(invalid), null);
+});

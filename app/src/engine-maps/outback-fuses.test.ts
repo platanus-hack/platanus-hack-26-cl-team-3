@@ -34,11 +34,11 @@ test('returns supported window circuits without selecting an arbitrary member of
 test('each diagram assigns a distinct contained hit area to all 38 numbered positions', () => {
   for (const box of ['engine', 'cabin'] as const) {
     const slots = outbackFuses.filter(f => f.box === box);
-    assert.deepEqual(slots.map(f => f.number), Array.from({ length: 38 }, (_, i) => i + 1));
+    assert.deepEqual(slots.filter(f => typeof f.number === 'number').map(f => f.number), Array.from({ length: 38 }, (_, i) => i + 1));
     for (const fuse of slots) {
       assert.ok(fuse.x >= 0 && fuse.y >= 0 && fuse.width > 0 && fuse.height > 0);
       assert.ok(fuse.x + fuse.width <= 1 && fuse.y + fuse.height <= 1);
-      for (const other of slots.slice(fuse.number)) {
+      for (const other of slots.slice(slots.indexOf(fuse) + 1)) {
         assert.ok(fuse.x + fuse.width <= other.x || other.x + other.width <= fuse.x ||
           fuse.y + fuse.height <= other.y || other.y + other.height <= fuse.y);
       }

@@ -1,8 +1,0 @@
-[
-  { "box": "cabina", "number": 6, "amps": 20, "circuit": "P/W R.LH", "part_id": "fusible-cabina-6", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 529 },
-  { "box": "cabina", "number": 11, "amps": 30, "circuit": "P/W MAIN1", "part_id": "fusible-cabina-11", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 529 },
-  { "box": "cabina", "number": 16, "amps": 20, "circuit": "P/W R.RH", "part_id": "fusible-cabina-16", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 529 },
-  { "box": "cabina", "number": 21, "amps": 20, "circuit": "P/W PASS1", "part_id": "fusible-cabina-21", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 529 },
-  { "box": "cabina", "number": 24, "amps": 20, "circuit": "P/W MAIN2", "part_id": "fusible-cabina-24", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 530 },
-  { "box": "cabina", "number": 29, "amps": 20, "circuit": "P/W PASS2", "part_id": "fusible-cabina-29", "source": "Manual Subaru Outback 2016 para Norteamérica (MSA5M1603C)", "page": 530 }
-]
