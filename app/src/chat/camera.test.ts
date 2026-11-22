@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { toCard } from './history';
-import { cameraRoute, fuseCitationRoute } from './camera';
+import { cameraRoute, fuseCitationRoute, fuseRoute } from './camera';
 
 test('cameraRoute points to /escanear with the vehicle, part and instruction', () => {
   const card = { part: 'washer' as const, instruction: 'Busca la tapa amarilla.' };
@@ -36,4 +36,9 @@ test('an engine-box citation opens its engine slot', () => {
   };
   assert.deepEqual(fuseCitationRoute(citation)?.params, { box: 'engine', fuse: '37' });
   assert.deepEqual(fuseCitationRoute({ ...citation, cited_text: 'Fusible 37, Fusible 38' })?.params, { box: 'engine' });
+});
+
+test('fuseRoute points to /outback-fuses with the box and the fuse number', () => {
+  assert.deepEqual(fuseRoute('engine', 37), { pathname: '/outback-fuses', params: { box: 'engine', fuse: '37' } });
+  assert.deepEqual(fuseRoute('cabin', 6), { pathname: '/outback-fuses', params: { box: 'cabin', fuse: '6' } });
 });

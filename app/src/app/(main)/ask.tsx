@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cargarAjustes } from '../../ajustes';
 import { cameraRoute } from '../../chat/camera';
+import { FuseLinks } from '../../chat/FuseLinks';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
 import { runTurn } from '../../chat/client';
@@ -13,7 +14,7 @@ import { crearCortador, frasesDe } from '../../chat/frases';
 import { useVoz } from '../../chat/useVoz';
 import { Dictado } from '../../chat/Dictado';
 import type { AnthropicMessage } from '../../chat/contract';
-import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../../chat/history';
+import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewFuse, type ViewPart } from '../../chat/history';
 import { useVehicleSelection } from '../../plates/selection';
 import { vehicles } from '../../vehicles';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../../chat/turn';
@@ -37,6 +38,7 @@ export default function Ask() {
   const [question, setQuestion] = useState<string | null>(null);
   const [live, setLive] = useState<ViewPart[]>([]);
   const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
+  const [liveFuses, setLiveFuses] = useState<ViewFuse[]>([]);
   const [replies, setReplies] = useState(false);
   const openedCamera = useRef(false);
   const openedHistory = useRef(false);
@@ -112,10 +114,10 @@ export default function Ask() {
 
   const bubbles = useMemo(() => {
     const b: Bubble[] = toView(messages);
-    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [] });
-    if (live.length > 0 || liveCards.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards });
+    if (question !== null) b.push({ role: 'user', parts: [{ text: question, citations: [] }], cards: [], fuses: [] });
+    if (live.length > 0 || liveCards.length > 0 || liveFuses.length > 0) b.push({ role: 'assistant', parts: live, cards: liveCards, fuses: liveFuses });
     return b;
-  }, [messages, question, live, liveCards]);
+  }, [messages, question, live, liveCards, liveFuses]);
 
   const send = useCallback(async (override?: string) => {
     const text = (override ?? input).trim();
@@ -132,6 +134,7 @@ export default function Ask() {
     setQuestion(text);
     setLive([]);
     setLiveCards([]);
+    setLiveFuses([]);
     setStatus(THINKING);
     setBusy(true);
     callar();
@@ -144,6 +147,7 @@ export default function Ask() {
         if (vozChatRef.current) decir(cortador.current.push(progress.parts.map((p) => p.text).join('\n')));
         setLive(progress.parts);
         setLiveCards(progress.cards);
+        setLiveFuses(progress.fuses);
         setStatus(progress.status);
       });
       if ('messages' in result) await save(result.messages);
@@ -161,6 +165,7 @@ export default function Ask() {
     setQuestion(null);
     setLive([]);
     setLiveCards([]);
+    setLiveFuses([]);
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
@@ -219,7 +224,8 @@ export default function Ask() {
         )}
         {bubbles.map((b, i) => (
           <BubbleView
-            key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0) && i === bubbles.length - 1}
+            key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0 || liveFuses.length > 0) && i === bubbles.length - 1}
+            showFuses={chatVehicleId === 'outback'}
             onCitation={setCitation}
             onCamera={openCamera}
             voz={vozChat ? { sonando: sonando === i && hablando, onPress: (texto) => alternarVoz(i, texto) } : undefined}
@@ -290,6 +296,7 @@ export default function Ask() {
 function BubbleView({
   bubble,
   streaming,
+  showFuses,
   onCitation,
   onCamera,
   voz,
@@ -297,6 +304,7 @@ function BubbleView({
   bubble: Bubble;
   voz?: { sonando: boolean; onPress: (texto: string) => void };
   streaming: boolean;
+  showFuses: boolean;
   onCitation: (c: ViewCitation) => void;
   onCamera: (card: ViewCard, cards: ViewCard[]) => void;
 }) {
@@ -342,6 +350,9 @@ function BubbleView({
         </GuideChoice>
       ) : (
         text
+      )}
+      {!mine && showFuses && bubble.fuses.length > 0 && (
+        <FuseLinks fuses={bubble.fuses} disabled={streaming} />
       )}
     </View>
   );

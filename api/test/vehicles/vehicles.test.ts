@@ -43,16 +43,16 @@ const send = async (extra: object) => {
 
 const toolNames = (a: AdapterArgs) => a.tools.map((t) => (t as { name: string }).name);
 
-test("el prompt del Outback es idéntico byte a byte al de antes", () => {
+test("el prompt del Outback es idéntico byte a byte al fixture", () => {
   const expected = readFileSync(join(process.cwd(), "test/chat/fixtures/outback-prompt.txt"), "utf8");
   assert.equal(SYSTEM_PROMPT, expected);
   assert.equal(systemPrompt(profiles.outback), expected);
 });
 
-test("sin vehicle_id: prompt del Outback y las 5 tools", async () => {
+test("sin vehicle_id: prompt del Outback y las 6 tools", async () => {
   await send({});
   assert.equal(calls[0].system, SYSTEM_PROMPT);
-  assert.deepEqual(toolNames(calls[0]), ["lookup_fuses", "lookup_parts", "show_in_camera", "buscar_manual", "leer_manual"]);
+  assert.deepEqual(toolNames(calls[0]), ["lookup_fuses", "show_fuse", "lookup_parts", "show_in_camera", "buscar_manual", "leer_manual"]);
 });
 
 test("swift: prompt del Swift sin Outback y solo lookup_parts y show_in_camera", async () => {
@@ -103,4 +103,11 @@ test("modo vivo usa las herramientas del auto, sin nombrar las del Outback", asy
   await send({ vehicle_id: "swift", mode: "vivo" });
   assert.match(calls[0].system, /salen solo de tus herramientas/);
   assert.doesNotMatch(calls[0].system, /buscar_manual|lookup_fuses/);
+});
+
+test("show_fuse solo existe en el Outback", () => {
+  assert.ok(toolsFor(profiles.outback).show_fuse);
+  assert.equal(toolsFor(profiles.swift).show_fuse, undefined);
+  assert.equal(toolsFor(genericProfile("x")).show_fuse, undefined);
+  assert.doesNotMatch(systemPrompt(profiles.swift), /show_fuse/);
 });

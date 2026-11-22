@@ -1,5 +1,5 @@
 import { outbackFuses } from '../engine-maps/outback-fuses';
-import { toCard, type ViewCard, type ViewCitation } from './history';
+import { toCard, type ViewCard, type ViewCitation, type ViewFuse } from './history';
 
 export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string) => ({
   pathname: '/escanear' as const,
@@ -10,6 +10,11 @@ export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string
     ...(card.action ? { action: card.action } : {}),
     ...(steps.length > 1 ? { steps: JSON.stringify(steps), step: String(Math.max(steps.indexOf(card), 0)) } : {}),
   },
+});
+
+export const fuseRoute = (box: ViewFuse['box'], number: number) => ({
+  pathname: '/outback-fuses' as const,
+  params: { box, fuse: String(number) },
 });
 
 /** The fuse tool cites whole rows. A citation spanning multiple rows opens the panel without selecting one. */

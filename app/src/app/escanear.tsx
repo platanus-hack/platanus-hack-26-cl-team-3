@@ -51,5 +51,5 @@ export default function Escanear() {
 
   if (!permiso || conAR === null) return <View style={estilos.raiz} />;
   if (!permiso.granted) return <PantallaPermiso puedePreguntar={permiso.canAskAgain} pedir={pedirPermiso} />;
-  return conAR ? <EscanerAR key={JSON.stringify([vehicle?.id, guidePart, action])} vehicle={vehicle} initialPart={guidePart} steps={guide.steps} initialStep={guide.step} vivo={vivo === '1'} /> : <EscanerCamara vehicleId={vehicle?.id} initialLive={vivo === '1'} />;
+  return conAR ? <EscanerAR key={JSON.stringify([vehicle?.id, guidePart, action])} vehicle={vehicle} initialPart={guidePart} steps={guide.steps} initialStep={guide.step} vivo={vivo === '1'} /> : <EscanerCamara key={vehicle?.id} vehicleId={vehicle?.id} initialLive={vivo === '1'} />;
 }

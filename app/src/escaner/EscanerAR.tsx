@@ -11,7 +11,6 @@
  *    - «Recalibrar»: vuelve a reconocer desde donde está el teléfono y reemplaza las anclas.
  *    - «Empezar de nuevo»: suelta las anclas y vuelve a buscar.
  */
-import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking, PixelRatio, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -32,6 +31,7 @@ import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, ne
 import { GuiaMovimiento } from './GuiaMovimiento';
 import { InitialVisualScan, type ScanProgress } from './initial-visual-scan';
 import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
+import { FuseLinks } from '../chat/FuseLinks';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
 import { useScannerConversation } from './useScannerConversation';
@@ -100,7 +100,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
-  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1));
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id);
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -721,8 +721,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               </ScrollView>
             )}
             {outbackParts && selected === 'fuses' && (
-              <Boton texto="Ver fusibles por circuito" icono="fuse" variante="secundario"
-                onPress={() => router.push('/outback-fuses')} />
+              <FuseLinks fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
             )}
             {fuseLink && (
               <Pressable
