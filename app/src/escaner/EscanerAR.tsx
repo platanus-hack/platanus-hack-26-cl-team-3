@@ -101,7 +101,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const initialIndex = map?.volumes.findIndex((volume) => volume.part === initialPart) ?? -1;
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const selected = map?.volumes[selectedIndex]?.part;
-  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id);
+  const cameraGuide = useCameraGuide(steps, initialStep, (card) => setSelectedIndex(map?.volumes.findIndex((volume) => volume.part === card.part) ?? -1), vehicle?.id, initialLive);
   const ar = useRef<VistaARRef>(null);
   const guide = useRef<PartGuideRef>(null);
   const [estadoAR, setEstadoAR] = useState<EstadoAR | null>(null);
@@ -722,7 +722,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
               </ScrollView>
             )}
             {selected === 'fuses' && fuseGuideFor(vehicle?.id) && (
-              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
+              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse={!cameraGuide.waitingForFuseStep} />
             )}
             {fuseLink && (
               <Pressable

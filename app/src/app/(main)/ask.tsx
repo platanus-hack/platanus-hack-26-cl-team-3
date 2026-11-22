@@ -12,7 +12,7 @@ import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
 import { runTurn } from '../../chat/client';
 import { crearCortador, frasesDe } from '../../chat/frases';
-import { useVoz } from '../../chat/useVoz';
+import { useAgentSpeech } from '../../chat/AgentSpeech';
 import { Dictado } from '../../chat/Dictado';
 import type { AnthropicMessage } from '../../chat/contract';
 import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewFuse, type ViewPart } from '../../chat/history';
@@ -52,7 +52,7 @@ export default function Ask() {
   const [note, setNote] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [citation, setCitation] = useState<ViewCitation | null>(null);
-  const { hablando, decir, callar } = useVoz();
+  const { hablando, decir, stop: callar, begin, handoff } = useAgentSpeech();
   const [vozChat, setVozChat] = useState(false);
   const [sonando, setSonando] = useState<number | null>(null);
   const vozChatRef = useRef(false);
@@ -70,9 +70,8 @@ export default function Ask() {
     });
     return () => {
       vigente = false;
-      callar();
     };
-  }, [callar]));
+  }, []));
 
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -105,8 +104,9 @@ export default function Ask() {
 
   const openCamera = useCallback((card: ViewCard, cards: ViewCard[]) => {
     openedCamera.current = true;
+    handoff();
     router.push(cameraRoute(card, cards, chatVehicleId));
-  }, [chatVehicleId]);
+  }, [chatVehicleId, handoff]);
 
   const openHistory = useCallback(() => {
     openedHistory.current = true;
@@ -138,19 +138,21 @@ export default function Ask() {
     setLiveFuses([]);
     setStatus(THINKING);
     setBusy(true);
-    callar();
+    const speech = begin();
     cortador.current.terminar();
     setSonando(toView(previous).length + 1);
 
     const result = await withChatTurn(async () => {
+      if (speech.signal.aborted) return { aborted: true } as const;
       await selectConversationVehicle(chatVehicleId);
       const result = await sendTurn(await load(), text, runTurn, (progress) => {
-        if (vozChatRef.current) decir(cortador.current.push(progress.parts.map((p) => p.text).join('\n')));
+        if (vozChatRef.current) speech.speak(cortador.current.push(progress.parts.map((p) => p.text).join('\n')));
         setLive(progress.parts);
         setLiveCards(progress.cards);
         setLiveFuses(progress.fuses);
         setStatus(progress.status);
-      });
+      }, { signal: speech.signal });
+      if (speech.signal.aborted) return { aborted: true } as const;
       if ('messages' in result) await save(result.messages);
       return result;
     }).catch(() => ({ error: 'No pude abrir la conversación. Inténtalo de nuevo.' }));
@@ -161,8 +163,9 @@ export default function Ask() {
       setMessages(result.messages);
       if (result.truncated) setNote('La respuesta se cortó.');
     }
-    if (vozChatRef.current) decir(cortador.current.terminar());
+    if (vozChatRef.current) speech.speak(cortador.current.terminar());
     else cortador.current.terminar();
+    speech.finish('error' in result ? result.error : undefined);
     setQuestion(null);
     setLive([]);
     setLiveCards([]);
@@ -170,7 +173,7 @@ export default function Ask() {
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
-  }, [input, loaded, messages, selected.id, chatVehicleId, callar, decir]);
+  }, [input, loaded, messages, selected.id, chatVehicleId, begin]);
 
   const reset = useCallback(() => {
     callar();
@@ -277,11 +280,11 @@ export default function Ask() {
             </Pressable>
           ) : (
             <Pressable
-              onPress={() => { openedCamera.current = true; router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } }); }}
-              disabled={busy || !loaded}
+              onPress={() => { openedCamera.current = true; handoff(); router.push({ pathname: '/escanear', params: { vehicleId: chatVehicleId, vivo: '1' } }); }}
+              disabled={!loaded}
               accessibilityRole="button"
               accessibilityLabel="Hablar con la cámara"
-              style={[styles.send, styles.video, (busy || !loaded) && { opacity: 0.4 }]}
+              style={[styles.send, styles.video, !loaded && { opacity: 0.4 }]}
             >
               <Icono nombre="video" tam={22} tono={color.textoSuave} />
             </Pressable>

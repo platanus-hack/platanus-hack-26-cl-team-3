@@ -1,6 +1,6 @@
 import type { runTurn } from './client';
 import type { AnthropicMessage } from './contract';
-import { toCard, type ViewCard, type ViewFuse, type ViewPart } from './history';
+import { maintenanceSteps, toCard, type ViewCard, type ViewFuse, type ViewPart } from './history';
 
 const TOOL_STATUS: Record<string, string> = {
   lookup_fuses: 'Revisando la tabla de fusibles…',
@@ -69,7 +69,7 @@ export async function sendTurn(
       } else {
         return { error: ev.message };
       }
-      onProgress({ parts: parts.filter(Boolean), cards: [...cards], fuses: [...fuses], status });
+      onProgress({ parts: parts.filter(Boolean), cards: maintenanceSteps(cards, fuses), fuses: [...fuses], status });
     }
   } catch {}
   if (aborted()) return { aborted: true };

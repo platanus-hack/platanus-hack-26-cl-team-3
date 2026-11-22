@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { json } from "../server/responses";
-import { elevenlabsSpeaker } from "./elevenlabs";
+import { elevenlabsSpeaker, VOCES, VOZ_DEFECTO, type VozId } from "./elevenlabs";
 import { SpeakError } from "./errors";
 import { limpiarParaVoz } from "./limpiar";
 
-export type Speaker = (texto: string, signal: AbortSignal) => Promise<ReadableStream<Uint8Array>>;
+export type Speaker = (texto: string, signal: AbortSignal, voz: VozId) => Promise<ReadableStream<Uint8Array>>;
 
 export const MAX_TEXTO = 500;
 
@@ -23,13 +23,16 @@ export async function handleSpeak(
 ): Promise<void> {
   const token = process.env.CHAT_TOKEN;
   if (token && req.headers["x-chat-token"] !== token) return json(res, 401, { error: "No autorizado." });
-  const texto = limpiarParaVoz(new URL(req.url ?? "/", "http://localhost").searchParams.get("text") ?? "");
+  const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+  const texto = limpiarParaVoz(params.get("text") ?? "");
   if (!texto) return json(res, 400, { error: "Falta el texto." });
   if (texto.length > MAX_TEXTO) return json(res, 400, { error: "El texto es muy largo." });
+  const voz = params.get("voz") ?? VOZ_DEFECTO;
+  if (!Object.hasOwn(VOCES, voz)) return json(res, 400, { error: "La voz no existe." });
   const abort = new AbortController();
   res.on("close", () => abort.abort());
   try {
-    const stream = await speaker(texto, abort.signal);
+    const stream = await speaker(texto, abort.signal, voz as VozId);
     if (abort.signal.aborted) return void stream.cancel().catch(() => {});
     res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" });
     const origen = Readable.fromWeb(stream as import("node:stream/web").ReadableStream<Uint8Array>);
