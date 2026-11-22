@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cargarAjustes, ESFUERZOS, guardarAjustes, MAX_INSTRUCCIONES, MODELOS, type Ajustes } from '../ajustes';
+import { cargarAjustes, ESFUERZOS, guardarAjustes, MAX_INSTRUCCIONES, MODELOS, VOCES, type Ajustes } from '../ajustes';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Icono } from '../ui';
 
@@ -91,6 +91,10 @@ export default function PantallaAjustes() {
               trackColor={{ true: color.acento, false: color.borde }}
             />
           </View>
+          <Text style={tipo.nota}>Voz</Text>
+          {VOCES.map((v) => (
+            <Opcion key={v.id} nombre={v.nombre} nota={v.nota} activa={ajustes.voz === v.id} onPress={() => cambiar({ voz: v.id })} />
+          ))}
 
           <Text style={[tipo.seccion, styles.separado]}>Instrucciones del asistente</Text>
           <TextInput

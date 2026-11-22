@@ -1,16 +1,22 @@
 import { SpeakError } from "./errors";
 import type { Speaker } from "./handler";
 
-export const VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
+export const VOCES = {
+  jorge: "Rt1JHkPO27QCUX6Nd5bV",
+  luisa: "ByzPpv6d6pT90CCpgb7k",
+  luis: "ziigB5Dny14v5lDIHo0x",
+} as const;
 
-const ENDPOINT = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream?output_format=mp3_44100_64`;
+export type VozId = keyof typeof VOCES;
 
-export const elevenlabsSpeaker: Speaker = async (texto, signal) => {
+export const VOZ_DEFECTO: VozId = "jorge";
+
+export const elevenlabsSpeaker: Speaker = async (texto, signal, voz) => {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new SpeakError("config");
   let res: Response;
   try {
-    res = await fetch(ENDPOINT, {
+    res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOCES[voz]}/stream?output_format=mp3_44100_64`, {
       method: "POST",
       headers: { "xi-api-key": key, "content-type": "application/json" },
       body: JSON.stringify({ text: texto, model_id: "eleven_flash_v2_5", language_code: "es" }),
