@@ -54,6 +54,7 @@ export function crearVad(opciones: Partial<OpcionesVad> = {}) {
   };
 
   return {
+    cerrando: () => enFrase && bajoDesde !== null,
     push(db: number, t: number): EventoVad | null {
       const desde = anterior ?? t;
       anterior = t;

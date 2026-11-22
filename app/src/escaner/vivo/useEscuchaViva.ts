@@ -30,7 +30,12 @@ type Opciones = {
   onError: (mensaje: string) => void;
 };
 
-export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opciones): EstadoEscucha {
+const DB_SILENCIO = -60;
+const DB_VOZ = -10;
+
+const aNivel = (db: number) => Math.min(1, Math.max(0, (db - DB_SILENCIO) / (DB_VOZ - DB_SILENCIO)));
+
+export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opciones): { estado: EstadoEscucha; nivel: number; cerrando: boolean } {
   const recorder = useAudioRecorder(VOZ);
   const medida = useAudioRecorderState(recorder, MUESTRA_MS);
   const [vad] = useState(() => crearVad());
@@ -114,7 +119,7 @@ export function useEscuchaViva({ silenciado, onInicio, onFrase, onError }: Opcio
     else if (evento === 'reiniciar') void cortar(false);
   }, [medida, silenciado, vad, cortar]);
 
-  if (silenciado) return 'silenciado';
-  if (oyendo) return 'oyendo';
-  return pendientes > 0 ? 'transcribiendo' : 'escuchando';
+  const estado: EstadoEscucha = silenciado ? 'silenciado' : oyendo ? 'oyendo' : pendientes > 0 ? 'transcribiendo' : 'escuchando';
+  const nivel = silenciado || typeof medida.metering !== 'number' ? 0 : aNivel(medida.metering);
+  return { estado, nivel, cerrando: estado === 'oyendo' && vad.cerrando() };
 }

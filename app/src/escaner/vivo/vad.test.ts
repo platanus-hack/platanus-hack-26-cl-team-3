@@ -77,3 +77,18 @@ test('8: el umbral sigue el piso de ruido y respeta -45 y -20', () => {
   const h = correr(techo, -18, 300, g.t);
   assert.deepEqual(h.salidas, ['inicio']);
 });
+
+test('cerrando: solo en frase y con silencio en curso', () => {
+  const vad = crearVad();
+  const a = correr(vad, RUIDO, 2000, 0);
+  assert.equal(vad.cerrando(), false);
+  const b = correr(vad, VOZ, 300, a.t);
+  assert.equal(vad.cerrando(), false);
+  const c = correr(vad, RUIDO, 300, b.t);
+  assert.equal(vad.cerrando(), true);
+  const d = correr(vad, VOZ, 100, c.t);
+  assert.equal(vad.cerrando(), false);
+  const e = correr(vad, RUIDO, 1000, d.t);
+  assert.deepEqual(e.salidas, ['fin']);
+  assert.equal(vad.cerrando(), false);
+});

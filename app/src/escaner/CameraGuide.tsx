@@ -9,12 +9,14 @@ import { parts, type PartId } from '../engine-maps/catalog';
 import { inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
 import { color, video } from '../theme';
 import { LiveCaptions } from './LiveCaptions';
+import { useVivo } from './vivo/ModoVivo';
+import { TarjetaVivo } from './vivo/TarjetaVivo';
 
-type Caption = { text: string; citations: ViewCitation[] };
+type Caption = { text: string; citations: ViewCitation[]; pensando: boolean };
 
 export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, onStep: (card: ViewCard) => void) {
   const [guide, setGuide] = useState({ steps: initialSteps, index: initialStep, key: 0 });
-  const [caption, setCaption] = useState<Caption>({ text: initialSteps[initialStep]?.instruction ?? '', citations: [] });
+  const [caption, setCaption] = useState<Caption>({ text: initialSteps[initialStep]?.instruction ?? '', citations: [], pensando: false });
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<InspectionAction | null>(null);
   const [focus, setFocus] = useState<PartId | null>(null);
@@ -35,13 +37,13 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   const ask = async (text: string, keepGuide = false, opts?: TurnOptions) => {
     setBusy(true);
-    setCaption({ text: THINKING, citations: [] });
+    setCaption({ text: THINKING, citations: [], pensando: true });
     let spoke = false;
     let replaced: ViewCard[] = [];
     const result = await sendTurn(await load(), text, runTurn, (progress) => {
       const said = progress.parts.map((p) => p.text).join('\n');
       spoke ||= said.trim() !== '';
-      setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations) });
+      setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations), pensando: !spoke });
       if (keepGuide || progress.cards.length === 0) return;
       if (replaced.length === 0) {
         setFocus(null);
@@ -54,9 +56,9 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
       setBusy(false);
       return false;
     }
-    if ('error' in result) setCaption({ text: result.error, citations: [] });
+    if ('error' in result) setCaption({ text: result.error, citations: [], pensando: false });
     else {
-      if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [] });
+      if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [], pensando: false });
       await save(result.messages);
     }
     setBusy(false);
@@ -70,7 +72,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     const next = guide.steps[guide.index + 1];
     if (!next) return void ask(DONE_REPLY).then(setFinished);
     setGuide({ ...guide, index: guide.index + 1, key: guide.key + 1 });
-    setCaption({ text: next.instruction, citations: [] });
+    setCaption({ text: next.instruction, citations: [], pensando: false });
     onStep(next);
   };
   const lost = () => {
@@ -90,10 +92,12 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 }
 
 export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGuide> }) {
+  const vivo = useVivo();
   const { current, caption, busy, playing, focus, finished, done, lost, clearFocus } = guide;
+  if (!current && vivo) return <TarjetaVivo vivo={vivo} caption={caption} />;
   if (!current) return caption.text ? <LiveCaptions text={caption.text} citations={caption.citations} /> : null;
-  return (
-    <LiveCaptions part={current.part} text={caption.text} citations={caption.citations}>
+  const botones = (
+    <>
       {playing === 'refill' && <Text style={styles.caveat}>Ilustración: no muestra el nivel real del depósito.</Text>}
       {finished ? (
         <View style={styles.row}>
@@ -109,8 +113,10 @@ export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGui
           )}
         </View>
       )}
-    </LiveCaptions>
+    </>
   );
+  if (vivo) return <TarjetaVivo vivo={vivo} caption={caption} part={current.part}>{botones}</TarjetaVivo>;
+  return <LiveCaptions part={current.part} text={caption.text} citations={caption.citations}>{botones}</LiveCaptions>;
 }
 
 function GuideButton({ label, primary, disabled, onPress }: { label: string; primary?: boolean; disabled: boolean; onPress: () => void }) {
