@@ -530,6 +530,12 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
   const { current: step, stepKey, play, stop, focus } = cameraGuide;
   const refillLoop = !!(cameraGuide.refilling && mapTracking && outbackParts && selected === 'washer');
+  const choosePart = (index: number) => {
+    setSelectedIndex(index);
+    const part = map?.volumes[index]?.part;
+    if (outbackParts && part) cameraGuide.toggleFocus(part);
+    else if (part !== focus) cameraGuide.clearFocus();
+  };
   const playedFocus = useRef<string | null>(null);
   useEffect(() => {
     if (!focus) playedFocus.current = null;
@@ -644,7 +650,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                   key={part}
                   accessibilityRole="button"
                   accessibilityState={{ selected: selectedIndex === index }}
-                  onPress={() => setSelectedIndex(index)}
+                  onPress={() => choosePart(index)}
                   style={[styles.part, selectedIndex === index && styles.selected]}
                 >
                   <Text style={tipo.nota}>{parts[part][0]}</Text>
@@ -775,10 +781,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         outbackParts={outbackParts}
         selectedPart={selectedIndex}
         focusedPart={focus}
-        onPart={(e) => {
-          setSelectedIndex(e.nativeEvent.index);
-          if (map?.volumes[e.nativeEvent.index]?.part !== focus) cameraGuide.clearFocus();
-        }}
+        onPart={(e) => choosePart(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
