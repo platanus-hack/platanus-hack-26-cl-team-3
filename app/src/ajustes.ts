@@ -23,7 +23,7 @@ export const ESFUERZOS = [
 export type ModeloId = (typeof MODELOS)[number]['id'];
 export type VozId = (typeof VOCES)[number]['id'];
 export type EsfuerzoId = (typeof ESFUERZOS)[number]['id'];
-export const INSTRUCCIONES_DEFECTO = 'Responde de forma concisa y simple.';
+export const INSTRUCCIONES_DEFECTO = 'En las guías, da un consejo breve por etapa en el espacio del asistente.';
 export const MAX_INSTRUCCIONES = 2000;
 
 export type Ajustes = { modelo: ModeloId; esfuerzo: EsfuerzoId | null; anclajeConModelo: boolean; vozVivo: boolean; vozChat: boolean; voz: VozId; instrucciones: string };

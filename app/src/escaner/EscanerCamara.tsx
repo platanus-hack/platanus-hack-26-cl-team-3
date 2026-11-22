@@ -173,7 +173,7 @@ export default function EscanerCamara({ vehicleId, initialLive, steps, initialSt
         />
         {mostrarVano && <CapaVano vano={vano!} foto={foto!} vista={vista!} debug={debug} tono={tono} />}
         {conversation.listening && <EstadoVozPantalla pensando={guide.caption.pensando} />}
-        <ScannerControls controls={controls} status={status} top={<StepCounter step={guide.index} total={guide.steps.length} />} conversation={conversation}
+        <ScannerControls controls={controls} status={status} top={<StepCounter card={guide.current} step={guide.index} total={guide.steps.length} />} conversation={conversation}
           captions={<GuideCaptions guide={guide} />} step={guide.current}>
           {error ? (
             <>

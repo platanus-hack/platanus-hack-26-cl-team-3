@@ -9,7 +9,7 @@ import { MICROPHONE_DENIED, MICROPHONE_BLOCKED } from '../../chat/microphone-per
 import { useEscuchaViva } from './useEscuchaViva';
 import { useVoz } from '../../chat/useVoz';
 
-type Caption = { text: string; pensando: boolean };
+type Caption = { text: string; pensando: boolean; stageKey?: number };
 
 export type ModoVivoEstado = ReturnType<typeof useModoVivo>;
 
@@ -62,6 +62,9 @@ export function useModoVivo({
   const vivo = useRef(true);
   const { hablando, decir, callar } = useVoz();
   const agent = useAgentSpeech();
+  const { stop: stopChatSpeech } = agent;
+  const stageKey = caption?.stageKey;
+  const lastSpokenStage = useRef<number | undefined>(undefined);
   const agentActive = agent.pending || agent.hablando;
   const cortador = useRef(crearCortador());
   const estabaOcupado = useRef(busy);
@@ -81,22 +84,35 @@ export function useModoVivo({
   }, []);
 
   useEffect(() => {
+    if (activo && stageKey !== undefined) stopChatSpeech();
+  }, [activo, stageKey, stopChatSpeech]);
+
+  useEffect(() => {
     if (!activo || !vozVivo) {
       callar();
       cortador.current.terminar();
+      return;
+    }
+    if (stageKey !== undefined && textoCaption) {
+      if (lastSpokenStage.current !== stageKey) {
+        lastSpokenStage.current = stageKey;
+        cortador.current.terminar();
+        callar();
+        decir([textoCaption]);
+      }
       return;
     }
     if (textoCaption !== undefined && !pensandoCaption) {
       const sentences = cortador.current.push(textoCaption);
       if (!agentActive) decir(sentences);
     }
-  }, [activo, vozVivo, textoCaption, pensandoCaption, decir, callar, agentActive]);
+  }, [activo, vozVivo, textoCaption, pensandoCaption, decir, callar, agentActive, stageKey]);
 
   useEffect(() => {
-    if (activo && vozVivo && estabaOcupado.current && !busy) decir(cortador.current.terminar());
-    if (activo && vozVivo && !estabaOcupado.current && busy) callar();
+    if (activo && vozVivo && stageKey === undefined && estabaOcupado.current && !busy) decir(cortador.current.terminar());
+    if (activo && vozVivo && stageKey === undefined && !estabaOcupado.current && busy) callar();
     estabaOcupado.current = busy;
-  }, [activo, vozVivo, busy, decir, callar]);
+  }, [activo, vozVivo, busy, decir, callar, stageKey]);
 
   const [wasEnabled, setWasEnabled] = useState(enabled);
   if (wasEnabled !== enabled) {

@@ -863,7 +863,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
             <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
           </View>
         ) : (
-          <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
+          <ScannerControls controls={controls} status={status} top={<StepCounter card={cameraGuide.current} step={cameraGuide.index} total={cameraGuide.steps.length} />}
             conversation={conversation} captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
         )}
       </View>

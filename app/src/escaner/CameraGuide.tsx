@@ -26,6 +26,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const restoreSteps = useEffectEvent((cards: ViewCard[]) => {
     if (!cards.length || guide.steps.length) return;
     setGuide(g => ({ steps: cards, index: 0, key: g.key + 1 }));
+    setCaption({ text: cards[0].instruction, citations: [], pensando: false });
     onStep(cards[0]);
   });
   useEffect(() => {
@@ -166,7 +167,9 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   return {
     vehicleId, steps: guide.steps, index: guide.index, current, stepKey: guide.key,
-    waitingForFuseStep, fuses: waitingForFuseStep ? [] : current?.fuseTargets ?? fuses, previousCaption, caption, busy, playing, focus, finished, refilling,
+    waitingForFuseStep, fuses: waitingForFuseStep ? [] : current?.fuseTargets ?? fuses, previousCaption,
+    caption: current && !finished && !caption.pensando && caption.text === current.instruction
+      ? { ...caption, stageKey: guide.key } : caption, busy, playing, focus, finished, refilling,
     resetCaption, endConversation, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
