@@ -35,6 +35,7 @@ import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
 import { ProveedorVivo } from './vivo/ModoVivo';
+import { EstadoVozPantalla } from './vivo/EstadoVozPantalla';
 import { StepCounter } from './StepCounter';
 import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
@@ -831,6 +832,8 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         />
         <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
           name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+        {/* Feedback de voz a pantalla completa (solo en modo en vivo): escuchando / oyendo / pensando. */}
+        {vivo && <EstadoVozPantalla pensando={cameraGuide.caption.pensando} />}
         {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
         {!anclaje && !recalibrando && !error && registrationCandidate && (outbackParts || measuredParts) && movimiento && !editingMap && controls.mode !== 'hidden' && (
           <GuiaMovimiento base={movimiento.baseline} objetivo={movimiento.target} />
