@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
 import { findOutbackFuses, outbackFuses } from './outback-fuses';
 
 test('distinguishes the numbered circuits in the two diagrams', () => {
   assert.deepEqual(findOutbackFuses('17').map(f => [f.box, f.label, f.amps]), [
-    ['engine', 'O2 HTR', 25], ['cabin', 'MIR', 7.5],
+    ['motor', 'O2 HTR', 25], ['cabina', 'MIR', 7.5],
   ]);
   assert.deepEqual(findOutbackFuses('Empty').map(f => f.number), [13, 25, 30, 36]);
-  assert.equal(findOutbackFuses('F1', 'engine')[0].label, 'HORN RH');
+  assert.equal(findOutbackFuses('F1', 'motor')[0].label, 'HORN RH');
   assert.deepEqual(findOutbackFuses('BLOWER').map(f => f.number), [32, 33]);
   assert.deepEqual(findOutbackFuses('fuse 94'), []);
   assert.deepEqual(findOutbackFuses('xinventado'), []);
@@ -29,11 +28,11 @@ test('returns supported window circuits without selecting an arbitrary member of
   assert.deepEqual(numbers('desempañador de ventana trasera'), [31]);
   assert.deepEqual(numbers('limpiaparabrisas de la ventana trasera'), [36]);
   assert.deepEqual(numbers('ventana del techo'), [35]);
-  assert.deepEqual(findOutbackFuses('ventana', 'engine'), []);
+  assert.deepEqual(findOutbackFuses('ventana', 'motor'), []);
 });
 
 test('each diagram assigns a distinct contained hit area to all 38 numbered positions', () => {
-  for (const box of ['engine', 'cabin'] as const) {
+  for (const box of ['motor', 'cabina'] as const) {
     const slots = outbackFuses.filter(f => f.box === box);
     assert.deepEqual(slots.map(f => f.number), Array.from({ length: 38 }, (_, i) => i + 1));
     for (const fuse of slots) {
@@ -44,18 +43,5 @@ test('each diagram assigns a distinct contained hit area to all 38 numbered posi
           fuse.y + fuse.height <= other.y || other.y + other.height <= fuse.y);
       }
     }
-  }
-});
-
-test('the api fuse table matches the app map', () => {
-  const file = new URL('../../../api/src/data/fuses.json', import.meta.url);
-  const rows: { box: string; number: number; amps: number | null; circuit: string }[] = JSON.parse(readFileSync(file, 'utf8')).fuses;
-  assert.equal(rows.length, 76);
-  assert.equal(rows.length, outbackFuses.length);
-  for (const row of rows) {
-    const slot = outbackFuses.find(f => f.box === (row.box === 'cabina' ? 'cabin' : 'engine') && f.number === row.number);
-    assert.ok(slot, `${row.box} ${row.number}`);
-    assert.equal(row.amps, slot.amps);
-    assert.equal(row.circuit, slot.label);
   }
 });

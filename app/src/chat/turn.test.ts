@@ -65,3 +65,11 @@ test('12: abortado después de done devuelve messages', async () => {
   const result = await sendTurn([], 'hola', fakeRun([done], [], () => controller.abort()), () => {}, { signal: controller.signal });
   assert.ok('messages' in result);
 });
+
+test('un evento fuse se acumula en fuses y no es un error', async () => {
+  const seen: unknown[] = [];
+  const fuse: ChatEvent = { type: 'fuse', box: 'motor', numbers: [37], instruction: 'x' };
+  const result = await sendTurn([], 'hola', fakeRun([fuse, text('ok'), done]), (p) => seen.push(p.fuses));
+  assert.ok('messages' in result);
+  assert.deepEqual(seen[0], [{ box: 'motor', numbers: [37], instruction: 'x' }]);
+});

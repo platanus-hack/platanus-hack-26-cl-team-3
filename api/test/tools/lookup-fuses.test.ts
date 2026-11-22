@@ -1,8 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { tools } from "../../src/tools";
+import outbackTable from "../../src/data/fuses/outback.json";
+import { lookupFuses } from "../../src/tools/lookup-fuses";
+import type { FuseTable } from "../../src/tools/fuse-table";
 
-const { run } = tools.lookup_fuses;
+const table: FuseTable = outbackTable;
+const tool = lookupFuses(table);
+const { run } = tool;
 const NONE = "Sin resultados en la tabla de fusibles. Prueba con filter \"*\" para ver la caja completa.";
 
 test("1: filter p/w returns one cabina search_result, location first, then 6 citable rows", async () => {
@@ -22,7 +26,7 @@ test("1: filter p/w returns one cabina search_result, location first, then 6 cit
   }
   assert.equal(
     sr.content.find((b: { text: string }) => b.text.startsWith("Fusible 11 ")).text,
-    "Fusible 11 — 30 A — P/W MAIN1: Circuito principal 1 de alzavidrios, sin puerta asignada en el manual — caja de la cabina. part_id: fusible-cabina-11",
+    "Fusible 11 — 30 A — P/W MAIN1: Circuito principal 1 de alzavidrios, sin puerta asignada en el manual — caja de fusibles de la cabina. part_id: fusible-cabina-11",
   );
 });
 
@@ -74,7 +78,7 @@ test("a numeric filter compares the exact fuse number", async () => {
 
 test("a numeric filter includes empty positions", async () => {
   const [sr] = (await run({ filter: "13", box: "cabina" })).content as any[];
-  assert.match(sr.content[1].text, /^Posición 13 — vacía según el manual — caja de la cabina\. part_id: fusible-cabina-13$/);
+  assert.match(sr.content[1].text, /^Posición 13 — vacía según el manual — caja de fusibles de la cabina\. part_id: fusible-cabina-13$/);
 });
 
 test("the sapito is the engine-box F.WASH", async () => {
@@ -117,7 +121,15 @@ test("the title names the data source", async () => {
   assert.match(sr.title, /MSA5M1603C\), PDF 529 y 530$/);
 });
 
+test("the enum of boxes comes from the table", () => {
+  const props = tool.definition.input_schema.properties as any;
+  assert.deepEqual(props.box.enum, ["cabina", "motor"]);
+  const other = lookupFuses({ ...table, vehicle: "Otro", notes: undefined, boxes: { frente: table.boxes.cabina }, fuses: [] });
+  assert.deepEqual((other.definition.input_schema.properties as any).box.enum, ["frente"]);
+  assert.doesNotMatch(other.definition.description!, /Outback|R\.LH/);
+});
+
 test("the description explains boxes and the manual abbreviations", () => {
-  const d = tools.lookup_fuses.definition.description!;
-  for (const s of ["cabina", "motor", "sapito", "R.LH", "R.RH", "PASS", "MAIN", "box"]) assert.ok(d.includes(s), s);
+  const d = tool.definition.description!;
+  for (const s of ["cabina", "motor", "Subaru Outback 2016", "R.LH", "R.RH", "PASS", "MAIN", "box"]) assert.ok(d.includes(s), s);
 });
