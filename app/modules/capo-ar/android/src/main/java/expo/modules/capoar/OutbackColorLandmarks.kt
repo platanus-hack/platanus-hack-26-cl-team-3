@@ -7,11 +7,11 @@ import org.opencv.imgproc.Imgproc
 internal enum class LandmarkHue { AMBER, BLUE, RED }
 
 /** A colored surface with center and visible width expressed in its vehicle's model space. */
-internal data class Landmark(val id: String, val center: EnginePoint, val width: Double, val hue: LandmarkHue, val upperFace: Boolean = false)
+internal data class Landmark(val id: String, val center: EnginePoint, val width: Double, val hue: LandmarkHue, val upperFace: Boolean = false, val usesTemplate: Boolean = false)
 internal fun outbackLandmarks(parts: List<ModelPart>): List<Landmark> {
   val widths = mapOf("brake_fluid" to .039, "oil_cap" to .047, "positive" to .044, "washer" to .041, "dipstick" to .025)
   return parts.mapNotNull { part ->
-    widths[part.id]?.let { Landmark(part.id, part.guideCenter, it, if (part.id == "positive") LandmarkHue.RED else LandmarkHue.AMBER, upperFace = part.id == "positive") }
+    widths[part.id]?.let { Landmark(part.id, part.guideCenter, it, if (part.id == "positive") LandmarkHue.RED else LandmarkHue.AMBER, upperFace = part.id == "positive", usesTemplate = part.id == "oil_cap") }
   }
 }
 
@@ -83,7 +83,7 @@ internal fun observeOutbackLandmarks(image: Mat, degrees: Int, intr: EngineCaptu
   return landmarks.mapNotNull { landmark ->
     val p = pose.cameraPoint(landmark.center)
     val predicted = imagePoint(landmark.center) ?: return@mapNotNull null
-    val center = if (landmark.id == "oil_cap") {
+    val center = if (landmark.usesTemplate) {
       if (templates == null) return@mapNotNull null
       val step = (landmark.width/24).toFloat()
       val x = imagePoint(landmark.center + EnginePoint(step,0f,0f)) ?: return@mapNotNull null

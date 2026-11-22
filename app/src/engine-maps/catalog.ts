@@ -1,8 +1,15 @@
+import { ramVolumes } from './ram-volumes';
 import { swiftVolumes } from './swift-volumes';
 import { outbackVolumes } from './outback-volumes';
 import type { Vehicle } from '../vehicles';
 
 export const parts = {
+  battery_terminal: ["Terminal de batería","Conexión metálica visible. Comprueba la polaridad en las marcas de la batería."],
+  terminal_boot: ["Cubierta del terminal","Protector del terminal en la parte superior de la batería."],
+  valve_cover: ["Tapa de válvulas","Parte superior del motor junto al punto de llenado de aceite."],
+  wiring_harness: ["Mazo de cables","Conjunto de cables con una funda protectora."],
+  steering_fluid: ["Depósito de dirección hidráulica","Depósito de líquido de la dirección asistida."],
+  steering_cap: ["Tapa de dirección hidráulica","Tapa del depósito de líquido de dirección."],
   fuses: ["Caja de fusibles del motor","Consulta el plano de la caja y coteja su etiqueta con la del vehículo."],
   washer: ["Sapito","Tapa del depósito del líquido limpiaparabrisas."],
   dipstick: ["Varilla de aceite","Manilla de la varilla que se usa para revisar el nivel de aceite."],
@@ -69,6 +76,19 @@ export const engineMaps: Record<Vehicle['id'], EngineMap> = {
       positive: "Borne identificado con el símbolo +. En la foto de referencia está bajo la cubierta roja. Consulta el procedimiento de arranque con cables del manual.",
     },
     volumes: outbackVolumes,
+  },
+  ram700: {
+    referenceVariant: "Big Horn · 1.4 Fire · Chile",
+    volumes: ramVolumes,
+    partDetails: {
+      fuses: "Caja de fusibles del vano, junto a la batería. Comprueba los circuitos en la etiqueta de la unidad.",
+      coolant_cap: "Tapa azul del depósito de refrigerante. Ábrela solo con el motor completamente frío.",
+      brake_cap: "Tapa del depósito de frenos, junto al cortafuegos.",
+      left_strut_mount: "Soporte superior de la suspensión, en el lado izquierdo del vehículo.",
+      right_strut_mount: "Soporte superior de la suspensión, en el lado derecho del vehículo.",
+      radiator_support: "Travesaño frontal que rodea el cierre del capó.",
+      steering_fluid: "Depósito de líquido de dirección hidráulica con tapa amarilla.",
+    },
   },
   swift: {
     referenceVariant: "1.2 · Vehículo de referencia de 2017",
