@@ -16,8 +16,10 @@ export function Dictado({
   deshabilitado,
   onTexto,
   onError,
+  onEmpezar,
 }: {
   deshabilitado: boolean;
+  onEmpezar?: () => void;
   onTexto: (text: string) => void;
   onError: (message: string) => void;
 }) {
@@ -63,6 +65,7 @@ export function Dictado({
   }, [recorder, onTexto, onError]);
 
   const empezar = useCallback(async () => {
+    onEmpezar?.();
     onError('');
     try {
       const permiso = await AudioModule.requestRecordingPermissionsAsync();
@@ -79,7 +82,7 @@ export function Dictado({
     timer.current = setInterval(() => {
       setSegundos((s) => s + 1);
     }, 1000);
-  }, [recorder, onError]);
+  }, [recorder, onError, onEmpezar]);
 
   useEffect(() => {
     if (estado === 'grabando' && segundos >= MAX_SEGUNDOS) void parar();

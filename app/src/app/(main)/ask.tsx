@@ -1,15 +1,18 @@
 import { withChatTurn } from '../../chat/turn-queue';
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { cargarAjustes } from '../../ajustes';
 import { cameraRoute } from '../../chat/camera';
 import { FuseLinks } from '../../chat/FuseLinks';
 import { fuseGuideFor } from '../../fusibles/guides';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
 import { runTurn } from '../../chat/client';
+import { crearCortador, frasesDe } from '../../chat/frases';
+import { useVoz } from '../../chat/useVoz';
 import { Dictado } from '../../chat/Dictado';
 import type { AnthropicMessage } from '../../chat/contract';
 import { clear, conversationVehicle, load, save, selectConversationVehicle, toView, type Bubble, type ViewCard, type ViewCitation, type ViewFuse, type ViewPart } from '../../chat/history';
@@ -49,10 +52,31 @@ export default function Ask() {
   const [note, setNote] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [citation, setCitation] = useState<ViewCitation | null>(null);
+  const { hablando, decir, callar } = useVoz();
+  const [vozChat, setVozChat] = useState(false);
+  const [sonando, setSonando] = useState<number | null>(null);
+  const vozChatRef = useRef(false);
+  const cortador = useRef(crearCortador());
+
+  useEffect(() => {
+    vozChatRef.current = vozChat;
+    if (!vozChat) callar();
+  }, [vozChat, callar]);
+
+  useFocusEffect(useCallback(() => {
+    let vigente = true;
+    void cargarAjustes().then((a) => {
+      if (vigente) setVozChat(a.vozChat);
+    });
+    return () => {
+      vigente = false;
+      callar();
+    };
+  }, [callar]));
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    Promise.all([load(), conversationVehicle()]).then(([stored, vehicleId]) => {
+    withChatTurn(() => Promise.all([load(), conversationVehicle()])).then(([stored, vehicleId]) => {
       if (!active || busyRef.current) return;
       setMessages(stored);
       setStoredVehicle(vehicleId);
@@ -114,10 +138,14 @@ export default function Ask() {
     setLiveFuses([]);
     setStatus(THINKING);
     setBusy(true);
+    callar();
+    cortador.current.terminar();
+    setSonando(toView(previous).length + 1);
 
     const result = await withChatTurn(async () => {
       await selectConversationVehicle(chatVehicleId);
       const result = await sendTurn(await load(), text, runTurn, (progress) => {
+        if (vozChatRef.current) decir(cortador.current.push(progress.parts.map((p) => p.text).join('\n')));
         setLive(progress.parts);
         setLiveCards(progress.cards);
         setLiveFuses(progress.fuses);
@@ -133,6 +161,8 @@ export default function Ask() {
       setMessages(result.messages);
       if (result.truncated) setNote('La respuesta se cortó.');
     }
+    if (vozChatRef.current) decir(cortador.current.terminar());
+    else cortador.current.terminar();
     setQuestion(null);
     setLive([]);
     setLiveCards([]);
@@ -140,16 +170,28 @@ export default function Ask() {
     setStatus(null);
     busyRef.current = false;
     setBusy(false);
-  }, [input, loaded, messages, selected.id, chatVehicleId]);
+  }, [input, loaded, messages, selected.id, chatVehicleId, callar, decir]);
 
   const reset = useCallback(() => {
+    callar();
     setMessages([]);
     void clear(selected.id).catch(() => setError('No pude iniciar una conversación nueva.'));
     setStoredVehicle(null);
     setError(null);
     setNote(null);
     setReplies(false);
-  }, [selected.id]);
+  }, [selected.id, callar]);
+
+  const alternarVoz = useCallback(
+    (indice: number, texto: string) => {
+      const activa = sonando === indice && hablando;
+      callar();
+      if (activa) return;
+      setSonando(indice);
+      decir(frasesDe(texto));
+    },
+    [sonando, hablando, callar, decir],
+  );
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior="padding">
@@ -187,6 +229,7 @@ export default function Ask() {
             fuseVehicleId={fuseGuideFor(chatVehicleId) ? chatVehicleId : undefined}
             onCitation={setCitation}
             onCamera={openCamera}
+            voz={vozChat ? { sonando: sonando === i && hablando, onPress: (texto) => alternarVoz(i, texto) } : undefined}
           />
         ))}
       </ScrollView>
@@ -218,6 +261,7 @@ export default function Ask() {
           />
           {focused && <Dictado
             deshabilitado={busy || !loaded}
+            onEmpezar={callar}
             onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
             onError={(message) => setDictationError(message || null)}
           />}
@@ -256,8 +300,10 @@ function BubbleView({
   fuseVehicleId,
   onCitation,
   onCamera,
+  voz,
 }: {
   bubble: Bubble;
+  voz?: { sonando: boolean; onPress: (texto: string) => void };
   streaming: boolean;
   fuseVehicleId?: string;
   onCitation: (c: ViewCitation) => void;
@@ -266,6 +312,7 @@ function BubbleView({
   const mine = bubble.role === 'user';
   const uncited =
     !mine && !streaming && bubble.parts.some((p) => p.text.trim()) && bubble.parts.every((p) => p.citations.length === 0);
+  const textoPlano = bubble.parts.map((p) => p.text).join('\n').trim();
   let n = 0;
   const text = (
     <>
@@ -282,6 +329,17 @@ function BubbleView({
         ))}
       </Text>
       {uncited && <Text style={styles.uncited}>Sin cita del manual</Text>}
+      {voz && !mine && !streaming && textoPlano && (
+        <Pressable
+          onPress={() => voz.onPress(textoPlano)}
+          accessibilityRole="button"
+          accessibilityLabel={voz.sonando ? 'Callar respuesta' : 'Escuchar respuesta'}
+          hitSlop={8}
+          style={styles.parlante}
+        >
+          <Icono nombre={voz.sonando ? 'stop' : 'volume-high'} tam={18} tono={color.textoSuave} />
+        </Pressable>
+      )}
     </>
   );
   const guided = !mine && bubble.cards.length > 0;
@@ -320,6 +378,7 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '88%', borderRadius: radio.l, paddingVertical: espacio.m, paddingHorizontal: espacio.l },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: color.acento },
   bubbleAssistant: { alignSelf: 'flex-start', backgroundColor: color.superficie, borderWidth: 1, borderColor: color.borde },
+  parlante: { alignSelf: 'flex-start', marginTop: espacio.s },
   uncited: { fontSize: 12, color: color.textoTenue, marginTop: espacio.xs },
   bubbleGuide: { alignSelf: 'stretch', maxWidth: '100%' },
   replies: { flexDirection: 'row', flexWrap: 'wrap', gap: espacio.s, marginBottom: espacio.s },

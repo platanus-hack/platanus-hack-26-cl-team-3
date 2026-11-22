@@ -54,6 +54,14 @@ export function crearVad(opciones: Partial<OpcionesVad> = {}) {
   };
 
   return {
+    reiniciar() {
+      ruido = [];
+      anterior = null;
+      enFrase = false;
+      sobreDesde = null;
+      bajoDesde = null;
+      sinVozDesde = null;
+    },
     cerrando: () => enFrase && bajoDesde !== null,
     push(db: number, t: number): EventoVad | null {
       const desde = anterior ?? t;

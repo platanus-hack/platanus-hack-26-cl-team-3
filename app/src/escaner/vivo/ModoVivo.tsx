@@ -1,7 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { cargarAjustes } from '../../ajustes';
+import { crearCortador } from '../../chat/frases';
 import { juntarPregunta } from './pregunta';
 import { useEscuchaViva } from './useEscuchaViva';
+import { useVoz } from '../../chat/useVoz';
+
+type Caption = { text: string; pensando: boolean };
 
 export type ModoVivoEstado = ReturnType<typeof useModoVivo>;
 
@@ -14,15 +19,19 @@ export function ProveedorVivo({
   enabled,
   capturarVano,
   preguntar,
+  caption,
+  busy,
   children,
 }: {
   activo: boolean;
   enabled: boolean;
+  caption?: Caption;
+  busy?: boolean;
   capturarVano: () => Promise<string | null>;
   preguntar: (texto: string, imagen: string | null, signal: AbortSignal) => Promise<unknown>;
   children: ReactNode;
 }) {
-  const vivo = useModoVivo({ activo, enabled, capturarVano, preguntar });
+  const vivo = useModoVivo({ activo, enabled, capturarVano, preguntar, caption, busy });
   return <VivoContext.Provider value={activo ? vivo : null}>{children}</VivoContext.Provider>;
 }
 
@@ -31,9 +40,13 @@ export function useModoVivo({
   enabled,
   capturarVano,
   preguntar,
+  caption,
+  busy,
 }: {
   activo: boolean;
   enabled: boolean;
+  caption?: Caption;
+  busy?: boolean;
   capturarVano: () => Promise<string | null>;
   preguntar: (texto: string, imagen: string | null, signal: AbortSignal) => Promise<unknown>;
 }) {
@@ -43,6 +56,38 @@ export function useModoVivo({
   const pendiente = useRef('');
   const controlador = useRef<AbortController | null>(null);
   const vivo = useRef(true);
+  const { hablando, decir, callar } = useVoz();
+  const cortador = useRef(crearCortador());
+  const estabaOcupado = useRef(busy);
+  const [ajusteVoz, setVozVivo] = useState(false);
+  const vozVivo = ajusteVoz && caption !== undefined;
+  const textoCaption = caption?.text;
+  const pensandoCaption = caption?.pensando ?? true;
+
+  useEffect(() => {
+    let cancelado = false;
+    void cargarAjustes().then((a) => {
+      if (!cancelado) setVozVivo(a.vozVivo);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activo || !vozVivo) {
+      callar();
+      cortador.current.terminar();
+      return;
+    }
+    if (textoCaption !== undefined && !pensandoCaption) decir(cortador.current.push(textoCaption));
+  }, [activo, vozVivo, textoCaption, pensandoCaption, decir, callar]);
+
+  useEffect(() => {
+    if (activo && vozVivo && estabaOcupado.current && !busy) decir(cortador.current.terminar());
+    if (activo && vozVivo && !estabaOcupado.current && busy) callar();
+    estabaOcupado.current = busy;
+  }, [activo, vozVivo, busy, decir, callar]);
 
   const [wasEnabled, setWasEnabled] = useState(enabled);
   if (wasEnabled !== enabled) {
@@ -95,6 +140,7 @@ export function useModoVivo({
 
   const { estado, nivel, cerrando, parcial } = useEscuchaViva({
     silenciado: silenciado || !activo,
+    pausado: hablando,
     onInicio,
     onFrase: (t) => void onFrase(t),
     onError: setError,
@@ -105,6 +151,8 @@ export function useModoVivo({
     nivel,
     cerrando,
     parcial,
+    hablando,
+    callar,
     pregunta,
     error,
     silenciado: silenciado && activo,

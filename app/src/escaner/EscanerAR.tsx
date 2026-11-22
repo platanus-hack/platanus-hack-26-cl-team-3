@@ -817,6 +817,8 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   return (
     <ProveedorVivo
       enabled={conversation.enabled} activo={conversation.listening}
+      caption={cameraGuide.caption}
+      busy={cameraGuide.busy}
       capturarVano={capturarVano}
       preguntar={conversation.ask}
     >
