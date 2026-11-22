@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import type { ConversationStore } from "./store";
 
-export function sqliteStore(path: string): ConversationStore {
-  const db = new DatabaseSync(path);
-  if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL");
+export function sqliteStore(db: DatabaseSync): ConversationStore {
   db.exec(`
     CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS conversations (

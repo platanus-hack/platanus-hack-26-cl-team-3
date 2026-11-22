@@ -1,7 +1,12 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { EFFORTS, type Effort, type Profile } from "../chat/contract";
+import { contextWindow } from "../chat/context";
 import { runTurn } from "../chat/orchestrator";
+import { stripImages, titleFrom } from "../conversations/sanitize";
+import type { ConversationStore } from "../conversations/store";
+import { createTurnRecorder } from "../runlog/recorder";
+import type { RunLogStore } from "../runlog/store";
 import { SYSTEM_PROMPT, VIVO_PROMPT } from "../chat/system-prompt";
 import type { Adapter } from "../chat/orchestrator";
 import { anthropic } from "../llm/anthropic";
@@ -12,6 +17,12 @@ import { json, openSSE, sendEvent } from "./responses";
 export const MAX_BODY = 1024 * 1024;
 const MAX_MESSAGES = 200;
 export const HEARTBEAT_MS = 15_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface ChatStores {
+  conversations?: ConversationStore | null;
+  runlog?: RunLogStore | null;
+}
 
 export class BodyTooLarge extends Error {}
 
@@ -59,6 +70,7 @@ export async function handleChat(
   res: ServerResponse,
   adapter?: Adapter,
   heartbeatMs: number = HEARTBEAT_MS,
+  { conversations = null, runlog = null }: ChatStores = {},
 ): Promise<void> {
   const token = process.env.CHAT_TOKEN;
   if (token && req.headers["x-chat-token"] !== token) return json(res, 401, { error: "No autorizado." });
@@ -71,6 +83,13 @@ export async function handleChat(
   }
   const v = validate(body);
   if (v.error !== undefined) return json(res, 400, { error: v.error });
+  const rawConversation = (body as { conversation_id?: unknown }).conversation_id;
+  if (rawConversation !== undefined && (typeof rawConversation !== "string" || !UUID.test(rawConversation))) {
+    return json(res, 400, { error: "conversation_id inválido" });
+  }
+  const conversationId = rawConversation as string | undefined;
+  const rawDevice = req.headers["x-device-id"];
+  const deviceId = typeof rawDevice === "string" && UUID.test(rawDevice) ? rawDevice : null;
   if (!adapter && !process.env.ANTHROPIC_API_KEY) return json(res, 500, { error: "Falta ANTHROPIC_API_KEY" });
 
   openSSE(res);
@@ -81,23 +100,74 @@ export async function handleChat(
     clearInterval(heartbeat);
     if (!finished) controller.abort();
   });
+  const window = contextWindow(v.messages);
+  const definitions = Object.values(tools).map((t) => t.definition);
+  const recorder = createTurnRecorder({
+    model: v.profile.model,
+    effort: v.profile.effort,
+    mode: (body as { mode?: string }).mode,
+    system: v.system,
+    definitions,
+    contextMessages: window.length,
+    messages: v.messages,
+    deviceId,
+  });
+  let outcome: string | null = null;
+  let savedId: string | null = null;
+  let fresh: MessageParam[] | null = null;
   try {
     for await (const e of runTurn({
-      messages: v.messages,
+      messages: window,
       profile: v.profile,
       system: v.system,
       adapter: adapter ?? anthropic,
       tools,
       signal: controller.signal,
+      log: recorder.log,
     })) {
       if (controller.signal.aborted) break;
+      if (e.event === "done") {
+        outcome = e.data.truncated ? "truncated" : "done";
+        fresh = e.data.messages;
+        savedId = await saveConversation(conversations, deviceId, conversationId, v.messages, e.data.messages);
+        e.data = { ...e.data, ...(savedId ? { conversation_id: savedId } : {}), turn_id: recorder.id };
+      } else if (e.event === "error") {
+        outcome = `error:${e.data.code}`;
+      }
       sendEvent(res, e.event, e.data);
     }
   } catch (e) {
     console.error(e);
+    outcome = "error:internal";
     if (!controller.signal.aborted) sendEvent(res, "error", { code: "internal", message: "Error interno." });
   }
   finished = true;
   clearInterval(heartbeat);
   res.end();
+  if (runlog) {
+    try {
+      const { turn, tools: runs } = recorder.finish(outcome ?? "aborted", savedId ?? conversationId ?? null, fresh);
+      runlog.saveTurn(turn, runs);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
+
+async function saveConversation(
+  store: ConversationStore | null,
+  deviceId: string | null,
+  conversationId: string | undefined,
+  sent: MessageParam[],
+  fresh: MessageParam[],
+): Promise<string | null> {
+  if (!store || !deviceId) return null;
+  try {
+    const data = { title: titleFrom(sent), messages: stripImages([...sent, ...fresh]) };
+    if (conversationId && (await store.update(deviceId, conversationId, data))) return conversationId;
+    return await store.create(deviceId, data);
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
 }

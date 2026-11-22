@@ -1,7 +1,7 @@
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
-import { createConversation, fetchConversation, listConversations, updateConversation } from './remote-history';
+import { fetchConversation, listConversations } from './remote-history';
 
 const KEY = 'capo-ar:chat-v1';
 const ID_KEY = 'capo-ar:chat-id:v1';
@@ -32,45 +32,53 @@ export async function load(): Promise<AnthropicMessage[]> {
   }
 }
 
-// El id del servidor solo se toca dentro de la cola: un save viejo no debe pisar «Nueva conversación».
-let queue: Promise<void> = Promise.resolve();
-const enqueue = (job: () => Promise<void>) => {
-  queue = queue.then(job).catch(() => {});
-};
-
-async function sync(messages: AnthropicMessage[]): Promise<void> {
-  const store = await storage();
-  const id = await store.getItem(ID_KEY);
-  if (id && (await updateConversation(id, messages)) !== 'missing') return;
-  const created = await createConversation(messages);
-  if (created) await store.setItem(ID_KEY, created);
-}
+let generation = 0;
 
 export async function save(messages: AnthropicMessage[]): Promise<void> {
   try {
     await (await storage()).setItem(KEY, JSON.stringify(messages));
   } catch {
   }
-  enqueue(() => sync(messages));
 }
 
 export async function clear(): Promise<void> {
+  generation++;
   try {
-    await (await storage()).removeItem(KEY);
+    const store = await storage();
+    await store.removeItem(KEY);
+    await store.removeItem(ID_KEY);
   } catch {
   }
-  enqueue(async () => (await storage()).removeItem(ID_KEY));
 }
 
 export async function open(id: string): Promise<AnthropicMessage[] | null> {
   const messages = await fetchConversation(id);
   if (!messages) return null;
+  generation++;
   try {
-    await (await storage()).setItem(KEY, JSON.stringify(messages));
+    const store = await storage();
+    await store.setItem(KEY, JSON.stringify(messages));
+    await store.setItem(ID_KEY, id);
   } catch {
   }
-  enqueue(async () => (await storage()).setItem(ID_KEY, id));
   return messages;
+}
+
+export async function currentConversation(): Promise<{ id: string | null; generation: number }> {
+  const at = generation;
+  try {
+    return { id: await (await storage()).getItem(ID_KEY), generation: at };
+  } catch {
+    return { id: null, generation: at };
+  }
+}
+
+export async function adoptConversation(id: string, at: number): Promise<void> {
+  if (at !== generation) return;
+  try {
+    await (await storage()).setItem(ID_KEY, id);
+  } catch {
+  }
 }
 
 export const list = listConversations;

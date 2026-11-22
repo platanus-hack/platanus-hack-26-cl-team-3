@@ -11,7 +11,12 @@ export function toEvent(name: string, data: any): ChatEvent | null {
     case 'ar':
       return { type: 'ar', part: data.part, instruction: data.instruction, ...(data.action !== undefined ? { action: data.action } : {}) };
     case 'done':
-      return data.truncated === true ? { type: 'done', messages: data.messages, truncated: true } : { type: 'done', messages: data.messages };
+      return {
+        type: 'done',
+        messages: data.messages,
+        ...(data.truncated === true ? { truncated: true } : {}),
+        ...(typeof data.conversation_id === 'string' ? { conversationId: data.conversation_id } : {}),
+      };
     case 'error':
       return { type: 'error', code: data.code, message: data.message };
     default:
