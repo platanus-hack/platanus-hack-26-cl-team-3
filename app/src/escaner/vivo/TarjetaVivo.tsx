@@ -39,6 +39,7 @@ export function TarjetaVivo({ vivo, caption, part, children }: {
       <Pressable
         style={styles.tarjeta}
         disabled={!respondiendo}
+        accessible={respondiendo}
         onPress={callar}
         accessibilityRole={respondiendo ? 'button' : undefined}
         accessibilityLabel={respondiendo ? 'Callar al asistente' : undefined}
