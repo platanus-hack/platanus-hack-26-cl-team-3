@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -17,14 +18,19 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState<InspectionAction | null>(null);
   const [focus, setFocus] = useState<PartId | null>(null);
+  const [finished, setFinished] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const play = useCallback((action: InspectionAction) => {
+  const play = useCallback((action: InspectionAction, loop = false) => {
     clearTimeout(timer.current);
     setPlaying(action);
-    timer.current = setTimeout(() => setPlaying(null), inspectionSeconds[action] * 1000);
+    if (!loop) timer.current = setTimeout(() => setPlaying(null), inspectionSeconds[action] * 1000);
+  }, []);
+  const stop = useCallback(() => {
+    clearTimeout(timer.current);
+    setPlaying(null);
   }, []);
 
   const ask = async (text: string, keepGuide = false) => {
@@ -50,13 +56,15 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
       await save(result.messages);
     }
     setBusy(false);
+    return !('error' in result) && replaced.length === 0;
   };
 
   const current = guide.steps[guide.index];
+  const refilling = !finished && current?.part === 'washer' && guide.steps.slice(0, guide.index + 1).some((s) => s.action === 'refill');
   const done = () => {
     setFocus(null);
     const next = guide.steps[guide.index + 1];
-    if (!next) return void ask(DONE_REPLY);
+    if (!next) return void ask(DONE_REPLY).then(setFinished);
     setGuide({ ...guide, index: guide.index + 1, key: guide.key + 1 });
     setCaption({ text: next.instruction, citations: [] });
     onStep(next);
@@ -70,16 +78,23 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
   };
   const clearFocus = useCallback(() => setFocus(null), []);
 
-  return { steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, play, done, lost, clearFocus };
+  return {
+    steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, finished, refilling,
+    play, stop, done, lost, clearFocus,
+  };
 }
 
 export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGuide> }) {
-  const { current, caption, busy, playing, focus, done, lost, clearFocus } = guide;
+  const { current, caption, busy, playing, focus, finished, done, lost, clearFocus } = guide;
   if (!current) return null;
   return (
     <LiveCaptions part={current.part} text={caption.text} citations={caption.citations}>
       {playing === 'refill' && <Text style={styles.caveat}>Ilustración: no muestra el nivel real del depósito.</Text>}
-      {!playing && (
+      {finished ? (
+        <View style={styles.row}>
+          <GuideButton label="Ir al chat" primary disabled={false} onPress={() => router.back()} />
+        </View>
+      ) : (!playing || playing === 'refill') && (
         <View style={styles.row}>
           <GuideButton label="Listo" primary disabled={busy} onPress={done} />
           {focus ? (
