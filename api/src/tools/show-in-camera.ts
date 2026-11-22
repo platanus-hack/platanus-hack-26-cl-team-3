@@ -36,7 +36,7 @@ export function showInCamera(profile: VehicleProfile): Tool {
       type: "object",
       properties: {
         part: { type: "string", enum: rows.map((p) => p.id) },
-        instruction: { type: "string" },
+        instruction: { type: "string", description: "One short Chilean Spanish sentence spoken to the driver at this stage. Describe only the current action." },
         action: { type: "string", enum: actions, description: actionDescription(profile) },
       },
       required: ["part", "instruction"],

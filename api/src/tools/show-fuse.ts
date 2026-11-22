@@ -24,7 +24,7 @@ export const showFuse = (table: FuseTable): Tool => {
       properties: {
         box: { type: "string", enum: ids },
         numbers: { type: "array", items: { type: "integer" }, minItems: 1, maxItems: MAX_NUMBERS },
-        instruction: { type: "string" },
+        instruction: { type: "string", description: "One short Chilean Spanish sentence spoken to the driver at this stage. Describe only the current action." },
       },
       required: ["box", "numbers", "instruction"],
       additionalProperties: false,
