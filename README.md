@@ -166,7 +166,7 @@ Es la parte más incierta. Evidencia disponible:
 
 El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por la API de Anthropic (Claude Sonnet 5.5 por defecto). La key vive solo en el servidor.
 
-1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). Tests: `cd api && npm test`. El dictado por voz necesita además `ELEVENLABS_API_KEY` en el entorno del host (key con permiso de Speech to Text).
+1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). El historial de conversaciones se guarda en SQLite en la ruta de `HISTORIAL_DB`; sin esa variable, las rutas del historial responden 503. Tests: `cd api && npm test`. El dictado por voz necesita además `ELEVENLABS_API_KEY` en el entorno del host (key con permiso de Speech to Text).
 2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
 
 ## 10. Futuro (fuera del MVP)
