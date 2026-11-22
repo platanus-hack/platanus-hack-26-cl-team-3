@@ -4,6 +4,7 @@ import { toFuse, toCard, type ViewCard, type ViewCitation, type ViewFuse } from 
 export const cameraRoute = (card: ViewCard, steps: ViewCard[], vehicleId: string) => ({
   pathname: '/escanear' as const,
   params: {
+    vivo: '1',
     vehicleId,
     part: card.part,
     instruction: card.instruction,

@@ -7,6 +7,7 @@ import { ProveedorAviso, useAviso } from '../aviso';
 import { PantallaAviso } from '../PantallaAviso';
 import { VehicleSelection } from '../plates/selection';
 import { useReducedMotion } from '../useReducedMotion';
+import { AgentSpeechProvider } from '../chat/AgentSpeech';
 import { color } from '../theme';
 
 export default function Layout() {
@@ -17,14 +18,16 @@ export default function Layout() {
         <StatusBar style="light" />
         <View style={styles.raiz}>
           <VehicleSelection>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: color.fondo },
-                animation: reduceMotion ? 'none' : 'fade',
-                animationDuration: 155,
-              }}
-            />
+            <AgentSpeechProvider>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: color.fondo },
+                  animation: reduceMotion ? 'none' : 'fade',
+                  animationDuration: 155,
+                }}
+              />
+            </AgentSpeechProvider>
             <AvisoPrimerUso />
           </VehicleSelection>
         </View>
