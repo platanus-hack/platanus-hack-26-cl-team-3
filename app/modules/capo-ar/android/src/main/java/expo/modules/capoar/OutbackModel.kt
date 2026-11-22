@@ -18,9 +18,11 @@ internal class OutbackModel(
   companion object {
     // The bundled GLB has a single scene of identity-transform nodes, indexed triangles,
     // packed float positions, unsigned short indices and solid double-sided materials.
-    fun load(assets: AssetManager, swift: Boolean = false): OutbackModel {
-      val bindingName = if (swift) "swift-registration" else "outback-registration"
-      val modelName = if (swift) "swift-service" else "outback-ez36"
+    fun load(assets: AssetManager, vehicle: String = "outback"): OutbackModel {
+      require(vehicle in setOf("outback", "swift", "ram700"))
+      val measuredBay = vehicle != "outback"
+      val bindingName = "$vehicle-registration"
+      val modelName = if (measuredBay) "$vehicle-service" else "outback-ez36"
       val binding = assets.open("engine-models/$bindingName.json").bufferedReader().use { JSONObject(it.readText()) }
       fun point(a: JSONArray) = EnginePoint(a.getDouble(0).toFloat(), a.getDouble(1).toFloat(), a.getDouble(2).toFloat())
       val parts = binding.getJSONArray("parts").objects().map { part ->
@@ -61,7 +63,7 @@ internal class OutbackModel(
       val triangles = buildList {
         for (part in parts.indices) {
           val node = doc.getJSONArray("nodes").getJSONObject(scene.getInt(part))
-          if (swift) require(node.getString("name") == parts[part].id)
+          if (measuredBay) require(node.getString("name") == parts[part].id)
           val mesh = doc.getJSONArray("meshes").getJSONObject(node.getInt("mesh"))
           for ((primitiveIndex, primitive) in mesh.getJSONArray("primitives").objects().withIndex()) {
             val (pos, count) = data(primitive.getJSONObject("attributes").getInt("POSITION"), 5126, "VEC3")
@@ -71,7 +73,7 @@ internal class OutbackModel(
             }
             val material = doc.getJSONArray("materials").getJSONObject(primitive.getInt("material"))
             val color = material.getJSONObject("pbrMetallicRoughness").getJSONArray("baseColorFactor")
-            val rgb = when (if (swift) null else parts[part].id) {
+            val rgb = when (if (measuredBay) null else parts[part].id) {
               "washer" -> if (primitiveIndex == 1) yellow else ivory
               "dipstick" -> if (primitiveIndex == 1) yellow else floatArrayOf(.64f,.62f,.52f)
               "fuses" -> if (primitiveIndex == 1) lidPlastic else dark
@@ -85,7 +87,7 @@ internal class OutbackModel(
       }
       val depths = binding.getJSONArray("relativeDepths")
       val relativeDepths = List(4) { depths.getDouble(it).toFloat() }
-      if (swift) {
+      if (measuredBay) {
         val landmarks = binding.getJSONArray("colorLandmarks").objects().map { site ->
           Landmark(site.getString("id"), point(site.getJSONArray("center")), site.getDouble("width"), LandmarkHue.valueOf(site.getString("color")))
         }

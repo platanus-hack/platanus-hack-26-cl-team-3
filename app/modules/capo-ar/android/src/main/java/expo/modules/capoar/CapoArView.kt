@@ -62,7 +62,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   fun playPartAction(id: String, actionName: String) {
     gl.queueEvent {
       val model = placedEngine?.model ?: return@queueEvent
-      val action = if (swiftParts.isNotEmpty()) {
+      val action = if (measuredParts.isNotEmpty()) {
         when (actionName) {
           "highlight" -> InspectionAction.HIGHLIGHT
           "lift" -> InspectionAction.LIFT
@@ -73,7 +73,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         }
       } else InspectionAction.resolve(id, actionName)
       if (action == null) return@queueEvent
-      val ids = swiftParts.ifEmpty { outbackParts }
+      val ids = measuredParts.ifEmpty { outbackParts }
       val index = ids.indexOf(id)
       val inspectCap = id == "brake_fluid" && (action == InspectionAction.OPEN || action == InspectionAction.SEPARATE)
       val movingPart = if (inspectCap) ids.indexOf("brake_cap") else index
@@ -89,7 +89,10 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
   internal val capa = CapaPoligono(context) { index -> onPart(mapOf("index" to index)) }
   @Volatile internal var outbackParts: List<String> = emptyList()
   @Volatile internal var swiftParts: List<String> = emptyList()
-  private val swiftModel by lazy { OutbackModel.load(context.assets, swift = true) }
+  @Volatile internal var ramParts: List<String> = emptyList()
+  private val measuredParts get() = ramParts.ifEmpty { swiftParts }
+  private val ramModel by lazy { OutbackModel.load(context.assets, "ram700") }
+  private val swiftModel by lazy { OutbackModel.load(context.assets, "swift") }
   private val outbackModel by lazy { OutbackModel.load(context.assets) }
   private val visualRegistration by lazy {
     if (org.opencv.android.OpenCVLoader.initLocal()) {
@@ -99,15 +102,22 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       context.assets.open("engine-models/outback-features.bin").use { VisualModelRegistration(it.readBytes(),outbackModel.colorLandmarks,templates) }
     } else null
   }
-  private val swiftRegistration by lazy {
+  private val swiftRegistration by lazy { measuredRegistration("swift", swiftModel) }
+  private val ramRegistration by lazy { measuredRegistration("ram700", ramModel) }
+  private fun measuredRegistration(vehicle: String, model: OutbackModel): VisualModelRegistration? =
     if (org.opencv.android.OpenCVLoader.initLocal()) {
-      context.assets.open("engine-models/swift-features.bin").use {
-        VisualModelRegistration(it.readBytes(), swiftModel.colorLandmarks, null, requireMeasuredScale = true, poseSupport = swiftModel.corners)
+      context.assets.open("engine-models/$vehicle-features.bin").use {
+        val guides = if (vehicle == "ram700") context.assets.open("engine-models/$vehicle-guides.json").use { guide -> guide.readBytes() } else null
+        VisualModelRegistration(it.readBytes(), model.colorLandmarks, null, requireMeasuredScale = true,
+          poseSupport = model.corners, guideBytes = guides)
       }
     } else null
+  private val hasDetailedModel get() = outbackParts.isNotEmpty() || measuredParts.isNotEmpty()
+  private val selectedModel get() = when {
+    ramParts.isNotEmpty() -> ramModel
+    swiftParts.isNotEmpty() -> swiftModel
+    else -> outbackModel
   }
-  private val hasDetailedModel get() = outbackParts.isNotEmpty() || swiftParts.isNotEmpty()
-  private val selectedModel get() = if (swiftParts.isNotEmpty()) swiftModel else outbackModel
   private val modelRenderer = ModelRenderer()
   private val fondo = FondoCamara()
   private val principal = Handler(Looper.getMainLooper())
@@ -499,7 +509,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       Matrix.translateM(mvp, 0, offset.x, offset.y, offset.z)
       Matrix.scaleM(mvp, 0, scale, scale, scale)
       val selectedPart = animation?.index ?: guidePart
-      val focus = focusedPart?.let { id -> (swiftParts.ifEmpty { outbackParts }).indexOf(id) } ?: -1
+      val focus = focusedPart?.let { id -> (measuredParts.ifEmpty { outbackParts }).indexOf(id) } ?: -1
       val effectiveFocus = if (focus >= 0 && focus == guidePart) selectedPart else focus
       modelRenderer.draw(engine.model, mvp, selectedPart, animation, effectiveFocus)
       ModelHitFrame(engine.model, mvp, anchoVista, altoVista, animation)
@@ -633,7 +643,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
     }
     val id = ++contador
     val capture = pose?.let { Captura(it, f[0], f[1], c[0], c[1], dims[0], dims[1], grados, muestras, prof) }
-    val matchModel = capture != null && (outbackParts.isNotEmpty() || (swiftParts.isNotEmpty() && prof != null))
+    val matchModel = capture != null && (outbackParts.isNotEmpty() || (measuredParts.isNotEmpty() && prof != null))
+    val matchRam = ramParts.isNotEmpty()
     val matchSwift = swiftParts.isNotEmpty()
     if (capture != null) {
       capturas[id] = capture
@@ -648,7 +659,11 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
           val (ancho, alto) = Imagen.guardarJpeg(nv21, w, h, grados, archivo)
           if (matchModel && capture != null && request.includeMeasurements) {
             capture.visualPose = try {
-              (if (matchSwift) swiftRegistration else visualRegistration)?.locate(archivo.path, grados, intrinsics, capture.prof)
+              (when {
+                matchRam -> ramRegistration
+                matchSwift -> swiftRegistration
+                else -> visualRegistration
+              })?.locate(archivo.path, grados, intrinsics, capture.prof)
             } catch (_: org.opencv.core.CvException) { null } catch (_: UnsatisfiedLinkError) { null }
           }
           val r = mutableMapOf<String, Any>(
@@ -848,8 +863,8 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
         }
         EngineMesh.create(corners, volumes, captureDepth = ::captureDepth)
       }?.also { registrationMethod = "visual" }
-      if (swiftParts.isNotEmpty() && visualMesh == null) {
-        promise.reject("ERR_REGISTRATION", "Apunta al depósito de frenos y a la batería del Swift.", null)
+      if (measuredParts.isNotEmpty() && visualMesh == null) {
+        promise.reject("ERR_REGISTRATION", "Apunta la cámara a las piezas de referencia del vano.", null)
         return
       }
       val scanMesh = scanPoints?.takeIf { visualMesh == null }?.let { points ->
@@ -913,7 +928,7 @@ class CapoArView(context: Context, appContext: AppContext) : ExpoView(context, a
       placement = mesh?.let {
         val origin = it.origin
         val model = when {
-          swiftParts.isNotEmpty() -> PlacedModel(swiftModel, it, swiftParts)
+          measuredParts.isNotEmpty() -> PlacedModel(selectedModel, it, measuredParts)
           outbackParts.isNotEmpty() -> PlacedModel(outbackModel, it, outbackParts)
           else -> null
         }
