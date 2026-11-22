@@ -62,7 +62,6 @@ export function useModoVivo({
   const vivo = useRef(true);
   const { hablando, decir, callar } = useVoz();
   const agent = useAgentSpeech();
-  const { stop: stopChatSpeech } = agent;
   const stageKey = caption?.stageKey;
   const lastSpokenStage = useRef<number | undefined>(undefined);
   const agentActive = agent.pending || agent.hablando;
@@ -84,17 +83,13 @@ export function useModoVivo({
   }, []);
 
   useEffect(() => {
-    if (activo && stageKey !== undefined) stopChatSpeech();
-  }, [activo, stageKey, stopChatSpeech]);
-
-  useEffect(() => {
     if (!activo || !vozVivo) {
       callar();
       cortador.current.terminar();
       return;
     }
     if (stageKey !== undefined && textoCaption) {
-      if (lastSpokenStage.current !== stageKey) {
+      if (!agentActive && lastSpokenStage.current !== stageKey) {
         lastSpokenStage.current = stageKey;
         cortador.current.terminar();
         callar();
