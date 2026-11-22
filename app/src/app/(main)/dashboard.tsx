@@ -12,6 +12,7 @@ import { readDashboardPhoto } from '../../dashboard/photo';
 import { borrar } from '../../escaner/comun';
 import { color, espacio, tipo } from '../../theme';
 import { Boton, BotonIcono } from '../../ui';
+import { useGiroLibre } from '../../useGiroLibre';
 
 export default function Dashboard() {
   const { vehicle } = useVehicleSelection();
@@ -21,6 +22,7 @@ export default function Dashboard() {
 }
 
 function DashboardScanner({ vehicleId }: { vehicleId: string }) {
+  useGiroLibre(); // la cámara del tablero gira con el teléfono
   const [permission, requestPermission] = useScannerPermission(vehicleId === 'outback');
   const { height } = useWindowDimensions();
   const camera = useRef<CameraView>(null);
