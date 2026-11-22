@@ -15,20 +15,21 @@ export const ESFUERZOS = [
 
 export type ModeloId = (typeof MODELOS)[number]['id'];
 export type EsfuerzoId = (typeof ESFUERZOS)[number]['id'];
-export type Ajustes = { modelo: ModeloId; esfuerzo: EsfuerzoId | null; anclajeConModelo: boolean };
+export type Ajustes = { modelo: ModeloId; esfuerzo: EsfuerzoId | null; anclajeConModelo: boolean; vozVivo: boolean };
 
 const KEY = 'capo-ar:ajustes:v1';
 // Misma clave y valores que el switch de escaner/comun.tsx.
 const ANCLAJE_KEY = 'capo-ar:anclaje-sonnet:v1';
 
-const DEFECTO = { modelo: 'sonnet', esfuerzo: null } as const;
+const DEFECTO = { modelo: 'sonnet', esfuerzo: null, vozVivo: false } as const;
 
-export function parseAjustes(raw: string | null): Pick<Ajustes, 'modelo' | 'esfuerzo'> {
+export function parseAjustes(raw: string | null): Pick<Ajustes, 'modelo' | 'esfuerzo' | 'vozVivo'> {
   try {
     const v = raw ? JSON.parse(raw) : null;
     const modelo = MODELOS.find((m) => m.id === v?.modelo)?.id ?? DEFECTO.modelo;
     const esfuerzo = ESFUERZOS.find((e) => e.id === v?.esfuerzo)?.id ?? DEFECTO.esfuerzo;
-    return { modelo, esfuerzo };
+    const vozVivo = typeof v?.vozVivo === 'boolean' ? v.vozVivo : DEFECTO.vozVivo;
+    return { modelo, esfuerzo, vozVivo };
   } catch {
     return { ...DEFECTO };
   }
@@ -46,10 +47,10 @@ export async function cargarAjustes(): Promise<Ajustes> {
   }
 }
 
-export async function guardarAjustes({ modelo, esfuerzo, anclajeConModelo }: Ajustes): Promise<void> {
+export async function guardarAjustes({ modelo, esfuerzo, anclajeConModelo, vozVivo }: Ajustes): Promise<void> {
   try {
     const s = await storage();
-    await s.setItem(KEY, JSON.stringify({ modelo, esfuerzo }));
+    await s.setItem(KEY, JSON.stringify({ modelo, esfuerzo, vozVivo }));
     await s.setItem(ANCLAJE_KEY, anclajeConModelo ? '1' : '0');
   } catch {}
 }
