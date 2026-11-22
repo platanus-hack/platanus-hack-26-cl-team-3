@@ -7,6 +7,7 @@ import { cameraRoute } from '../chat/camera';
 import { CitationModal } from '../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../chat/GuideChoice';
 import { runTurn } from '../chat/client';
+import { Dictado } from '../chat/Dictado';
 import type { AnthropicMessage } from '../chat/contract';
 import { clear, load, save, toView, type Bubble, type ViewCard, type ViewCitation, type ViewPart } from '../chat/history';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING } from '../chat/turn';
@@ -26,6 +27,7 @@ export default function Ask() {
   const openedCamera = useRef(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dictationError, setDictationError] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -72,6 +74,7 @@ export default function Ask() {
     setReplies(false);
     setNote(null);
     setError(null);
+    setDictationError(null);
     setQuestion(text);
     setLive([]);
     setLiveCards([]);
@@ -142,6 +145,7 @@ export default function Ask() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + espacio.s }]}>
         {error && <Text style={styles.error}>{error}</Text>}
+        {dictationError && <Text style={styles.error}>{dictationError}</Text>}
         {status && <Text style={styles.status}>{status}</Text>}
         {note && !status && <Text style={styles.status}>{note}</Text>}
         {replies && (
@@ -163,6 +167,11 @@ export default function Ask() {
             submitBehavior="submit"
             returnKeyType="send"
             onSubmitEditing={() => void send()}
+          />
+          <Dictado
+            deshabilitado={busy || !loaded}
+            onTexto={(text) => setInput((prev) => (prev.trim() ? prev.trimEnd() + ' ' + text : text))}
+            onError={(message) => setDictationError(message || null)}
           />
           <Pressable
             onPress={() => void send()}
@@ -253,18 +262,22 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: espacio.l, paddingTop: espacio.s, borderTopWidth: 1, borderTopColor: color.borde, backgroundColor: color.fondo },
   status: { fontSize: 13, color: color.textoSuave, marginBottom: espacio.s },
   error: { fontSize: 13, color: color.peligro, marginBottom: espacio.s },
-  row: { flexDirection: 'row', alignItems: 'flex-end', gap: espacio.s },
-  input: {
-    flex: 1,
-    maxHeight: 120,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    minHeight: 48,
     backgroundColor: color.superficie,
     borderWidth: 1,
     borderColor: color.borde,
     borderRadius: radio.m,
+  },
+  input: {
+    flex: 1,
+    maxHeight: 120,
     paddingHorizontal: espacio.l,
     paddingVertical: espacio.m,
     fontSize: 15,
     color: color.texto,
   },
-  send: { width: 48, height: 48, borderRadius: radio.m, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 40, height: 40, borderRadius: 20, margin: 4, backgroundColor: color.acento, alignItems: 'center', justifyContent: 'center' },
 });

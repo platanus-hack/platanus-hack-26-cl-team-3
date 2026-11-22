@@ -33,7 +33,14 @@
       ],
       "expo-router",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Capo AR usa el micrófono para dictar tus preguntas al chat. El audio se envía a ElevenLabs para transcribirlo.",
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "web": {
       "favicon": "./assets/favicon.png"
