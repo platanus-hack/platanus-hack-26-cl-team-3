@@ -1,7 +1,7 @@
 import { useScannerPermission } from '../useScannerPermission';
 import { CameraView } from 'expo-camera';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { AppState, findNodeHandle, StyleSheet, Text, View } from 'react-native';
+import { AppState, findNodeHandle, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { readPlatePreview } from '../../modules/capo-ar';
 import { color, espacio, radio, tipo } from '../theme';
@@ -15,6 +15,9 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
   const [error, setError] = useState('');
   const preview = useRef<ComponentRef<typeof View>>(null);
   const capturing = useRef(false);
+  const { width: pantallaAncho, height: pantallaAlto } = useWindowDimensions();
+  // En horizontal la vista no puede ser más alta que la pantalla: se achica manteniendo la proporción 3:2.
+  const ancho = Math.min(pantallaAncho - espacio.xl * 2, pantallaAlto * 0.7 * 1.5);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => {
@@ -69,7 +72,7 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
     </View>
   );
   return (
-    <View ref={preview} collapsable={false} style={styles.preview}>
+    <View ref={preview} collapsable={false} style={[styles.preview, { width: ancho }]}>
       {active && <CameraView style={StyleSheet.absoluteFill} facing="back"
         onCameraReady={() => setReady(true)} onMountError={() => setError('No se pudo abrir la cámara. Puedes escribir la patente.')} />}
       <View pointerEvents="none" style={styles.guide} />
@@ -79,7 +82,7 @@ export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
 
 const styles = StyleSheet.create({
   permission: { gap: espacio.m },
-  preview: { width: '100%', aspectRatio: 1.5, backgroundColor: color.superficie, borderRadius: radio.l,
+  preview: { alignSelf: 'center', aspectRatio: 1.5, backgroundColor: color.superficie, borderRadius: radio.l,
     overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   guide: { width: '75%', aspectRatio: 3.25, borderColor: color.acento, borderWidth: 2, borderRadius: radio.s },
 });

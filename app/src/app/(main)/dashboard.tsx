@@ -13,9 +13,11 @@ import { readDashboardPhoto } from '../../dashboard/photo';
 import { borrar } from '../../escaner/comun';
 import { color, espacio, tipo } from '../../theme';
 import { Boton, BotonIcono } from '../../ui';
+import { useGiroLibre } from '../../useGiroLibre';
 
 export default function Dashboard() {
   const { vehicle } = useVehicleSelection();
+  useGiroLibre(); // la cámara del tablero gira con el teléfono
   const { vehicleId = vehicle.id } = useLocalSearchParams<{ vehicleId?: string }>();
   const focused = useIsFocused();
   return focused && <DashboardScanner key={vehicleId} vehicleId={vehicleId} />;
@@ -82,9 +84,9 @@ function DashboardScanner({ vehicleId }: { vehicleId: string }) {
         {!supported ? <Text style={tipo.cuerpo}>El escáner de tablero solo tiene referencias verificadas del Subaru Outback 2016. Para {selected.name}{selected.year ? ` ${selected.year}` : ''} todavía no hay un manual verificado, así que no se identifican testigos.</Text> : <>
           {!result && <Text style={tipo.cuerpo}>Con el auto estacionado, encuadra el tablero completo y comprueba que los símbolos encendidos se vean nítidos.</Text>}
           {(result || permission?.granted) && (
-            <View style={[styles.preview, result ? { aspectRatio: result.width / result.height } : { maxHeight: height * 0.46, alignSelf: 'center' }]}>
+            <View style={[styles.preview, result ? { aspectRatio: result.width / result.height } : { height: height * 0.46 }]}>
               {result ? <Image source={{ uri: result.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> :
-              <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back" ratio="4:3"
+              <CameraView style={StyleSheet.absoluteFill} ref={camera} facing="back"
                 onCameraReady={() => setReady(true)}
                 onMountError={() => { setReady(false); setError('No se pudo abrir la cámara. Vuelve al menú y reintenta.'); }} />}
               {result?.detections.map((box, index) => (
@@ -131,7 +133,7 @@ function DashboardScanner({ vehicleId }: { vehicleId: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.fondo },
   content: { padding: espacio.l, gap: espacio.m },
-  preview: { width: '100%', aspectRatio: 3 / 4, backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  preview: { width: '100%', backgroundColor: 'black', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   marker: { position: 'absolute', borderWidth: 1, borderColor: color.acento },
   result: { backgroundColor: color.superficie, padding: espacio.l, gap: espacio.s },
   link: { ...tipo.nota, color: color.acento, textDecorationLine: 'underline' },
