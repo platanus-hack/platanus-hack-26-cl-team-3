@@ -1,3 +1,4 @@
+import { servidor } from '../servidor';
 import { vehicles } from '../vehicles';
 
 export type PlateRecord = { plate: string; make: string | null; model: string | null; year: number | null };
@@ -33,8 +34,7 @@ export function identifiedVehicle(record: PlateRecord) {
 }
 
 export async function lookupPlate(plate: string, signal: AbortSignal): Promise<PlateRecord> {
-  const base = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
-  const response = await fetch(base.replace(/\/$/, '') + '/api/vehicles/' + encodeURIComponent(plate), { signal });
+  const response = await fetch((await servidor()) + '/api/vehicles/' + encodeURIComponent(plate), { signal });
   if (response.status === 404) throw new Error('Sin registro en las revisiones técnicas disponibles. Revisa la patente.');
   if (!response.ok) throw new Error('No se pudo consultar el registro. Inténtalo de nuevo.');
   const record: unknown = await response.json();

@@ -2,7 +2,8 @@ import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 
 import type { PartCenter } from '../../../modules/capo-ar';
-import { API_URL, CHAT_TOKEN } from '../../chat/client';
+import { CHAT_TOKEN } from '../../chat/client';
+import { servidor } from '../../servidor';
 import type { Vano } from '../../detector/vano';
 import type { PartId, Volume } from '../catalog';
 import { insideBay } from './part-centers';
@@ -106,7 +107,7 @@ export async function locatePartsWithSonnet(
   try {
     const crop = await cropToBase64(capture.uri, bay);
     if (!crop) return [];
-    const res = await fetch(`${API_URL}/api/locate`, {
+    const res = await fetch(`${await servidor()}/api/locate`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

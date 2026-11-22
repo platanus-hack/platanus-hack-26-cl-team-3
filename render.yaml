@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: hoodini-api
+    runtime: docker
+    rootDir: api
+    dockerContext: .
+    dockerfilePath: ./Dockerfile.render
+    branch: main
+    region: virginia
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
+    disk:
+      name: historial
+      mountPath: /app/historial
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "8787"
+      - key: HISTORIAL_DB
+        value: /app/historial/historial.sqlite
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: LOGS_TOKEN
+        sync: false
