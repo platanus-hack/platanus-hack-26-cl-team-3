@@ -53,3 +53,21 @@ test("7: expandWords conserva las palabras sin reducir para FTS5", () => {
   assert.deepEqual(expandWords("replacing tires"), ["replacing", "tires"]);
   assert.ok(expandWords("varilla").includes("gauge"));
 });
+
+test("8: el glosario traduce plurales y frases de varias palabras", () => {
+  assert.ok(expandWords("mis neumaticos").includes("tire"));
+  assert.ok(expandWords("las ampolletas").includes("bulb"));
+  assert.ok(expandWords("la luz de reserva").includes("empty"));
+  assert.ok(expandWords("el aire acondicionado").includes("conditioner"));
+  assert.ok(expandWords("¿Dónde está el CHECK ENGINE?").includes("malfunction"));
+});
+
+test("9: no se tocan las consultas que ya vienen en inglés ni las siglas que el manual usa", () => {
+  assert.deepEqual(expandWords("ABS warning light"), ["abs", "warning", "light"]);
+  assert.deepEqual(expandWords("cruise control set speed"), ["cruise", "control", "set", "speed"]);
+  assert.deepEqual(expandWords("windshield washer fluid"), ["windshield", "washer", "fluid"]);
+});
+
+test("10: las palabras vacías del español no entran a la búsqueda", () => {
+  assert.deepEqual(expandWords("cómo hago para que no se"), []);
+});

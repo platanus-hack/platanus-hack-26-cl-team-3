@@ -34,7 +34,7 @@ el índice con él ya corriendo.
 ## Qué ven los agentes
 
 - `buscar_manual { query, limit? }`: las páginas más relevantes (4 por defecto, 5 como máximo). La consulta va en inglés;
-  si llega en español se traducen 58 palabras del auto (`api/src/manual/glossary.ts`: sapito, varilla, ampolleta…).
+  si llega en español se traducen 162 palabras y 33 expresiones del auto (`api/src/manual/glossary.ts`: sapito, varilla, ampolleta, «luz de reserva»…).
 - `leer_manual { page, count? }`: desde una página y hasta 2 siguientes. `page` es la numeración impresa («11-9»); las
   portadas, el índice y la contratapa no la traen y se piden como `pdf:566`.
 - Cada página sale como un `search_result` con cita habilitada: `source` `manual://subaru-outback-2016-us/11-11` y título
@@ -48,7 +48,7 @@ el índice con él ya corriendo.
 Léxico, sin dependencias: BM25 por página, con el título de la sección pesando el triple, un quitaplurales sencillo y la
 traducción de las palabras del auto. Carga en unos 50 ms y cada consulta tarda menos de 2 ms.
 
-## Dónde vive el índice: memoria, SQLite o Postgres
+## Dónde vive el índice: memoria, SQLite o Postgres (medido con el glosario original)
 
 `MANUAL_INDEX` decide el formato por la extensión: `.json` se carga a memoria (BM25 propio) y `.sqlite` se abre como base
 con FTS5, que trae BM25 integrado y usa `node:sqlite`, que el `api` ya usa para los vehículos. Para generar el segundo,
@@ -90,10 +90,40 @@ Otras dos formas de ordenar en Postgres salieron peor (`ts_rank` con normalizaci
 manual; un solo manual; las preguntas en español se escribieron antes de saber en cuáles fallaba el glosario, y no se
 ajustó el glosario a ellas para no sesgar el resultado.
 
+## Mejora del español
+
+La medición anterior mostró que el punto débil era el español, no el motor. El glosario se reescribió recorriendo los
+**títulos de sección del propio manual** (140), con palabras de uso común, plurales, expresiones de varias palabras
+(«luz de reserva», «freno de mano») y las palabras vacías del español, y no a partir de las preguntas con que se mide.
+
+| Entre las 4 primeras páginas | Antes | Después |
+|---|---|---|
+| Ajuste (28 preguntas), español | 57 % | **86 %** |
+| Ajuste, inglés | 89 % | 89 % |
+| **Validación** (19 preguntas), español | 37 % | **89 %** |
+| Validación, inglés | 95 % | 95 % |
+
+El conjunto de **validación** (`eval/manual/preguntas-validacion.json`) se escribió antes de tocar el glosario y el glosario
+se ajustó solo mirando el de ajuste. La evaluación acepta `--preguntas archivo.json` y `--sin-detalle` (no lista cuáles
+fallaron, para no ajustar a la validación).
+
+Dos defectos que salieron en el camino y se corrigieron con una regla general: **no se expande lo que el manual ya dice
+igual**. «control» (palabra inglesa común) se convertía en «remote», y «ABS» agregaba «anti-lock brake system» a una consulta
+que ya venía en inglés y la diluía. El script de evaluación lista las palabras del glosario que también están en el manual.
+
+**Límites:**
+
+- La validación se midió tres veces (línea base, glosario nuevo y tras corregir esos defectos). Solo 19 preguntas: cada una
+  vale 5 puntos.
+- **No es independiente del todo:** los temas de las preguntas coinciden con títulos de sección del manual, que alimentaron
+  el glosario, y las escribió la misma fuente que el glosario. Con palabras que no se parezcan a un título de sección el
+  resultado puede ser peor.
+- Ambos índices (memoria y SQLite) dieron lo mismo con el glosario nuevo.
+
 ## Límites conocidos
 
 - **Es búsqueda por palabras:** no entiende sinónimos que no estén en el glosario. Si un tema falla, agregar la palabra
-  allí es lo más barato. Con la pregunta en español, la respuesta está entre las 4 primeras páginas en 57 % de los casos.
+  allí es lo más barato. Con el glosario nuevo, la respuesta en español está entre las 4 primeras páginas en 86–89 % de las preguntas medidas.
 - **Los diagramas no están:** solo el texto. Las tablas salen como texto corrido y pueden perder el orden de las celdas.
 - **El símbolo de grado** sale del PDF como un «8» (`10.48F`). `fixDegrees` lo corrige junto a F o C; no se revisaron otros
   símbolos, y `cm²` pierde el cuadrado.
