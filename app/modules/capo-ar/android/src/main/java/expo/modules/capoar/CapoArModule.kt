@@ -105,6 +105,12 @@ class CapoArModule : Module() {
         vista.fijar(id, esquinas, registration, volumes, observedCenters.orEmpty(), allowVisual == true, promise)
       }
 
+      AsyncFunction("placeInitial") {
+        view: CapoArView, id: Int, outline: List<Double>, registration: List<Double>, volumes: List<List<Double>>,
+        observedCenters: List<List<Double>>?, allowVisual: Boolean?, promise: Promise ->
+        view.fijar(id, outline, registration, volumes, observedCenters.orEmpty(), allowVisual == true, promise, checkLiveView = true)
+      }
+
       AsyncFunction("soltar") { vista: CapoArView -> vista.soltar() }
 
       AsyncFunction("playPartAction") { view: CapoArView, id: String, action: String -> view.playPartAction(id, action) }
