@@ -6,9 +6,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ProveedorAviso, useAviso } from '../aviso';
 import { PantallaAviso } from '../PantallaAviso';
 import { VehicleSelection } from '../plates/selection';
+import { useReducedMotion } from '../useReducedMotion';
 import { color } from '../theme';
 
 export default function Layout() {
+  const reduceMotion = useReducedMotion();
   return (
     <SafeAreaProvider>
       <ProveedorAviso>
@@ -19,11 +21,10 @@ export default function Layout() {
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: color.fondo },
-                animation: 'slide_from_right',
+                animation: reduceMotion ? 'none' : 'fade',
+                animationDuration: 155,
               }}
-            >
-              <Stack.Screen name="aviso" options={{ animation: 'slide_from_bottom' }} />
-            </Stack>
+            />
           </VehicleSelection>
           <AvisoPrimerUso />
         </View>

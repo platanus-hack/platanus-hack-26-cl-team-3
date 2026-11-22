@@ -1,4 +1,4 @@
-import { useCameraPermissions } from 'expo-camera';
+import { useScannerPermission } from '../useScannerPermission';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -38,7 +38,7 @@ export default function Escanear() {
   const guide = readGuide({ part, instruction, action, steps, step });
   const guidePart = part && Object.hasOwn(parts, part) ? (part as PartId) : undefined;
   const vehicle = vehicles.find(option => option.id === vehicleId);
-  const [permiso, pedirPermiso] = useCameraPermissions();
+  const [permiso, pedirPermiso] = useScannerPermission();
   const [conAR, setConAR] = useState<boolean | null>(null);
 
   useEffect(() => {
