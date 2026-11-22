@@ -1,4 +1,9 @@
-# capo-ar — Guía de tu auto en Realidad Aumentada
+<p align="center"><img src="project-logo.png" width="140" alt="Hoodini"></p>
+
+# Hoodini — Guía de tu auto en Realidad Aumentada
+
+> **Hoodini** es el nombre de la app. Equipo: **<WIP>** (nombre por definir) · Track: Physical World · [Descargar el APK](https://github.com/platanus-hack/platanus-hack-26-cl-team-3/releases/latest).
+> Antes se llamaba «Capo AR»: el repositorio, el paquete Android (`com.capoar.app`), el slug, el esquema `capoar` y los módulos conservan ese nombre técnico; **los textos que ve el usuario dicen «Hoodini»**.
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
 > Estado (21-11-2026): **MVP inicial** (hackathon). El resumen para el mentor está en [`docs/brief.md`](docs/brief.md).

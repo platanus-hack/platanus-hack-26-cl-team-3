@@ -2,8 +2,10 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AVISO } from './aviso';
+import { buildActual } from './buildActual';
 import { color, espacio, radio, tipo } from './theme';
 import { Boton, Icono, Tarjeta } from './ui';
+import { describeBuild } from './version';
 
 /** Aviso obligatorio (primer uso) y página «Aviso y fuentes» (siempre accesible desde el menú). */
 export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onListo: () => void }) {
@@ -30,6 +32,7 @@ export function PantallaAviso({ primerUso, onListo }: { primerUso: boolean; onLi
           Reconocimiento del vano del motor: CLIPSeg de CIDAS (licencia Apache-2.0), basado en CLIP ViT-B/16 de OpenAI
           (licencia MIT), con un decodificador entrenado por el equipo.
         </Text>
+        <Text style={styles.version} selectable>Hoodini · {describeBuild(buildActual())}</Text>
       </ScrollView>
       <Boton texto={primerUso ? 'Entendido, continuar' : 'Cerrar'} onPress={onListo} estilo={styles.boton} />
     </View>
@@ -63,4 +66,5 @@ const styles = StyleSheet.create({
   punto: { flexDirection: 'row', gap: espacio.m, marginBottom: espacio.m, alignItems: 'flex-start' },
   puntoTexto: { flex: 1 },
   boton: { marginTop: espacio.m },
+  version: { fontSize: 11, color: color.textoTenue, textAlign: 'center', marginTop: espacio.xl },
 });

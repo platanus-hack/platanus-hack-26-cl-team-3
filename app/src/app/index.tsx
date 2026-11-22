@@ -1,13 +1,14 @@
-import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useRef, useState, type ComponentRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { buildActual } from '../buildActual';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Icono, Insignia, type NombreIcono } from '../ui';
 
 import { useVehicleSelection } from '../plates/selection';
+import { describeBuild } from '../version';
 import { vehicles } from '../vehicles';
 
 // Planned MVP features from the README.
@@ -21,7 +22,7 @@ export default function Menu() {
   const { vehicle, setVehicle } = useVehicleSelection();
   const [vehicleOptionsOpen, setVehicleOptionsOpen] = useState(false);
   const vehiclePicker = useRef<ComponentRef<typeof Pressable>>(null);
-  const version = Constants.expoConfig?.version ?? '';
+  const version = describeBuild(buildActual());
 
   return (
     <ScrollView
@@ -30,11 +31,9 @@ export default function Menu() {
     >
       <View style={styles.cabecera}>
         <View style={styles.marca}>
-          <View style={styles.logo}>
-            <Icono nombre="car-wrench" tam={26} tono={color.acentoTexto} />
-          </View>
+          <Image source={require('../../assets/icon.png')} style={styles.logo} accessibilityLabel="Hoodini" />
           <View>
-            <Text style={tipo.titulo}>Capo AR</Text>
+            <Text style={tipo.titulo}>Hoodini</Text>
             <Text style={tipo.subtitulo}>Tu guía bajo el capó</Text>
           </View>
         </View>
@@ -178,7 +177,7 @@ export default function Menu() {
           Guía informativa: no reemplaza el manual ni a un mecánico. Ver aviso y fuentes.
         </Text>
       </Pressable>
-      {!!version && <Text style={styles.version}>Versión {version}</Text>}
+      {!!version && <Text style={styles.version} selectable>{version}</Text>}
     </ScrollView>
   );
 }
@@ -190,14 +189,7 @@ const styles = StyleSheet.create({
   acciones: { flexDirection: 'row', gap: espacio.s },
   cabecera: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: espacio.xl },
   marca: { flexDirection: 'row', alignItems: 'center', gap: espacio.m },
-  logo: {
-    width: 48,
-    height: 48,
-    borderRadius: radio.m,
-    backgroundColor: color.acento,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  logo: { width: 48, height: 48, borderRadius: radio.m },
   vehiclePicker: {
     flexDirection: 'row',
     alignItems: 'center',
