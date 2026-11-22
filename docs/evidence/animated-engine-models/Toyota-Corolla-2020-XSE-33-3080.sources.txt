@@ -1,0 +1,11 @@
+2020 Toyota Corolla Sedan XSE US / 2.0 M20A-FKS / K&N 33-3080 air filter
+
+Toyota USA identifies the 2.0 M20A-FKS engine in XSE sedans. K&N lists the 33-3080 as a replacement for the 2020 Corolla 2.0 L four-cylinder gas engine. The supplier gives 268 mm outside length, 152 mm outside width and 29 mm height, and identifies cotton gauze media.
+https://pressroom.toyota.com/all-new-2020-toyota-corolla-ready-to-rock-the-sedan-world/
+https://www.knfilters.com/toyota/corolla/2.0l-l4-gas/2020
+https://www.knfilters.com/33-3080-replacement-air-filter
+
+The black frame, folded media, colors and repeat follow a photograph of the identified product distributed by Lowe’s. Frame cross-section and internal fold depth are visual approximations. Repeat count is approximate. The housing and mounting pose are outside this isolated study. No factory-fit equipment claim or VIN confirmation.
+https://mobileimages.lowes.com/productimages/33d0d5a6-3b5b-4b20-88b9-b7a32745ea00/47731649.jpg
+
+GLB coordinates use metres. The animation tilts the whole filter for inspection. The modeled exterior bounds were checked against the supplier metric dimensions.

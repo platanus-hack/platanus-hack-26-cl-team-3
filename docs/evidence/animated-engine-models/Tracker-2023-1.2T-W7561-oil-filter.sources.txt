@@ -1,0 +1,10 @@
+Chevrolet Tracker | MY2023 | Brazil | 1.2 12V Turbo Flex | MANN-FILTER W 7561
+MANN-FILTER's Brazil catalog lists the 1199 cc, 98 kW engine from February 2020 onward. The replacement fitment applies by engine, including the targeted 1.2T Premier. The catalogue references GM 55509268 among several interchange numbers. The supplier and filter actually installed on any individual car must be checked on the vehicle.
+https://www.mann-filter.com/br-pt/catalogo/resultados-da-pesquisa/produto.html/w7561_mann-filter.html
+https://www.mann-filter.com/content/dam/website/mann-filter/mann-filter-com/br-pt/documents/lan%C3%A7amentos/lan%C3%A7amentos-dezembro-2024/Informativo_Lan%C3%A7amento_Linha_Leve_12.24.pdf
+Product photo inspected for the exterior profile, inlet pattern, rolled rim, gasket and finish.
+https://s7g10.scene7.com/is/image/mannhummel/W_7561?wid=800
+
+Published geometry: 74 mm maximum diameter, 73 mm overall height, 63/70 mm gasket inner/outer diameters and nominal M22 x 1.5-6H threaded connection. The canister profile, stamped face and inlet layout are approximated from the catalog photo. Rear inlet positions are inferred from the circumferential pattern. The helical ridge illustrates pitch only. The model omits hidden filtration media, valves and surface markings. No vehicle-space anchor has been measured.
+
+Blender 5.1.2 reimported the exported GLB and checked animation movement and all three envelope dimensions (74 x 74 x 73 mm). Six component meshes. The 720 x 720 PNG was rendered from the reopened GLB and inspected.
