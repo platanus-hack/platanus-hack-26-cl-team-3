@@ -21,14 +21,14 @@ import { VistaAR, type CapturaAR, type EstadoAR, type PartCenter, type Resultado
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { aCuadroCompleto, COMPLETO, Encuadre, recorteAlrededor, type Recorte } from '../detector/encuadre';
 import { iouPoligonos, poligonoVano, Suavizador, vanoValido, type Vano } from '../detector/vano';
-import { inspectionActions, inspectionLabels } from '../engine-maps/inspection';
+import { inspectionActions, inspectionLabels, inspectionSeconds } from '../engine-maps/inspection';
 import { engineMaps, parts, type PartId } from '../engine-maps/catalog';
 import { confirmedPartCenters } from '../engine-maps/landmarks/part-centers';
 import { locateOutbackParts, releaseOutbackEncoder } from '../engine-maps/landmarks/outback';
 import { lastSonnetStatus, locatePartsWithSonnet, resetSonnetCalls } from '../engine-maps/landmarks/sonnet';
 import { completeBay, extendsPartialMap, encodeVolumes, consistentCorrection, needsVisualCorrection, overlapsPlacedBay, registrationCorners, sameRegistrationView, visualBay } from '../engine-maps/registration';
 import { InitialVisualScan } from './initial-visual-scan';
-import { PartGuide, type PartGuideRef } from './PartGuide';
+import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
 import { ModoVivo } from './vivo/ModoVivo';
@@ -528,7 +528,14 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   useEffect(() => { sonnetAnchorRef.current = controls.sonnetAnchor; }, [controls.sonnetAnchor]);
   const playedStep = useRef(-1);
   const mapTracking = anclaje?.mapPlaced && estadoAR?.mapTracking;
-  const { current: step, stepKey, play, focus } = cameraGuide;
+  const { current: step, stepKey, play, stop, focus } = cameraGuide;
+  const refillLoop = !!(cameraGuide.refilling && mapTracking && outbackParts && selected === 'washer');
+  const choosePart = (index: number) => {
+    setSelectedIndex(index);
+    const part = map?.volumes[index]?.part;
+    if (outbackParts && part) cameraGuide.toggleFocus(part);
+    else if (part !== focus) cameraGuide.clearFocus();
+  };
   const playedFocus = useRef<string | null>(null);
   useEffect(() => {
     if (!focus) playedFocus.current = null;
@@ -539,12 +546,29 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     }
   }, [focus, mapTracking, outbackParts, selected, play]);
   useEffect(() => {
+    if (refillLoop) {
+      playedStep.current = stepKey;
+      return;
+    }
     if (playedStep.current !== stepKey && mapTracking && outbackParts && step?.action && selected === step.part && ar.current) {
       playedStep.current = stepKey;
       play(step.action);
       void ar.current.playPartAction(step.part, step.action).catch(() => setAviso('No se pudo mostrar la acción.'));
     }
-  }, [mapTracking, outbackParts, selected, step, stepKey, play]);
+  }, [refillLoop, mapTracking, outbackParts, selected, step, stepKey, play]);
+  useEffect(() => {
+    if (!refillLoop) return;
+    const cycle = () => {
+      play('refill', true);
+      void ar.current?.playPartAction('washer', 'refill').catch(() => setAviso('No se pudo mostrar la acción.'));
+    };
+    cycle();
+    const id = setInterval(cycle, inspectionSeconds.refill * 1000);
+    return () => {
+      clearInterval(id);
+      stop();
+    };
+  }, [refillLoop, play, stop]);
   if (!VistaAR) return null;
   const rastreando = estadoAR?.estado === 'rastreando';
   const detectado = valido && !!vano;
@@ -555,16 +579,20 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const fuseLink = selected === 'fuses' ? map?.fuseUrl : undefined;
 
   let status = 'Apunta al motor';
+  let engineHint: string | null = null;
   if (error || errorAR) status = 'Error de cámara';
   else if (estadoAR?.estado === 'instalando') status = 'Preparando RA…';
   else if (!modeloListo || !sesionActiva) status = 'Iniciando cámara…';
   else if (recalibrando) status = 'Recalibrando…';
   else if (aviso) status = 'Ver aviso';
-  else if (anclaje && (!rastreando || (anclaje.mapPlaced && !mapTracking))) status = 'Buscando seguimiento…';
-  else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
+  else if (anclaje && (!rastreando || (anclaje.mapPlaced && !mapTracking))) {
+    status = 'Buscando seguimiento…';
+    engineHint = 'Vuelve a apuntar al motor';
+  } else if (mapTracking) status = selected ? parts[selected][0] : 'Mapa fijado';
   else if (anclaje) status = 'Contorno fijado';
   else if (outbackParts && registrationCandidate) status = 'Scanning…';
   else if (detectado) status = map ? 'Alineando mapa…' : 'Vano detectado';
+  else engineHint = 'Apunta la cámara al motor';
 
   let panel;
   if (error || errorAR) {
@@ -622,7 +650,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                   key={part}
                   accessibilityRole="button"
                   accessibilityState={{ selected: selectedIndex === index }}
-                  onPress={() => setSelectedIndex(index)}
+                  onPress={() => choosePart(index)}
                   style={[styles.part, selectedIndex === index && styles.selected]}
                 >
                   <Text style={tipo.nota}>{parts[part][0]}</Text>
@@ -753,14 +781,13 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         outbackParts={outbackParts}
         selectedPart={selectedIndex}
         focusedPart={focus}
-        onPart={(e) => {
-          setSelectedIndex(e.nativeEvent.index);
-          if (map?.volumes[e.nativeEvent.index]?.part !== focus) cameraGuide.clearFocus();
-        }}
+        onPart={(e) => choosePart(e.nativeEvent.index)}
         onEstado={(e) => setEstadoAR(e.nativeEvent)}
         onGuia={(e) => guide.current?.push(e.nativeEvent)}
       />
-      <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
+        name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+      {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
       {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
           los toques sobre las piezas del mapa. */}
       {!anclaje && (

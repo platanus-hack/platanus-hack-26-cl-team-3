@@ -8,8 +8,9 @@ const MAX_INSTRUCTION = 200;
 const definition: ToolDefinition = {
   name: "show_in_camera",
   description:
-    "Muestra al conductor una tarjeta para abrir la cámara en una pieza del vano del motor. " +
-    "Úsala solo con piezas que devolvió lookup_parts. `instruction` es una frase corta en español que dice qué buscar.",
+    "Agrega un paso a la guía de cámara: la app marca la pieza del vano del motor y guía al conductor hasta ella. " +
+    "Úsala solo con piezas que devolvió lookup_parts. `instruction` es una frase corta en español que dice qué buscar " +
+    "o qué hacer en ese paso. Primero marca la pieza sin action; la animación va en una llamada posterior con la misma pieza.",
   input_schema: {
     type: "object",
     properties: {
@@ -17,7 +18,10 @@ const definition: ToolDefinition = {
       instruction: { type: "string" },
       action: {
         type: "string", enum: ["highlight", "lift", "refill", "open"],
-        description: "Optional 3D inspection after camera registration. Highlight or lift any mapped part. Refill demonstrates the washer only. Open demonstrates the observed cover, cap or dipstick movement on supported parts.",
+        description:
+          "Animación 3D del paso, para cuando el conductor ya encontró la pieza. Omítela en la llamada que marca la pieza " +
+          "por primera vez. highlight la hace destellar y lift la levanta en 3D (cualquier pieza); refill muestra cómo " +
+          `rellenar el sapito (solo washer); open muestra cómo se abre la tapa o cubierta, o sale la varilla (${[...openingParts].join(", ")}).`,
       },
     },
     required: ["part", "instruction"],

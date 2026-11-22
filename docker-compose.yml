@@ -32,9 +32,11 @@ services:
       PRT_SEED_PATH: /app/prt-seed/vehicles.sqlite
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      HISTORIAL_DB: /app/historial/historial.sqlite
     volumes:
       - ${PRT_DATA_DIR:-./api/data}:/app/data:ro
       - prt-seed:/app/prt-seed:ro
+      - historial:/app/historial
     networks: [proxy]
     labels:
       - "traefik.enable=true"
@@ -51,3 +53,4 @@ networks:
 
 volumes:
   prt-seed:
+  historial:

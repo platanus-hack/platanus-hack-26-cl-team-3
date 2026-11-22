@@ -25,6 +25,7 @@ export default function Ask() {
   const [liveCards, setLiveCards] = useState<ViewCard[]>([]);
   const [replies, setReplies] = useState(false);
   const openedCamera = useRef(false);
+  const openedHistory = useRef(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dictationError, setDictationError] = useState<string | null>(null);
@@ -49,12 +50,22 @@ export default function Ask() {
         setReplies(true);
         void load().then(setMessages);
       }
+      if (openedHistory.current) {
+        openedHistory.current = false;
+        setReplies(false);
+        void load().then(setMessages);
+      }
     }, []),
   );
 
   const openCamera = useCallback((card: ViewCard, cards: ViewCard[]) => {
     openedCamera.current = true;
     router.push(cameraRoute(card, cards));
+  }, []);
+
+  const openHistory = useCallback(() => {
+    openedHistory.current = true;
+    router.push('/historial');
   }, []);
 
   const bubbles = useMemo(() => {
@@ -118,6 +129,7 @@ export default function Ask() {
           <Text style={styles.title}>Asistente</Text>
           <Text style={styles.subtitleBar}>Subaru Outback 2016, motor 3.6R</Text>
         </View>
+        <BotonIcono icono="history" etiqueta="Conversaciones anteriores" onPress={openHistory} deshabilitado={busy} />
         <BotonIcono icono="square-edit-outline" etiqueta="Nueva conversación" onPress={reset} deshabilitado={busy} />
       </View>
 
