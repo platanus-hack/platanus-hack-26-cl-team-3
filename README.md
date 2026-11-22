@@ -1,211 +1,73 @@
 <p align="center"><img src="project-logo.png" width="140" alt="Hoodini"></p>
 
-# Hoodini — Guía de tu auto en Realidad Aumentada
+# Hoodini
 
-> **Hoodini** es el nombre de la app. Equipo: **<WIP>** (nombre por definir) · Track: Physical World · [Descargar el APK](https://github.com/platanus-hack/platanus-hack-26-cl-team-3/releases/latest).
-> Antes se llamaba «Capo AR»: el repositorio, el paquete Android (`com.capoar.app`), el slug, el esquema `capoar` y los módulos conservan ese nombre técnico; **los textos que ve el usuario dicen «Hoodini»**.
+Hoodini is an Android guide for drivers looking under the hood. Ask why the windshield washers have stopped working and the assistant can open the camera at the washer reservoir. An arrow points toward the part when it is outside the frame. As you move closer, the distance indicator and a vibration help you find it without looking away from the engine.
 
-> Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
-> Estado (21-11-2026): **MVP inicial** (hackathon). El resumen para el mentor está en [`docs/brief.md`](docs/brief.md).
-> **Qué falta y quién toma qué:** el plan por fases está en [`docs/plan.md`](docs/plan.md).
-> - **App** (`app/`, Expo + React Native + expo-router): menú principal, aviso obligatorio y selección de vehículo (8 modelos).
-> - **Escáner:** en el teléfono detecta el **contorno del vano del motor**, con sus esquinas y un modo debug (CLIPSeg con decodificador propio). Ver `herramientas/vano-motor/`. El contorno queda **anclado al auto con ARCore**: se reconoce una vez y queda fijo al mover el teléfono, con un botón Recalibrar.
-> - **Piezas en AR:** sobre el vano anclado se proyectan las **piezas del auto elegido** (`app/src/engine-maps/`). Falta calibrarlas en el auto real (#17).
-> - **Chat «Preguntar al manual»** (`api/` + pantalla `ask`): responde con citas a partir de la tabla de fusibles y de las fichas de las piezas del vano, y abre la cámara en la pieza que toca revisar. Ver la sección «Chat».
-> - **PWA** (`web/`): usa el detector anterior (CLIP ViT-B/32, `herramientas/detector-capo/`).
->
-> **Compilar el APK** (en el servidor del equipo): `scripts/compilar-apk.sh` → `dist/capo-ar.apk` (la primera vez arma el modelo del vano: ~1 GB de entorno Python en `~/.cache` y ~600 MB de pesos). Requisitos y protecciones de memoria, en el propio script. Sube `version` y `android.versionCode` en `app/app.json` antes de cada APK nuevo.
+Built for the Platanus Hack *Physical World* track, Hoodini uses the 2016 Subaru Outback 3.6R as its physical reference. Its model contains 27 parts, including nine routine maintenance items. The app lists ten vehicles, each with its own level of coverage. Part positions are approximate, and placement error on the car has yet to be measured in centimeters.
 
----
+[Download the Android APK](https://github.com/platanus-hack/platanus-hack-26-cl-team-3/releases/latest)
 
-## Web app and release
+## How a part stays in view
 
-The installable PWA ports the menu and open-hood detector from native revision
-`317e8367`. Select **Escanear capó**, enable the camera and aim at an open
-engine bay. Frames stay on the device. A module worker runs the pinned
-quantized CLIP image encoder with ONNX Runtime Web, using the native prompt
-vectors, smoothing and thresholds. At build time, the patch-convolution weights
-and zero point both shift by 128 to use the unsigned WASM kernel while
-preserving each centered weight. The score indicates an open hood. Individual
-part identification and AR anchoring are future features.
+Three distinct problems sit behind a label that appears to stay on the engine as the driver moves.
 
-### Start with Compose
+1. **Find the engine bay.** A CLIPSeg encoder and a decoder trained on engine-bay footage identify the outline between the fenders, windshield and front of the car. A battery and an air box look different across models, but the bay outline gives the scanner a place to start on each vehicle. The quantized ONNX model runs on the phone, so finding the bay works without a connection. [Detector and training notes](herramientas/vano-motor/README.md)
+2. **Fit the vehicle map.** For the Outback, DINOv2 turns small image regions into descriptors that can be matched against known landmarks from reference photos. The APK carries the descriptors and the encoder. Reference manifests record which images produced them, so a contributor can rebuild the bank and evaluate it on another Outback of the same variant. An optional server-assisted mode sends a crop of the bay to Claude for a second way to locate visible parts. [Landmark preparation](herramientas/outback-landmarks/README.md) · [Server-assisted locator](api/src/locate/)
+3. **Keep the overlay in place.** A native Kotlin module uses ARCore tracking and depth to anchor the bay in space. Observations from several viewpoints help when the whole bay will not fit in one frame. The scanner chooses an observed frame for the initial fit, keeping its image, camera pose and depth together as the phone moves. OpenGL draws the model from the phone’s changing viewpoint. Expo, React Native and Expo Router handle the screens around this loop, including vehicle selection and the handoff from chat to camera. [Android module](app/modules/capo-ar/) · [Scanner](app/src/escaner/)
 
-From a checkout containing the root `docker-compose.yml`, start the PWA on the
-existing home proxy network with one command:
+## How a question reaches the right part
 
-```sh
-docker compose up
-```
+The selected vehicle determines which tools the Node.js and TypeScript API gives Claude. On the Outback, a question about the windshield washer can lead to a reservoir guide or a fuse lookup. Tap the citation for the front washer circuit and Hoodini opens the engine fuse panel at slot 37. If the citation spans several slots, it opens the panel so the driver can see the group. [Vehicle profiles](api/src/vehicles/registry.ts) · [Citation routing](app/src/chat/camera.ts)
 
-Compose builds the image on first use. The build installs its own dependencies
-and packages the model and the web runtime. Traefik routes requests for
-`ph26.berguecio.cl` to port 8080 in the container.
+**Manual search.** The API can search the 566-page North American Outback manual and read adjacent pages when a procedure continues. A bilingual glossary maps Chilean terms such as *sapito* to English manual vocabulary. Search ranks pages with BM25, and answers can cite the printed page the driver can turn to. The index is prepared separately from a checksum-verified third-party copy. Safety-critical details still need confirmation against the manual for the actual vehicle. [Index preparation and retrieval evaluation](docs/specs/manual/README.md)
 
-For a local preview without Traefik:
+**Parts and fuses.** Part cards carry a source and an identifier that the camera guide can highlight. The Outback fuse data covers both the cabin and engine boxes and ties each circuit to a manual page. The dashboard guide also links four supported warning lights to their manual entries. [Part and fuse data](api/src/data/) · [Camera tools](api/src/tools/) · [Dashboard guide](app/src/dashboard/guide.ts)
+
+**Conversation in the scanner.** The driver can start and end a voice conversation from the camera. ElevenLabs transcribes speech, and the server holds the provider credentials. Chat and voice require connectivity. Depending on the feature, the server receives text, audio or an engine-bay crop. Saved conversation history replaces images with a text placeholder. [Scanner](app/src/escaner/) · [Transcription](api/src/transcribe/) · [History storage](api/src/conversations/)
+
+## How the app selects a vehicle
+
+The driver can select a vehicle manually or scan a Chilean license plate. The phone reads the plate locally and sends the normalized text to the API. The driver confirms the returned vehicle. The app keeps the registered year and uses an exact catalog match or an explicit engine-and-year alias to select a map. For example, the 2015 Outback 3.6R can use the 2016 engine-bay layout. [Plate selection](app/src/plates/)
+
+| Selected vehicle | Available guidance |
+| --- | --- |
+| 2016 Subaru Outback 3.6R | Landmark-registered 3D map, part cards, manual search, fuse diagrams and dashboard indicators. |
+| 2017 Suzuki Swift 1.2 | Depth-anchored 3D service parts and assistant tools to look up, highlight and lift supported parts. |
+| 2022 RAM 700 Big Horn 1.4 Fire | Depth-anchored 3D service parts. The assistant has no verified RAM manual or parts profile. |
+| Other catalog vehicles | Approximate engine-bay templates. A plate outside the catalog retains its registered details even when there is no matching map. |
+
+The app uses these capabilities to choose its screens, and the API selects tools from the vehicle profile. That keeps an Outback fuse rating out of an answer about a Swift. [App capabilities](app/src/capacidades.ts) · [Assistant profiles](api/src/vehicles/registry.ts)
+
+A Python importer turns public Chilean inspection archives into a read-only SQLite snapshot. It verifies the source hashes and database integrity before publishing the snapshot. Keeping that index on the server makes millions of vehicle records searchable without adding them to the APK. Existing host records take precedence when the imported snapshot also has a match. [Data sources and import procedure](scripts/prt/README.md)
+
+## Browser edition
+
+The installable PWA answers a smaller question on devices with a browser camera. Is an open engine bay in view? A worker runs a quantized CLIP encoder with ONNX Runtime Web, leaving the interface free to handle the camera and controls. Frames stay on the device. Once the service worker caches the model and WebAssembly runtime, the detector works offline. The AR part guide is available on Android. [Web client](web/) · [Open-hood detector](herramientas/detector-capo/README.md)
+
+To preview the PWA locally, run these commands from the repository root and open `http://localhost:8080`. A phone accessing the site over the network requires HTTPS for camera access. Allow about 89 MB for the model on the first visit, plus the runtime.
 
 ```sh
 docker build -t capo-ar .
 docker run --rm -p 127.0.0.1:8080:8080 capo-ar
 ```
 
-Open `http://localhost:8080`. Phones require HTTPS for camera access.
-The first visit downloads the app, model (about 89 MB) and WASM runtime.
-Once the service worker finishes caching, scanning works offline. The image
-also serves the map viewer if its files are present in the checkout.
+## Development and delivery
 
-### Compose and CI
+Hoodini retains its original Android package name, `com.capoar.app`, so existing installations can receive updates. The `capoar` URL scheme and native module names also retain their original identifiers.
 
-This project uses the same hackathon repository for the PWA and its Compose
-configuration. Pull requests and pushes to `main` verify the image on
-GitHub-hosted runners. Compose carries this repository's numeric ID and uses
-`CAPO_AR_DOMAIN` for the hostname. The default is `ph26.berguecio.cl`.
-The starter's private-runner release jobs stay disabled in this public
-repository. Production runner eligibility and the initial installation are
-deferred to issue #2.
+| Task | Entry point |
+| --- | --- |
+| Run the assistant locally | In `api/`, use Node 22.13 or later, run `npm ci` and then `npm start`. The API listens on port 8787. Set `ANTHROPIC_API_KEY` for chat and `ELEVENLABS_API_KEY` for dictation. Set `HISTORIAL_DB` to enable SQLite conversation history and turn logs. |
+| Connect an Android build | Set `EXPO_PUBLIC_API_URL` in `app/.env.local` before building. Release APKs require an HTTPS endpoint. |
+| Run focused checks | In `api/`, run `npm test`. In `app/`, install dependencies and run `npx tsx --test src/chat/*.test.ts` for the chat client. |
+| Build the ARM64 APK | The [Linux packaging script](scripts/compilar-apk.sh) requires the Android SDK and 5 GB of available memory. It prepares the models and writes `dist/capo-ar.apk`. [Android CI](.github/workflows/android.yml) checks the package identity, update code, signing certificate and bundled Outback asset before publication. The public hackathon signing key preserves update compatibility. Use the project release link above for downloads. |
+| Inspect the service layout | [Docker Compose](docker-compose.yml) defines the web client, API and vehicle-data seed. Traefik routes the web client and API under one hostname. The API reads the vehicle snapshot and stores conversation history on a separate writable volume. |
 
-## 1. Qué es, en una frase
+## Project conventions
 
-Una app Android que, al apuntar la cámara al capó (o al tablero) de tu auto, **muestra en Realidad Aumentada dónde están y cómo se revisan las cosas básicas** (caja de fusibles, depósito del limpiaparabrisas, varilla del aceite, refrigerante, filtro de aire, ampolletas) y responde en lenguaje natural «¿cómo cambio este fusible?», **siempre citando el manual del auto**.
+Hoodini is an informational guide. Confirm maintenance instructions in the owner's manual for the exact vehicle and consult a qualified mechanic when needed. Keep the first-use notice accessible in the app. Cite the document, section and page when available. Leave unsupported specifications unanswered and avoid inferring that a hazard is absent.
 
-Es una **guía**, no un mecánico. Ver sección 9 (aviso obligatorio).
+Check redistribution rights before adding manuals, models, datasets or reference photos. Keep personal information out of the public repository and external service requests, including contributor identities and images of people or license plates. The plate lookup sends the plate text to the project API.
 
-## 2. Contexto del hackathon
-
-- Tema elegido: **Physical World** — tomar inputs del mundo real (aquí: la cámara del teléfono apuntando a un auto real) y crear algo útil con ellos.
-- Existe también un track de **Hardware**. La idea actual es 100 % software; no bloquea una extensión de hardware más adelante (p. ej. una sonda de fusibles con ESP32), pero **no es parte del MVP**.
-
-## 3. El problema (dolor)
-
-Mucha gente no se atreve a hacer revisiones básicas de su auto, o ni siquiera sabe dónde están las cosas. Datos encontrados (encuestas mayormente de Reino Unido, de aseguradoras/empresas de asistencia, autodeclaradas; úsalas como indicio, no como verdad absoluta):
-
-- 63 % no sabía revisar el nivel de aceite; 1 de cada 5 no identificaba la varilla; 29 % no sabía rellenar el depósito del limpiaparabrisas — [Fleet News](https://www.fleetnews.co.uk/news/2014/11/12/three-in-ten-can-t-locate-washer-bottle/54053/), [Shropshire Star](https://www.shropshirestar.com/news/motors/2023/01/19/quarter-of-drivers-cant-identify-whats-under-a-cars-bonnet--survey).
-- 6 de cada 10 no podían cambiar una ampolleta de faro — [PR Newswire](https://www.prnewswire.co.uk/news-releases/millions-of-brits-admit-being-bamboozled-by-basic-car-maintenance---following-recent-research-from-accident-advice-helpline-611169015.html).
-- Razones para no hacerlo: miedo a dañar algo (≈29 %) y no saber cómo (≈22 %) — [Motor1](https://www.motor1.com/news/725197/uk-drivers-essential-maintenance-survey/). **Por eso la guía paso a paso con AR ataca el miedo a equivocarse.**
-
-Dolor concreto de partida: «No puedo prender una luz de mi auto» → ¿ampolleta o fusible? ¿dónde está? ¿cuál compro? ¿cómo la cambio?
-
-## 4. Diferenciador y competencia
-
-- Ya existen apps de IA que *identifican* piezas con la cámara (PartsIQ, Part Identifier Plus, ScanPart, CarSight — listados de App Store, sin reseñas independientes que hayamos visto).
-- Las guías AR de fabricantes (Hyundai/Genesis Virtual Guide, Ask Mercedes, Ford) son por marca y modelos concretos, con poco contenido AR.
-- **Nuestro diferencial:** (1) la información **anclada en AR sobre tu propio auto**, no solo texto; (2) **guía por modelo y año**; (3) **toda respuesta con fuente citada** del manual.
-- No encontramos una app multimarca que haga exactamente esto, pero **no está demostrado que no exista**. No lo afirmen en la presentación como hecho.
-
-## 5. Alcance del MVP (muy reducido a propósito)
-
-**Usuario objetivo:** conductor básico. (Mecánicos = futuro, ver sección 10.)
-
-| # | Feature | Qué debe hacer |
-|---|---|---|
-| F1 | **Mapa 3D simple de elementos del capó** | Modelos 3D sencillos (cajas, cilindros, flechas) de: caja de fusibles, depósito limpiaparabrisas («el sapito» en Chile), varilla del aceite, depósito de refrigerante, caja del filtro de aire. Ubicados según fotos y diagramas del manual. **No es un modelo CAD del auto completo.** |
-| F2 | **AR sobre el capó real** | Al apuntar la cámara, esos elementos aparecen superpuestos en su sitio, con etiqueta. |
-| F3 | **Pregunta en lenguaje natural** | «¿Cómo cambio un fusible?» → respuesta paso a paso **con cita (manual, sección, página)** y la AR resalta la pieza relevante. |
-| F4 | **Luces del tablero** | Apuntar al tablero con una luz encendida → nombre del indicador + qué significa + qué hacer, **según el manual del auto**. |
-| F5 | **Ampolleta** | «Se quemó una luz» → qué ampolleta lleva (según manual) y cómo cambiarla. |
-
-**Fuera del MVP:** modo mecánico, más de 2 autos, tienda/compra de repuestos, OBD2, iOS, hardware, cualquier dato con licencia de pago.
-
-## 6. Autos del MVP
-
-- **Auto de pruebas físico (obligatorio): Subaru Outback 2016, motor 3.6 (EZ36, versión «3.6R»).** Es el único auto al que el equipo tiene acceso físico hoy. Todo lo de AR se prueba aquí.
-- **Segundo auto (pendiente de decidir):** la idea original era un auto «muy genérico» con información pública abundante, p. ej. **Toyota Corolla**. Sin acceso físico a un Corolla, solo podríamos cubrir la parte de **datos/manual/chat (F3, F4, F5)**, no la parte de AR. **Decisión abierta:** conseguir acceso a un segundo auto (de un integrante o conocido) o dejar el MVP con un auto y mostrar el segundo solo en la capa de datos.
-- **Hoy:** la app trae mapas de 8 modelos (`app/src/vehicles.ts`), trazados sobre fotos de referencia. Solo el Outback se puede probar en un auto real.
-
-### Fuentes públicas conocidas
-
-| Auto | Fuente | Notas / cautelas |
-|---|---|---|
-| Subaru Outback 2016 | Copias del manual de dueño: [ManualMachine](https://manualmachine.com/subaru/outback2016/3856888-user-manual), [Scribd](https://www.scribd.com/document/669774538/2016-Subaru-Outback-12), [ManualsFile (3.6R Limited, 566 págs.)](https://manualsfile.com/product/po6htck0oy.html) | **Son copias de terceros; no encontramos el PDF oficial de Subaru.** Contrastar contra el manual físico de la guantera del auto. |
-| Subaru Outback 2016 | Diagrama de fusibles: [autogenius.info](https://www.autogenius.info/subaru-outback-2016-fuse-box-diagram) | Tercero. **No se confirmó si el 3.6R usa el mismo layout que el 2.5i.** Verificar contra el auto real. |
-| Toyota Corolla | Manuales oficiales en PDF: [toyota.ca](https://www.toyota.ca/content/dam/toyota/documents/manuals/en/OM12E95U/OM12E95U.pdf), [assets.sia.toyota.com](https://assets.sia.toyota.com/publications/en/om-s/OM12M01U/pdf/OM12M01U.pdf) | Cada manual trae «Indicators and warning lights». Hay que fijar el **año exacto** (cambia de generación). |
-| Cualquiera | Decodificar VIN → marca/modelo/año: [NHTSA vPIC](https://vpic.nhtsa.dot.gov/api/) | Gratis; **no** trae fusibles ni piezas. |
-| Cualquiera | Diagramas de fusibles por modelo vía API de terceros ([parse.bot / StartMyCar](https://parse.bot/marketplace/5f307be1-c720-49a8-9004-39a836115998/startmycar-com-api)) | Revisar términos, precio y cobertura antes de depender de ella. |
-
-**Datos que NO tenemos y no debemos inventar:** modelos 3D/CAD del fabricante, datos de taller (ALLDATA, Mitchell, HaynesPro — de pago), y tabla pública de ampolletas por API (Sylvania/Philips/Bulbs.com tienen buscadores web pero **sin API pública**; raspar sus datos probablemente viola sus términos). Para las ampolletas del MVP: **leerlas del manual del auto** y/o armar la tabla a mano para el Outback.
-
-## 7. Arquitectura
-
-> Decidido: la plataforma (Android), la AR (ARCore nativo) y el asistente (`api/`). Lo demás sigue siendo propuesta.
-
-- **Plataforma: Android** (decidido; más fácil generar APK y todo el equipo usa Android).
-- **Capa de datos (offline, preprocesada):** manuales en PDF → texto troceado con metadatos `{auto, año, motor, fuente, página, sección}`. Cada fragmento guarda su procedencia.
-- **Asistente (F3/F5):** recuperación de pasajes del manual + LLM que **responde solo con lo recuperado**. Si el manual no lo dice, responde «no lo encuentro en el manual». Proyectos de referencia: [Toyota/Lexus RAG](https://huggingface.co/ClaudioCela/toyota-lexus-rag-assistant), [AutoMate](https://awesome.ecosyste.ms/projects/github.com%2Finsafhamdi%2Fautomate-a-retrieval-augmented-ai-chatbot-for-car-assistance). Ninguno muestra citas: **la cita (página/sección) hay que construirla nosotros.**
-  **Hoy** es el servidor `api/`, que llama a Claude por la API de Anthropic. Consulta la tabla de fusibles (`api/src/data/fuses.json`, de terceros y por verificar), las fichas de las piezas y el manual del propietario con `buscar_manual` y `leer_manual` (el PDF y su índice no van al repo: ver [`docs/specs/manual/`](docs/specs/manual/README.md)).
-- **Luces del tablero (F4):** clasificador de imagen o modelo de visión; datasets abiertos pequeños en Roboflow (p. ej. [Dashboard icons, 18 clases](https://universe.roboflow.com/shourya-chambial-axqy0/dashboard-icons)) — **licencias sin verificar**. Significado y acción salen del manual.
-- **Modelos 3D (F1):** cada pieza es un volumen simple, extruido desde un contorno trazado sobre una foto de referencia del vano (`app/src/engine-maps/catalog.ts`). No es una malla del auto.
-- **AR (F2):** ARCore 1.57 en un módulo nativo propio en Kotlin (`app/modules/capo-ar/`), dentro de la app Expo.
-
-### Riesgo principal: anclar el 3D al capó real
-
-Es la parte más incierta. Evidencia disponible:
-- Vuforia Model Targets rastrea por forma pero **requiere un modelo CAD o escaneo 3D** del objeto.
-- El rastreo de objetos de ARKit exige escaneo previo (iOS, no aplica). Un foro antiguo y anecdótico dice que ARCore no tiene rastreo de objetos 3D nativo.
-- **No encontramos evidencia de rastreo sin marcadores de un capó sin modelo previo.**
-
-**Plan de mitigación (idea nuestra, aún NO probada):** anclaje asistido por el usuario. El usuario toca 2–3 puntos de referencia fijos del capó (p. ej. centro de la batería, una esquina del motor); la app coloca el modelo respecto a ellos y lo sostiene con el seguimiento de movimiento (SLAM) de ARCore. Mejora posible después: reconocimiento automático. **Probar esto antes que cualquier otra cosa.**
-
-**Lo que se hizo:** al final el anclaje es automático. Un modelo propio detecta el vano del motor y la profundidad de ARCore lo fija en el espacio (`herramientas/vano-motor/`). Falta validarlo en el Outback (#17).
-
-## 8. Orden de trabajo (paquetes paralelizables)
-
-1. **Prueba de anclaje AR** — cubo/flechas sobre el capó del Outback con puntos de referencia. Si falla, decidir rumbo aquí. *(Bloqueante del resto de AR.)* **Estado:** el anclaje automático está hecho; falta probarlo en el Outback (#17).
-2. **Capa de datos y asistente con citas** — manual del Outback → fragmentos con procedencia → preguntas en lenguaje natural. *(Independiente de AR; paralelizable desde el día 1.)* **Estado:** el chat funciona con la tabla de fusibles; falta indexar el manual.
-3. **Fotos y medidas del capó del Outback** + modelos 3D simples de las 5 piezas ubicados según fotos/manual. **Estado:** hasta 9 piezas por auto, trazadas sobre fotos de referencia; faltan las medidas en el auto.
-4. **Luces del tablero** — fotos propias del tablero del Outback + clasificador/modelo; significado desde el manual. **Estado:** sin empezar.
-5. **Integración** — la pregunta del usuario dispara la guía y la AR resalta la pieza. **Estado:** el chat abre la cámara en la pieza (fase 2 del chat); falta probarlo en el teléfono.
-
-## 9. Reglas del proyecto (para humanos y agentes)
-
-1. **Aviso obligatorio en la app** (visible en primer uso y accesible siempre): *«Esta app es una guía informativa. No reemplaza el manual del propietario ni a un mecánico. Confirma siempre con el manual de tu vehículo antes de actuar.»* Ya validado con el equipo.
-2. **Toda respuesta muestra su fuente** (documento, sección, página). Sin fuente → no se afirma.
-3. **No inventar datos de autos.** Si no hay dato público verificable, la app dice «no disponible». Nunca rellenar de memoria el tipo de ampolleta, refrigerante, amperaje de fusible, etc.
-4. **No afirmar ausencias de peligro** (p. ej. «aquí no hay cableado de alto voltaje»). La app muestra lo que el manual dice, no lo que *no* hay.
-5. **Variante exacta importa:** año + motor. El 3.6R no es el 2.5i; un diagrama del 2.5i **no se asume válido** para el 3.6R sin verificarlo en el auto.
-6. **Fuentes de terceros** (copias de manuales, sitios de fusibles) se marcan como tales y se contrastan con el auto/manual físico.
-7. **Licencias:** revisar licencia de cada dataset/modelo/manual antes de redistribuirlo. Los manuales se citan y enlazan; **no redistribuir PDFs** en el repositorio sin confirmar que se puede.
-8. **Privacidad:** no subir fotos de personas, patentes ni datos personales a servicios externos.
-9. **No usar la identidad personal de integrantes** (nombres, correos) en el repositorio público ni en requests a servicios externos.
-
-## Chat «Preguntar al manual»
-
-El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por la API de Anthropic (Claude Sonnet 5.5 por defecto). La key vive solo en el servidor.
-
-1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). El historial de conversaciones se guarda en SQLite en la ruta de `HISTORIAL_DB`; sin esa variable, las rutas del historial responden 503. En esa misma base, cada turno del chat queda en `turns` (modelo, esfuerzo, versión del prompt, pregunta, respuesta, tokens y resultado) y cada herramienta que corre, en `tool_runs`, para analizar las conversaciones; esos logs se leen con `GET /api/logs/turns` y `GET /api/logs/turns/:id`, con `Authorization: Bearer` y el `LOGS_TOKEN` del servidor (sin esa variable, esas rutas no existen). El modelo ve como contexto los últimos 30 mensajes. Tests: `cd api && npm test`. El dictado por voz necesita además `ELEVENLABS_API_KEY` en el entorno del host (key con permiso de Speech to Text). El modo vivo del escáner usa la misma key para transcribir en tiempo real: la app pide un token de un solo uso a `POST /api/transcribe/token` y manda el audio directo al WebSocket de ElevenLabs.
-2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
-
-## 10. Futuro (fuera del MVP)
-
-- **Modo mecánico:** contenido avanzado (rutas de correa, mangueras, torques). Requiere datos de taller con licencia (ALLDATA, Mitchell, HaynesPro); dejar la arquitectura de datos abierta a esa capa.
-- Más autos, con comunidad aportando fotos y marcas.
-- Hardware (track aparte): sonda de fusibles con ESP32 que reporta al teléfono. *Idea sin investigar.*
-
-## 11. Cosas que NO sabemos aún (investigar o probar)
-
-- Si el anclaje automático (vano + profundidad de ARCore) es estable en un capó real (reflejos, suciedad, luz) y qué tan cerca de su lugar real quedan las piezas.
-- Cobertura real de los manuales del Outback 2016 3.6R: diagrama del capó, tabla de ampolletas, fusibles, luces del tablero. (Las copias de terceros existen; falta revisarlas página por página.)
-- Licencias de los datasets de Roboflow y de uso de los manuales.
-- Precisión del reconocimiento por cámara para las piezas del capó (no hay benchmark público; hay que medir con fotos propias).
-- Si ya existe una app multimarca equivalente que no hayamos encontrado.
-
-## 12. Glosario
-
-- **El sapito:** depósito del líquido limpiaparabrisas (Chile).
-- **Varilla / medidor de aceite:** *dipstick*.
-- **AR:** Realidad Aumentada.
-- **RAG:** respuesta generada a partir de pasajes recuperados de documentos propios (aquí, los manuales).
-- **EZ36 / 3.6R:** motor boxer de 6 cilindros 3.6 L del Outback de la época.
-
-## Android download automation
-
-Each push to `main` builds the ARM64 APK, checks its Android package, update
-code and hackathon signing certificate, then publishes the verified APK and
-its SHA-256 checksum in a public Release tagged with the source commit.
-Only the publication job can write releases. Pull requests build and verify
-the package without publishing. Failed builds leave the previous APK available.
-
-Download `capo-ar.apk` from the repository's latest Release. Keep that latest
-designation for Android builds so the stable download link works. Android's
-update code increases with the first-parent history of main. The Expo template
-signing key preserves compatibility with hackathon installations and is publicly
-known. Obtain the app from the project's official download link.
+[Team brief](docs/brief.md) · [Development plan](docs/plan.md) · [Engine map authoring guide](docs/engine-map-style.md)
