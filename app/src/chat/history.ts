@@ -1,8 +1,10 @@
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
+import { createConversation, fetchConversation, listConversations, updateConversation } from './remote-history';
 
 const KEY = 'capo-ar:chat-v1';
+const ID_KEY = 'capo-ar:chat-id:v1';
 
 export type ViewCitation = { title: string; source: string; cited_text: string };
 export type ViewPart = { text: string; citations: ViewCitation[]; breakBefore?: boolean };
@@ -30,11 +32,26 @@ export async function load(): Promise<AnthropicMessage[]> {
   }
 }
 
+// El id del servidor solo se toca dentro de la cola: un save viejo no debe pisar «Nueva conversación».
+let queue: Promise<void> = Promise.resolve();
+const enqueue = (job: () => Promise<void>) => {
+  queue = queue.then(job).catch(() => {});
+};
+
+async function sync(messages: AnthropicMessage[]): Promise<void> {
+  const store = await storage();
+  const id = await store.getItem(ID_KEY);
+  if (id && (await updateConversation(id, messages)) !== 'missing') return;
+  const created = await createConversation(messages);
+  if (created) await store.setItem(ID_KEY, created);
+}
+
 export async function save(messages: AnthropicMessage[]): Promise<void> {
   try {
     await (await storage()).setItem(KEY, JSON.stringify(messages));
   } catch {
   }
+  enqueue(() => sync(messages));
 }
 
 export async function clear(): Promise<void> {
@@ -42,7 +59,21 @@ export async function clear(): Promise<void> {
     await (await storage()).removeItem(KEY);
   } catch {
   }
+  enqueue(async () => (await storage()).removeItem(ID_KEY));
 }
+
+export async function open(id: string): Promise<AnthropicMessage[] | null> {
+  const messages = await fetchConversation(id);
+  if (!messages) return null;
+  try {
+    await (await storage()).setItem(KEY, JSON.stringify(messages));
+  } catch {
+  }
+  enqueue(async () => (await storage()).setItem(ID_KEY, id));
+  return messages;
+}
+
+export const list = listConversations;
 
 export function toView(messages: AnthropicMessage[]): Bubble[] {
   const out: Bubble[] = [];
