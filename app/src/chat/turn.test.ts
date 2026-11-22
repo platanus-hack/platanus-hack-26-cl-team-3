@@ -65,3 +65,18 @@ test('12: abortado después de done devuelve messages', async () => {
   const result = await sendTurn([], 'hola', fakeRun([done], [], () => controller.abort()), () => {}, { signal: controller.signal });
   assert.ok('messages' in result);
 });
+
+test('local-only transport limits bytes and message count without splitting tool exchanges or mutating history', async () => {
+  const { fitsInitialImport, localContext } = await import('./transport');
+  const history: AnthropicMessage[] = Array.from({ length: 250 }, (_, i) => ({
+    role: i % 2 ? 'assistant' : 'user', content: '界'.repeat(25000),
+  }));
+  history.push({ role: 'user', content: 'Continue' });
+  assert.equal(fitsInitialImport(history), false);
+  const window = localContext(history);
+  assert.equal(window.at(-1)?.content, 'Continue');
+  assert.equal(window[0].role, 'user');
+  assert.ok(window.length <= 30);
+  assert.ok(new TextEncoder().encode(JSON.stringify(window)).length < 1024 * 1024);
+  assert.equal(history.length, 251);
+});

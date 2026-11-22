@@ -71,6 +71,7 @@ test('toView ignores unknown parts and empty instructions, and caps the instruct
         { type: 'tool_use', id: 'c4', name: 'lookup_fuses', input: { part: 'washer', instruction: 'z' } },
       ],
     },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c3', content: [] }] },
   ]);
   assert.deepEqual(v[1].cards, [{ part: 'battery', instruction: 'y'.repeat(200) }]);
 });
@@ -92,9 +93,19 @@ test('toView creates an assistant bubble when a card has no bubble to join', () 
   const v = toView([
     { role: 'user', content: 'hola' },
     { role: 'assistant', content: [cameraCall('oil_cap', 'Busca la tapa.')] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c1', content: [] }] },
   ]);
   assert.equal(v.length, 2);
   assert.equal(v[1].role, 'assistant');
   assert.deepEqual(v[1].parts, []);
   assert.deepEqual(v[1].cards, [{ part: 'oil_cap', instruction: 'Busca la tapa.' }]);
+});
+
+test('restoring photo questions preserves the question and hides tool results', () => {
+  const view = toView([
+    { role: 'user', content: [{ type: 'text', text: '[foto del vano]' }, { type: 'text', text: 'Which cap?' }] },
+    { role: 'assistant', content: [cameraCall('washer', 'Locate it', 'failed'), cameraCall('battery', 'Inspect it', 'missing')] },
+    { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'failed', is_error: true, content: 'Unsupported' }] },
+  ]);
+  assert.deepEqual(view, [{ role: 'user', parts: [{ text: '[foto del vano]\nWhich cap?', citations: [] }], cards: [] }]);
 });

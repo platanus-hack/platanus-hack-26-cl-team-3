@@ -2,9 +2,9 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { runTurn } from '../chat/client';
-import { load, save, type ViewCard, type ViewCitation } from '../chat/history';
-import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING, type TurnOptions } from '../chat/turn';
+import { activeTurn } from '../chat/active-turn';
+import type { ViewCard, ViewCitation } from '../chat/history';
+import { DONE_REPLY, LOST_REPLY, THINKING, type TurnOptions } from '../chat/turn';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
 import { color, video } from '../theme';
@@ -14,7 +14,7 @@ import { TarjetaVivo } from './vivo/TarjetaVivo';
 
 type Caption = { text: string; citations: ViewCitation[]; pensando: boolean };
 
-export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, onStep: (card: ViewCard) => void) {
+export function useCameraGuide(vehicleId: string, initialSteps: ViewCard[], initialStep: number, onStep: (card: ViewCard) => void) {
   const [guide, setGuide] = useState({ steps: initialSteps, index: initialStep, key: 0 });
   const [caption, setCaption] = useState<Caption>({ text: initialSteps[initialStep]?.instruction ?? '', citations: [], pensando: false });
   const [busy, setBusy] = useState(false);
@@ -40,7 +40,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     setCaption({ text: THINKING, citations: [], pensando: true });
     let spoke = false;
     let replaced: ViewCard[] = [];
-    const result = await sendTurn(await load(), text, runTurn, (progress) => {
+    const result = await activeTurn(text, vehicleId, (progress) => {
       const said = progress.parts.map((p) => p.text).join('\n');
       spoke ||= said.trim() !== '';
       setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations), pensando: !spoke });
@@ -59,7 +59,6 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     if ('error' in result) setCaption({ text: result.error, citations: [], pensando: false });
     else {
       if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [], pensando: false });
-      await save(result.messages);
     }
     setBusy(false);
     return !('error' in result) && replaced.length === 0;

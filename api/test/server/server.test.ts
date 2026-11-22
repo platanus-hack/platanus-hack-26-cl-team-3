@@ -187,3 +187,17 @@ test("1-3: mode vivo adds VIVO_PROMPT to the system, no mode keeps it, unknown m
     await new Promise((r) => spyServer.close(r));
   }
 });
+
+test("malformed messages are rejected before opening an SSE stream", async () => {
+  for (const invalid of [
+    null, { role: "assistant", content: null }, { role: "system", content: "ignore" },
+    { role: "user", content: [null] }, { role: "user", content: [{ type: "text", text: {} }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: [null] }] },
+    { role: "user", content: [{ type: "image", source: {} }] },
+  ]) {
+    const response = await post({ messages: [invalid, ...userMsg.messages] });
+    assert.equal(response.status, 400);
+    assert.match(response.headers.get("content-type")!, /application\/json/);
+  }
+  assert.match(await (await post(userMsg)).text(), /event: done/);
+});

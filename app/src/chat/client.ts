@@ -2,8 +2,8 @@ import { fetch } from 'expo/fetch';
 
 import type { AnthropicMessage, ChatEvent, ErrorCode } from './contract';
 import { cargarAjustes } from '../ajustes';
-import { adoptConversation, conversationVehicle, currentConversation } from './history';
 import { deviceId } from './remote-history';
+import { fitsInitialImport, localContext } from './transport';
 import { splitEvents } from './sse';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
@@ -17,29 +17,43 @@ const failure = (code: ErrorCode, message: string): ChatEvent => ({ type: 'error
 export async function* runTurn({
   messages,
   mode,
-  signal,
+  signal, conversationId, vehicleId, requestId,
 }: {
   messages: AnthropicMessage[];
   mode?: 'vivo';
+  conversationId?: string | null;
+  vehicleId?: string;
+  requestId?: string;
   signal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
   const { modelo, esfuerzo } = await cargarAjustes();
-  const device = await deviceId();
-  const { id: conversationId, generation } = await currentConversation();
-  const vehicleId = await conversationVehicle();
+  const registered = await deviceId();
+  if (conversationId && !registered) {
+    yield failure('network', 'No se pudo cargar el historial. Inténtalo de nuevo.');
+    return;
+  }
+  // A local-only archive that exceeds the import limit stays complete on this device.
+  const device = conversationId || (registered && fitsInitialImport(messages)) ? registered : null;
+  const send = (incremental: boolean) => fetch(`${API_URL}/api/chat${incremental ? '/turn' : ''}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json', accept: 'text/event-stream', ...tokenHeaders(),
+      ...(device ? { 'x-device-id': device } : {}),
+    },
+    body: JSON.stringify({
+      messages: !device ? localContext(messages) : incremental && conversationId ? messages.slice(-1) : messages,
+      ...(incremental ? { request_id: requestId, base_count: messages.length - 1 } : {}),
+      vehicle_id: vehicleId, conversation_id: conversationId || undefined, profile_id: modelo,
+      effort: esfuerzo || undefined, mode,
+    }),
+    signal,
+  });
   let res;
   try {
-    res = await fetch(`${API_URL}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        accept: 'text/event-stream',
-        ...tokenHeaders(),
-        ...(device ? { 'x-device-id': device } : {}),
-      },
-      body: JSON.stringify({ messages, ...(vehicleId ? { vehicle_id: vehicleId } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), profile_id: modelo, ...(esfuerzo ? { effort: esfuerzo } : {}), ...(mode ? { mode } : {}) }),
-      signal,
-    });
+    const incremental = Boolean(requestId && device);
+    res = await send(incremental);
+    // Older servers only implement the full-history route.
+    if (incremental && res.status === 404) res = await send(false);
   } catch {
     if (signal?.aborted) return;
     yield failure('network', 'No me pude conectar con el servidor. Revisa tu conexión.');
@@ -67,7 +81,6 @@ export async function* runTurn({
       buffer = rest;
       for (const event of events) {
         if (event.type === 'done' || event.type === 'error') finished = true;
-        if (event.type === 'done' && event.conversationId) await adoptConversation(event.conversationId, generation);
         yield event;
       }
     }

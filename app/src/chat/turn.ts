@@ -1,6 +1,6 @@
 import type { runTurn } from './client';
 import type { AnthropicMessage } from './contract';
-import { toCard, type ViewCard, type ViewPart } from './history';
+import { toCard, toView, type ViewCard, type ViewPart } from './history';
 
 const TOOL_STATUS: Record<string, string> = {
   lookup_fuses: 'Revisando la tabla de fusibles…',
@@ -41,7 +41,13 @@ export async function sendTurn(
   try {
     const request = { messages: [...history, requestMessage], ...(opts?.mode ? { mode: opts.mode } : {}), ...(opts?.signal ? { signal: opts.signal } : {}) };
     for await (const ev of run(request)) {
-      if (ev.type === 'done') return { messages: [...history, userMessage, ...ev.messages], truncated: ev.truncated === true };
+      if (ev.type === 'done') {
+        if (ev.replayed) {
+          const reply = toView(ev.messages).at(-1);
+          if (reply?.role === 'assistant') onProgress({ parts: reply.parts, cards: reply.cards, status: null });
+        }
+        return { messages: [...history, userMessage, ...ev.messages], truncated: ev.truncated === true };
+      }
       if (aborted()) return { aborted: true };
       if (ev.type === 'tool') {
         status = TOOL_STATUS[ev.name] ?? DEFAULT_TOOL_STATUS;

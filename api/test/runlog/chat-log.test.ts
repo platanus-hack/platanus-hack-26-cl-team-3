@@ -19,6 +19,7 @@ const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 2, 
 
 const adapter: Adapter = async function* (args) {
   calls.push(args);
+  if (args.messages.at(-1)?.content === "refuse-for-test") return { stop_reason: "refusal", content: [], usage } as unknown as Message;
   const last = args.messages.at(-1);
   const afterTool = Array.isArray(last?.content) && last.content.some((b) => b.type === "tool_result");
   if (!afterTool) {
@@ -147,4 +148,75 @@ test("guarda vehicle_id en la conversación y en el turno, y GET lo devuelve", a
   assert.equal(rows("SELECT vehicle_id FROM turns WHERE id = ?", first.done?.turn_id as string)[0].vehicle_id, "swift");
   const legacy = await chat([{ role: "user", content: "hola" }], { device: dev });
   assert.equal(rows("SELECT vehicle_id FROM conversations WHERE id = ?", legacy.done?.conversation_id as string)[0].vehicle_id, "outback");
+});
+
+test("retries recover the committed first and following turns without rerunning tools or replacing a newer history", async () => {
+  const dev = await device();
+  const post = (body: object) => fetch(`${base}/api/chat/turn`, {
+    method: "POST", headers: { "content-type": "application/json", "x-device-id": dev }, body: JSON.stringify(body),
+  });
+  const completion = async (body: object) => {
+    const response = await post(body);
+    assert.equal(response.status, 200);
+    const event = (await response.text()).split("\n\n").find(line => line.startsWith("event: done"))!;
+    return JSON.parse(event.split("data: ")[1]);
+  };
+  const photo = (frame: string) => [{ role: "user", content: [
+    { type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame } }, { type: "text", text: "Which cap?" },
+  ] }];
+  const messages = photo("AAAA");
+  const first = { request_id: crypto.randomUUID(), base_count: 0, messages, vehicle_id: "swift" };
+  const done = await completion(first);
+  assert.deepEqual(await completion({ ...first, messages: photo("BBBB") }), { ...done, replayed: true });
+  const second = { ...first, request_id: crypto.randomUUID(), base_count: 1 + done.messages.length, conversation_id: done.conversation_id };
+  assert.equal((await post({ ...second, vehicle_id: "outback" })).status, 409);
+  const followup = await completion({ ...second, vehicle_id: undefined });
+  assert.equal(rows("SELECT vehicle_id FROM turns WHERE id = ?", followup.turn_id)[0].vehicle_id, "swift");
+  assert.deepEqual(await completion({ ...second, vehicle_id: undefined }), { ...followup, replayed: true });
+  assert.equal((await post({ ...second, request_id: crypto.randomUUID() })).status, 409);
+  assert.equal((await post({ ...second, messages: [{ role: "user", content: "Different" }] })).status, 409);
+  assert.equal((await chat([{ role: "user", content: "Stale" }], { device: dev, conversation_id: done.conversation_id })).status, 409);
+  assert.equal(rows("SELECT id FROM turns WHERE device_id = ?", dev).length, 2);
+  assert.equal(rows("SELECT * FROM conversations WHERE device_id = ?", dev).length, 1);
+  assert.equal(rows("SELECT vehicle_id FROM conversations WHERE device_id = ?", dev)[0].vehicle_id, "swift");
+});
+
+test("one-message follow-ups to long stored conversations retain the complete prefix", async () => {
+  const dev = await device();
+  const messages: MessageParam[] = Array.from({ length: 210 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: "x".repeat(5500) }));
+  const id = await sqliteStore(db).create(dev, { messages, title: "Long history", vehicle_id: "outback" });
+  const response = await fetch(`${base}/api/chat/turn`, {
+    method: "POST", headers: { "content-type": "application/json", "x-device-id": dev },
+    body: JSON.stringify({ conversation_id: id, base_count: messages.length, request_id: crypto.randomUUID(), messages: [{ role: "user", content: "Continue" }] }),
+  });
+  assert.match(await response.text(), /event: done/);
+  const saved = await sqliteStore(db).get(dev, id!);
+  assert.deepEqual(saved?.messages.slice(0, messages.length), messages);
+  assert.ok(saved!.messages.length > 211);
+  assert.equal(saved?.title, "Long history");
+});
+
+test("saving a replayed tool result strips the nested photo from SQLite", async () => {
+  const dev = await device();
+  const frame = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAABBBCCC" } } as const;
+  const done = await chat([
+    { role: "user", content: "Look" },
+    { role: "assistant", content: [{ type: "tool_use", id: "frame", name: "photo", input: {} }] },
+    { role: "user", content: [{ type: "tool_result", tool_use_id: "frame", content: [frame] }] },
+    { role: "assistant", content: "Seen" }, { role: "user", content: "Continue" },
+  ], { device: dev });
+  const saved = rows("SELECT messages FROM conversations WHERE id = ?", done.done!.conversation_id as string)[0].messages as string;
+  assert.ok(saved.includes("[foto del vano]"));
+  assert.ok(!saved.includes("AAABBBCCC"));
+});
+
+test("failed legacy requests cannot attach logs to another device's conversation", async () => {
+  const owner = await device();
+  const other = await device();
+  const first = await chat([{ role: "user", content: "Hello" }], { device: owner });
+  const response = await chat([{ role: "user", content: "refuse-for-test" }], {
+    device: other, conversation_id: first.done!.conversation_id as string,
+  });
+  assert.equal(response.done, null);
+  assert.equal(rows("SELECT conversation_id FROM turns WHERE device_id = ?", other)[0].conversation_id, null);
 });
