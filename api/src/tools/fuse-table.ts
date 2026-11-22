@@ -1,7 +1,3 @@
-import data from "../data/fuses.json";
-
-export type BoxKey = "cabina" | "motor";
-
 export interface FuseRow {
   box: string;
   number: number;
@@ -12,10 +8,30 @@ export interface FuseRow {
   page: number;
 }
 
-export { data };
-export const FUSES = data.fuses as FuseRow[];
-export const BOXES = data.boxes as Record<BoxKey, { title: string; location: string; pages: string }>;
-export const BOX_LABEL: Record<BoxKey, string> = { cabina: "caja de la cabina", motor: "caja del motor" };
+export interface FuseBoxInfo {
+  title: string;
+  location: string;
+  pages: string;
+}
 
-export const findFuse = (box: BoxKey, number: number): FuseRow | undefined =>
-  FUSES.find((f) => f.box === box && f.number === number);
+export interface FuseTable {
+  vehicle: string;
+  source: string;
+  source_uri: string;
+  boxes: Record<string, FuseBoxInfo>;
+  procedure: string;
+  notes?: string;
+  fuses: FuseRow[];
+}
+
+export const boxIds = (table: FuseTable): string[] => Object.keys(table.boxes);
+
+export const isBox = (table: FuseTable, box: unknown): box is string => typeof box === "string" && Object.hasOwn(table.boxes, box);
+
+export const boxLabel = (table: FuseTable, box: string): string => {
+  const title = table.boxes[box].title;
+  return title.charAt(0).toLowerCase() + title.slice(1);
+};
+
+export const findFuse = (table: FuseTable, box: string, number: number): FuseRow | undefined =>
+  table.fuses.find((f) => f.box === box && f.number === number);

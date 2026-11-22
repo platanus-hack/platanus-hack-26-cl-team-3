@@ -55,11 +55,11 @@ test("sin vehicle_id: prompt del Outback y las 6 tools", async () => {
   assert.deepEqual(toolNames(calls[0]), ["lookup_fuses", "show_fuse", "lookup_parts", "show_in_camera", "buscar_manual", "leer_manual"]);
 });
 
-test("swift: prompt del Swift sin Outback y solo lookup_parts y show_in_camera", async () => {
+test("swift: prompt del Swift sin Outback, con fusibles, piezas y cámara pero sin manual", async () => {
   await send({ vehicle_id: "swift" });
   assert.match(calls[0].system, /Suzuki Swift 2017/);
   assert.doesNotMatch(calls[0].system, /Outback|Subaru/);
-  assert.deepEqual(toolNames(calls[0]), ["lookup_parts", "show_in_camera"]);
+  assert.deepEqual(toolNames(calls[0]), ["lookup_fuses", "show_fuse", "lookup_parts", "show_in_camera"]);
 });
 
 test("swift: lookup_parts devuelve las filas del Swift", async () => {
@@ -102,12 +102,27 @@ test("vehicle_id inválido responde 400", async () => {
 test("modo vivo usa las herramientas del auto, sin nombrar las del Outback", async () => {
   await send({ vehicle_id: "swift", mode: "vivo" });
   assert.match(calls[0].system, /salen solo de tus herramientas/);
-  assert.doesNotMatch(calls[0].system, /buscar_manual|lookup_fuses/);
+  assert.doesNotMatch(calls[0].system, /buscar_manual/);
 });
 
-test("show_fuse solo existe en el Outback", () => {
+test("show_fuse solo existe en los autos con tabla de fusibles", () => {
   assert.ok(toolsFor(profiles.outback).show_fuse);
-  assert.equal(toolsFor(profiles.swift).show_fuse, undefined);
+  assert.ok(toolsFor(profiles.swift).show_fuse);
   assert.equal(toolsFor(genericProfile("x")).show_fuse, undefined);
-  assert.doesNotMatch(systemPrompt(profiles.swift), /show_fuse/);
+  assert.equal(toolsFor(genericProfile("x")).lookup_fuses, undefined);
+  assert.doesNotMatch(systemPrompt(genericProfile("x")), /show_fuse/);
+  assert.match(systemPrompt(profiles.swift), /show_fuse/);
+});
+
+test("swift: lookup_fuses y show_fuse usan la tabla del Swift", async () => {
+  const { lookup_fuses, show_fuse } = toolsFor(profiles.swift);
+  assert.match(lookup_fuses.definition.description!, /Suzuki Swift 2017/);
+  assert.doesNotMatch(lookup_fuses.definition.description!, /Outback/);
+  const [sr] = (await lookup_fuses.run({ filter: "*", box: "cabina" })).content as any[];
+  assert.equal(sr.source, "fusibles://swift-2017-1.2/cabina");
+  assert.match(sr.content[1].text, /part_id: fusible-cabina-\d+$/);
+  const ok = await show_fuse.run({ box: "cabina", numbers: [1], instruction: "Revisa este fusible." });
+  assert.notEqual(ok.is_error, true);
+  assert.deepEqual(ok.events, [{ event: "fuse", data: { box: "cabina", numbers: [1], instruction: "Revisa este fusible." } }]);
+  assert.match(systemPrompt(profiles.swift), /según versión/);
 });

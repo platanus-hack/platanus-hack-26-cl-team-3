@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { pedirTokenRealtime } from '../../chat/transcribe';
 import { aBase64, dbDe, leerMensaje, urlRealtime, type MensajeRealtime } from './realtime';
+import { createMicrophonePermission, microphoneError } from '../../chat/microphone-permission';
 import { crearVad } from './vad';
 
 export type EstadoEscucha = 'escuchando' | 'oyendo' | 'transcribiendo' | 'silenciado';
@@ -21,13 +22,16 @@ const aNivel = (db: number) => Math.min(1, Math.max(0, (db - DB_SILENCIO) / (DB_
 
 type Opciones = {
   silenciado: boolean;
+  sessionEnabled: boolean;
+  retry: number;
   pausado?: boolean;
+  onListening: () => void;
   onInicio: () => void;
   onFrase: (texto: string) => void;
   onError: (mensaje: string) => void;
 };
 
-export function useEscuchaViva({ silenciado, pausado = false, onInicio, onFrase, onError }: Opciones): {
+export function useEscuchaViva({ silenciado, sessionEnabled, retry, pausado = false, onListening, onInicio, onFrase, onError }: Opciones): {
   estado: EstadoEscucha;
   nivel: number;
   cerrando: boolean;
@@ -52,16 +56,29 @@ export function useEscuchaViva({ silenciado, pausado = false, onInicio, onFrase,
   const [nivel, setNivel] = useState(0);
   const huboVozRef = useRef(false);
   const oyendoRef = useRef(false);
-  const callbacks = useRef({ onInicio, onFrase, onError });
-  callbacks.current = { onInicio, onFrase, onError };
+  const callbacks = useRef({ onListening, onInicio, onFrase, onError });
+  useEffect(() => {
+    callbacks.current = { onListening, onInicio, onFrase, onError };
+  }, [onListening, onInicio, onFrase, onError]);
 
   const marcarVoz = useCallback((valor: boolean) => {
     huboVozRef.current = valor;
     setHuboVoz(valor);
   }, []);
 
+  const pendingStart = useRef(Promise.resolve());
+  const permission = useRef<ReturnType<typeof createMicrophonePermission> | null>(null);
+  useEffect(() => {
+    permission.current = null;
+  }, [sessionEnabled, retry]);
+
   useEffect(() => {
     if (silenciado) return;
+    permission.current ??= createMicrophonePermission(
+      () => AudioModule.getRecordingPermissionsAsync(),
+      () => AudioModule.requestRecordingPermissionsAsync(),
+    );
+    const checkPermission = permission.current;
     let cancelado = false;
     let socket: WebSocket | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -197,12 +214,19 @@ export function useEscuchaViva({ silenciado, pausado = false, onInicio, onFrase,
 
     void (async () => {
       try {
-        const permiso = await AudioModule.requestRecordingPermissionsAsync();
+        const result = await checkPermission(() => !cancelado);
         if (cancelado) return;
-        if (!permiso.granted) return callbacks.current.onError('Necesito permiso de micrófono para escucharte.');
+        if (!result.granted) return callbacks.current.onError(microphoneError(result));
         await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
         if (cancelado) return;
-        await stream.start();
+        const start = pendingStart.current.then(async () => {
+          if (cancelado) return;
+          await stream.start();
+          if (cancelado) stream.stop();
+          else callbacks.current.onListening();
+        });
+        pendingStart.current = start.catch(() => {});
+        await start;
       } catch {
         if (!cancelado) callbacks.current.onError('No pude abrir el micrófono. Inténtalo de nuevo.');
       }
@@ -224,7 +248,7 @@ export function useEscuchaViva({ silenciado, pausado = false, onInicio, onFrase,
       setNivel(0);
       marcarVoz(false);
     };
-  }, [silenciado, stream, vad, marcarVoz]);
+  }, [silenciado, retry, stream, vad, marcarVoz]);
 
   const transcribiendo = !silenciado && !oyendo && huboVoz;
 
