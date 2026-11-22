@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cargarAjustes, ESFUERZOS, guardarAjustes, MODELOS, type Ajustes } from '../ajustes';
+import { fijarServidor, normalizarServidor, SERVIDOR_POR_DEFECTO, servidor } from '../servidor';
 import { color, espacio, radio, tipo } from '../theme';
 import { BotonIcono, Icono } from '../ui';
 
@@ -24,13 +25,52 @@ function Opcion({ nombre, nota, activa, onPress }: { nombre: string; nota?: stri
   );
 }
 
+const hostPorDefecto = SERVIDOR_POR_DEFECTO.replace(/^https?:\/\//, '');
+
 export default function PantallaAjustes() {
   const insets = useSafeAreaInsets();
   const [ajustes, setAjustes] = useState<Ajustes | null>(null);
+  const [direccion, setDireccion] = useState('');
+  const [estado, setEstado] = useState<string | null>(null);
 
   useEffect(() => {
     void cargarAjustes().then(setAjustes);
+    void servidor().then(setDireccion);
   }, []);
+
+  const guardarServidor = () => {
+    const url = normalizarServidor(direccion);
+    if (!url) {
+      setEstado('Tiene que ser una dirección https://');
+      return;
+    }
+    setDireccion(url);
+    void fijarServidor(url).then(() => setEstado('Guardado'));
+  };
+
+  const usarPredeterminado = () => {
+    setDireccion(SERVIDOR_POR_DEFECTO);
+    void fijarServidor(null).then(() => setEstado('Guardado'));
+  };
+
+  const probarConexion = async () => {
+    const url = normalizarServidor(direccion);
+    if (!url) {
+      setEstado('Tiene que ser una dirección https://');
+      return;
+    }
+    setEstado('Probando...');
+    const timer = new AbortController();
+    const timeout = setTimeout(() => timer.abort(), 5000);
+    try {
+      const res = await fetch(`${url}/api/health`, { signal: timer.signal });
+      setEstado(res.ok ? 'Conectado' : 'No responde');
+    } catch {
+      setEstado('No responde');
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 
   const cambiar = (parcial: Partial<Ajustes>) => {
     if (!ajustes) return;
@@ -71,6 +111,34 @@ export default function PantallaAjustes() {
               trackColor={{ true: color.acento, false: color.borde }}
             />
           </View>
+
+          <Text style={[tipo.seccion, styles.separado]}>Servidor</Text>
+          <Text style={tipo.nota}>
+            La app usa este servidor para el chat, el dictado, el historial y las patentes. Cámbialo solo si el equipo te lo pide.
+          </Text>
+          <TextInput
+            value={direccion}
+            onChangeText={(v) => {
+              setDireccion(v);
+              setEstado(null);
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            accessibilityLabel="Dirección del servidor"
+            placeholderTextColor={color.textoTenue}
+            style={styles.campo}
+          />
+          {estado && <Text style={tipo.nota}>{estado}</Text>}
+          <Pressable onPress={guardarServidor} accessibilityRole="button" style={styles.opcion}>
+            <Text style={styles.opcionNombre}>Guardar</Text>
+          </Pressable>
+          <Pressable onPress={usarPredeterminado} accessibilityRole="button" style={styles.opcion}>
+            <Text style={styles.opcionNombre}>Usar el predeterminado ({hostPorDefecto})</Text>
+          </Pressable>
+          <Pressable onPress={() => void probarConexion()} accessibilityRole="button" style={styles.opcion}>
+            <Text style={styles.opcionNombre}>Probar conexión</Text>
+          </Pressable>
         </ScrollView>
       )}
     </View>
@@ -103,5 +171,14 @@ const styles = StyleSheet.create({
     borderColor: color.borde,
   },
   opcionActiva: { borderColor: color.acento, backgroundColor: color.acentoSuave },
+  campo: {
+    padding: espacio.m,
+    borderRadius: radio.m,
+    backgroundColor: color.superficie,
+    borderWidth: 1,
+    borderColor: color.borde,
+    fontSize: 16,
+    color: color.texto,
+  },
   opcionNombre: { fontSize: 16, fontWeight: '600', color: color.texto },
 });

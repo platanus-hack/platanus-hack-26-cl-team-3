@@ -1,13 +1,14 @@
 import { File } from 'expo-file-system';
 import { fetch } from 'expo/fetch';
 
-import { API_URL, tokenHeaders } from './client';
+import { servidor } from '../servidor';
+import { tokenHeaders } from './client';
 import { NETWORK_MESSAGE, readTranscribeResponse, type TranscribeResult } from './transcribe-response';
 
 export async function transcribeAudio(uri: string): Promise<TranscribeResult> {
   let res;
   try {
-    res = await fetch(`${API_URL}/api/transcribe`, {
+    res = await fetch(`${await servidor()}/api/transcribe`, {
       method: 'POST',
       headers: { 'content-type': 'audio/mp4', ...tokenHeaders() },
       body: new File(uri),
@@ -24,7 +25,7 @@ export type TokenRealtimeResult = { ok: true; token: string } | { ok: false; mes
 export async function pedirTokenRealtime(): Promise<TokenRealtimeResult> {
   let res;
   try {
-    res = await fetch(`${API_URL}/api/transcribe/token`, { method: 'POST', headers: tokenHeaders() });
+    res = await fetch(`${await servidor()}/api/transcribe/token`, { method: 'POST', headers: tokenHeaders() });
   } catch {
     return { ok: false, message: NETWORK_MESSAGE };
   }

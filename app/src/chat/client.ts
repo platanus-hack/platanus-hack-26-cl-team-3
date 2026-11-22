@@ -5,8 +5,7 @@ import { cargarAjustes } from '../ajustes';
 import { adoptConversation, conversationVehicle, currentConversation } from './history';
 import { deviceId } from './remote-history';
 import { splitEvents } from './sse';
-
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://ph26.berguecio.cl';
+import { servidor } from '../servidor';
 
 export const CHAT_TOKEN = process.env.EXPO_PUBLIC_CHAT_TOKEN;
 
@@ -24,12 +23,13 @@ export async function* runTurn({
   signal?: AbortSignal;
 }): AsyncGenerator<ChatEvent> {
   const { modelo, esfuerzo } = await cargarAjustes();
+  const base = await servidor();
   const device = await deviceId();
   const { id: conversationId, generation } = await currentConversation();
   const vehicleId = await conversationVehicle();
   let res;
   try {
-    res = await fetch(`${API_URL}/api/chat`, {
+    res = await fetch(`${base}/api/chat`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
