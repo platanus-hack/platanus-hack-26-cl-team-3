@@ -1,3 +1,4 @@
+import { withChatTurn } from './turn-queue';
 import { supportsInspection, type InspectionAction } from '../engine-maps/inspection';
 import { parts as catalogParts, type PartId } from '../engine-maps/catalog';
 import type { AnthropicMessage } from './contract';
@@ -42,31 +43,19 @@ export async function save(messages: AnthropicMessage[]): Promise<void> {
   }
 }
 
-export async function clear(): Promise<void> {
-  generation++;
-  try {
-    const store = await storage();
-    await store.removeItem(KEY);
-    await store.removeItem(ID_KEY);
-    await store.removeItem(VEHICLE_KEY);
-  } catch {
-  }
+export function clear(vehicleId: string) {
+  return withChatTurn(() => selectConversationVehicle(vehicleId, storage, { messages: '[]', id: '' }));
 }
 
-export async function open(id: string): Promise<AnthropicMessage[] | null> {
-  const conversation = await fetchConversation(id);
-  if (!conversation) return null;
-  const { messages, vehicle_id } = conversation;
-  generation++;
-  try {
-    const store = await storage();
-    await store.setItem(KEY, JSON.stringify(messages));
-    await store.setItem(ID_KEY, id);
-    if (vehicle_id) await store.setItem(VEHICLE_KEY, vehicle_id);
-    else await store.removeItem(VEHICLE_KEY);
-  } catch {
-  }
-  return messages;
+export function open(id: string): Promise<AnthropicMessage[] | null> {
+  return withChatTurn(async () => {
+    const conversation = await fetchConversation(id);
+    if (!conversation) return null;
+    await selectConversationVehicle(conversation.vehicle_id || 'outback', storage, {
+      messages: JSON.stringify(conversation.messages), id,
+    });
+    return conversation.messages;
+  }).catch(() => null);
 }
 
 export async function conversationVehicle(): Promise<string | null> {
@@ -77,17 +66,38 @@ export async function conversationVehicle(): Promise<string | null> {
   }
 }
 
-export async function setConversationVehicle(id: string): Promise<void> {
-  try {
-    await (await storage()).setItem(VEHICLE_KEY, id);
-  } catch {
+// Keep the active thread (including local-only legacy messages) recoverable when changing cars.
+type ThreadStorage = Pick<Awaited<ReturnType<typeof storage>>, 'multiGet' | 'setItem' | 'getItem' | 'multiSet'>;
+type StoredThread = { messages: string; id: string };
+
+export async function selectConversationVehicle(
+  vehicleId: string, getStore: () => Promise<ThreadStorage> = storage, replacement?: StoredThread,
+): Promise<void> {
+  const store = await getStore();
+  const values = Object.fromEntries(await store.multiGet([KEY, ID_KEY, VEHICLE_KEY]));
+  const hasThread = !!values[ID_KEY] || (!!values[KEY] && values[KEY] !== '[]');
+  const previous = values[VEHICLE_KEY] || (hasThread ? 'outback' : null);
+  if (previous === vehicleId && !replacement) {
+    if (!values[VEHICLE_KEY]) await store.setItem(VEHICLE_KEY, vehicleId);
+    return;
   }
+  const vehicleKey = (id: string) => 'capo-ar:scanner-thread:v1:' + id;
+  const saved = await store.getItem(vehicleKey(vehicleId));
+  const next: StoredThread = replacement ?? (saved ? JSON.parse(saved) : { messages: '[]', id: '' });
+  generation++;
+  const parked: [string, string][] = previous && previous !== vehicleId && hasThread ? [
+    [vehicleKey(previous), JSON.stringify({ messages: values[KEY] || '[]', id: values[ID_KEY] || '' })],
+  ] : [];
+  await store.multiSet([
+    ...parked, [vehicleKey(vehicleId), JSON.stringify({ messages: '[]', id: '' })],
+    [KEY, next.messages], [ID_KEY, next.id], [VEHICLE_KEY, vehicleId],
+  ]);
 }
 
 export async function currentConversation(): Promise<{ id: string | null; generation: number }> {
   const at = generation;
   try {
-    return { id: await (await storage()).getItem(ID_KEY), generation: at };
+    return { id: (await (await storage()).getItem(ID_KEY)) || null, generation: at };
   } catch {
     return { id: null, generation: at };
   }

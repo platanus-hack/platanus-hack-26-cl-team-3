@@ -34,6 +34,7 @@ import { InitialVisualScan, type ScanProgress } from './initial-visual-scan';
 import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
+import { useScannerConversation } from './useScannerConversation';
 import { ProveedorVivo } from './vivo/ModoVivo';
 import { EstadoVozPantalla } from './vivo/EstadoVozPantalla';
 import { StepCounter } from './StepCounter';
@@ -90,7 +91,7 @@ function resumenAnclaje(a: ResultadoFijar): string {
   return `${a.metodo} · ${a.muestras} medidas · ${a.distancia.toFixed(2)} m`;
 }
 
-export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
+export default function EscanerAR({ vehicle, initialPart, steps = [], initialStep = 0, vivo: initialLive = false }: { vehicle?: Vehicle; initialPart?: PartId; steps?: ViewCard[]; initialStep?: number; vivo?: boolean }) {
   const map = vehicle ? engineMaps[vehicle.id] : undefined;
   const outbackParts = useMemo(() => vehicle?.id === 'outback' ? map?.volumes.map(({ part }) => part) : undefined, [vehicle?.id, map]);
   const measuredVehicle = vehicle?.id === 'swift' || vehicle?.id === 'ram700' ? vehicle.id : undefined;
@@ -113,7 +114,11 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
     if (!vano || !ar.current) return null;
     // Solo hace falta la foto: sin medición no se hacen hit tests ni registro visual en el hilo de GL en cada turno de voz.
     const cap = await ar.current.capturar(false);
-    return vanoParaChat(cap.uri, vano);
+    try {
+      return await vanoParaChat(cap.uri, vano);
+    } finally {
+      borrar(cap.uri);
+    }
   };
   const [valido, setValido] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -135,6 +140,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   const [ms, setMs] = useState<number | null>(null);
 
   const [activa, setActiva] = useState(AppState.currentState === 'active');
+  const conversation = useScannerConversation(initialLive, activa, cameraGuide, vehicle?.id, selected);
   const registrationGeneration = useRef(0);
   const ocupado = useRef(false); // fijando o recalibrando
 
@@ -810,9 +816,9 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
 
   return (
     <ProveedorVivo
-      activo={vivo}
+      enabled={conversation.enabled} activo={conversation.listening}
       capturarVano={capturarVano}
-      preguntar={(t, img, signal) => cameraGuide.ask(t, false, { image: img ?? undefined, mode: 'vivo', signal })}
+      preguntar={conversation.ask}
     >
       <View style={estilos.raiz}>
         {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
@@ -833,7 +839,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
         <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
           name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
         {/* Feedback de voz a pantalla completa (solo en modo en vivo): escuchando / oyendo / pensando. */}
-        {vivo && <EstadoVozPantalla pensando={cameraGuide.caption.pensando} />}
+        {conversation.listening && <EstadoVozPantalla pensando={cameraGuide.caption.pensando} />}
         {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
         {!anclaje && !recalibrando && !error && registrationCandidate && (outbackParts || measuredParts) && movimiento && !editingMap && controls.mode !== 'hidden' && (
           <GuiaMovimiento base={movimiento.baseline} objetivo={movimiento.target} />
@@ -856,7 +862,7 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
           </View>
         ) : (
           <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
-            captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
+            conversation={conversation} captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
         )}
       </View>
     </ProveedorVivo>

@@ -1,9 +1,10 @@
+import { withChatTurn } from '../chat/turn-queue';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { runTurn } from '../chat/client';
-import { load, save, type ViewCard, type ViewCitation } from '../chat/history';
+import { load, save, selectConversationVehicle, type ViewCard, type ViewCitation } from '../chat/history';
 import { DONE_REPLY, LOST_REPLY, sendTurn, THINKING, type TurnOptions } from '../chat/turn';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { inspectionSeconds, type InspectionAction } from '../engine-maps/inspection';
@@ -35,31 +36,46 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
     setPlaying(null);
   }, []);
 
+  const turn = useRef(0);
+  const resetCaption = () => {
+    turn.current++;
+    setBusy(false);
+    setCaption({ text: guide.steps[guide.index]?.instruction ?? '', citations: [], pensando: false });
+  };
+
   const ask = async (text: string, keepGuide = false, opts?: TurnOptions) => {
+    const id = ++turn.current;
     setBusy(true);
     setCaption({ text: THINKING, citations: [], pensando: true });
     let spoke = false;
     let replaced: ViewCard[] = [];
-    const result = await sendTurn(await load(), text, runTurn, (progress) => {
-      const said = progress.parts.map((p) => p.text).join('\n');
-      spoke ||= said.trim() !== '';
-      setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations), pensando: !spoke });
-      if (keepGuide || progress.cards.length === 0) return;
-      if (replaced.length === 0) {
-        setFocus(null);
-        onStep(progress.cards[0]);
-      }
-      setGuide((g) => ({ steps: progress.cards, index: replaced.length ? g.index : 0, key: replaced.length ? g.key : g.key + 1 }));
-      replaced = progress.cards;
-    }, opts);
-    if ('aborted' in result) {
-      setBusy(false);
+    const result = await withChatTurn(async () => {
+      if (opts?.signal?.aborted) return { aborted: true } as const;
+      if (opts?.vehicleId) await selectConversationVehicle(opts.vehicleId);
+      const result = await sendTurn(await load(), text, runTurn, (progress) => {
+        if (turn.current !== id || opts?.signal?.aborted) return;
+        const said = progress.parts.map((p) => p.text).join('\n');
+        spoke ||= said.trim() !== '';
+        setCaption({ text: spoke ? said : (progress.status ?? THINKING), citations: progress.parts.flatMap((p) => p.citations), pensando: !spoke });
+        if (keepGuide || progress.cards.length === 0) return;
+        if (replaced.length === 0) {
+          setFocus(null);
+          onStep(progress.cards[0]);
+        }
+        setGuide((g) => ({ steps: progress.cards, index: replaced.length ? g.index : 0, key: replaced.length ? g.key : g.key + 1 }));
+        replaced = progress.cards;
+      }, opts);
+      if ('messages' in result) await save(result.messages);
+      return result;
+    }).catch(() => ({ error: 'No pude abrir la conversación. Inténtalo de nuevo.' }));
+    if (turn.current !== id) return false;
+    if ('aborted' in result || opts?.signal?.aborted) {
+      resetCaption();
       return false;
     }
     if ('error' in result) setCaption({ text: result.error, citations: [], pensando: false });
     else {
       if (!spoke && replaced[0]) setCaption({ text: replaced[0].instruction, citations: [], pensando: false });
-      await save(result.messages);
     }
     setBusy(false);
     return !('error' in result) && replaced.length === 0;
@@ -87,7 +103,7 @@ export function useCameraGuide(initialSteps: ViewCard[], initialStep: number, on
 
   return {
     steps: guide.steps, index: guide.index, current, stepKey: guide.key, caption, busy, playing, focus, finished, refilling,
-    play, stop, done, lost, clearFocus, toggleFocus, ask,
+    resetCaption, play, stop, done, lost, clearFocus, toggleFocus, ask,
   };
 }
 
@@ -101,7 +117,7 @@ export function GuideCaptions({ guide }: { guide: ReturnType<typeof useCameraGui
       {playing === 'refill' && <Text style={styles.caveat}>Ilustración: no muestra el nivel real del depósito.</Text>}
       {finished ? (
         <View style={styles.row}>
-          <GuideButton label="Ir al chat" primary disabled={false} onPress={() => router.back()} />
+          <GuideButton label="Ir al chat" primary disabled={false} onPress={() => router.navigate('/ask')} />
         </View>
       ) : (!playing || playing === 'refill') && (
         <View style={styles.row}>
