@@ -10,6 +10,7 @@ import { CONFIANZA_MIN } from '../detector/vano';
 import { color, espacio, radio, tipo } from '../theme';
 import { Boton, BotonIcono, Icono, type NombreIcono } from '../ui';
 import { useVehicleSelection } from '../plates/selection';
+import { useVivo } from './vivo/ModoVivo';
 import { GuideBanner } from './GuideBanner';
 import { parts, type PartId } from '../engine-maps/catalog';
 import { vehicles } from '../vehicles';
@@ -72,6 +73,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
   step?: { part: PartId; instruction: string };
 }) {
   const insets = useSafeAreaInsets();
+  const liveVoice = useVivo();
   const { mode, setMode, debug, toggleDebug, hasError, sonnetAnchor, toggleSonnetAnchor } = controls;
   const expanded = mode === 'details';
   const hidden = mode === 'hidden';
@@ -125,7 +127,7 @@ export function ScannerControls({ controls, status, children, top, captions, ste
             {conversation?.enabled && (
               <Pressable accessibilityRole="button" accessibilityLabel="Terminar conversación"
                 onPress={() => { setMode('compact'); conversation.toggle(); }}
-                style={({ pressed }) => [estilos.hangUp, pressed && { opacity: 0.75 }]}>
+                style={({ pressed }) => [estilos.callControl, estilos.hangUp, pressed && { opacity: 0.75 }]}>
                 <Icono nombre="phone-hangup" tam={24} tono={color.peligro} />
               </Pressable>
             )}
@@ -136,6 +138,15 @@ export function ScannerControls({ controls, status, children, top, captions, ste
               <Text style={estilos.statusText} numberOfLines={1}>{expanded ? 'Cerrar detalles' : status}</Text>
               <Icono nombre={expanded ? 'chevron-down' : 'chevron-up'} tam={18} />
             </Pressable>
+            {conversation?.enabled && liveVoice && (
+              <Pressable accessibilityRole="button"
+                accessibilityLabel={liveVoice.silenciado ? 'Reactivar micrófono' : 'Silenciar micrófono'}
+                onPress={liveVoice.alternarSilencio}
+                style={({ pressed }) => [estilos.callControl, estilos.microphone, !liveVoice.silenciado && estilos.liveMic, pressed && { opacity: 0.75 }]}>
+                <Icono nombre={liveVoice.silenciado ? 'microphone-off' : 'microphone'} tam={24}
+                  tono={liveVoice.silenciado ? color.peligro : color.texto} />
+              </Pressable>
+            )}
           </View>
         </View>
       )}
@@ -247,7 +258,10 @@ export const estilos = StyleSheet.create({
   chipTexto: { fontSize: 12, fontWeight: '700', color: color.texto },
   dock: { position: 'absolute', left: espacio.l, right: espacio.l, maxHeight: '55%', gap: espacio.s },
   liveFooter: { justifyContent: 'center', minHeight: 48, paddingHorizontal: 48 + espacio.s },
-  hangUp: { position: 'absolute', left: 0, top: 0, width: 48, height: 48, borderRadius: 24,
+  hangUp: { left: 0 },
+  microphone: { right: 0 },
+  liveMic: { borderWidth: 2, borderColor: color.exito },
+  callControl: { position: 'absolute', top: 0, width: 48, height: 48, borderRadius: 24,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.velo },
   status: { alignSelf: 'center', maxWidth: '100%', minHeight: 44, borderRadius: 24, paddingHorizontal: espacio.l,
     flexDirection: 'row', alignItems: 'center', gap: espacio.s, backgroundColor: color.velo },
