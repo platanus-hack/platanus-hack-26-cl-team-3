@@ -1,9 +1,11 @@
 /**
  * Arma el índice del manual a partir del texto de pdftotext.
  *   tsx scripts/manual/construir-indice.ts <lectura.txt> <layout.txt> <salida.json> <sha256-del-pdf>
- * Lo corre scripts/manual/preparar-manual.sh. La salida NO se sube al repo (regla 7 del README).
+ * La salida es JSON (índice en memoria) o, si termina en .sqlite, una base con FTS5. Lo corre
+ * scripts/manual/preparar-manual.sh. La salida NO se sube al repo (regla 7 del README).
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { writeSqliteIndex } from "../../src/manual/fts";
 import { parsePages } from "../../src/manual/pages";
 import type { ManualFile } from "../../src/manual/search";
 
@@ -24,6 +26,7 @@ const file: ManualFile = {
   },
   pages,
 };
-writeFileSync(outPath, JSON.stringify(file));
+if (outPath.endsWith(".sqlite")) writeSqliteIndex(outPath, file);
+else writeFileSync(outPath, JSON.stringify(file));
 const labelled = pages.filter((page) => page.label).length;
 console.log(`${pages.length} páginas (${labelled} con numeración impresa) → ${outPath}`);

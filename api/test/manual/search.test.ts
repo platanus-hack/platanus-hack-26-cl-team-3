@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { expandQuery, ManualIndex, tokenize, type ManualFile } from "../../src/manual/search";
+import { expandQuery, expandWords, MemoryIndex, tokenize, type ManualFile } from "../../src/manual/search";
 
 const source = { title: "Manual de prueba", edition: "prueba", url: "https://example.test", sha256: "0".repeat(64), thirdParty: true };
 const pages = [
@@ -10,7 +10,7 @@ const pages = [
   { pdfPage: 13, label: "11-38", section: "Maintenance and service/Fuses", text: "Fuses protect the electrical circuits. The fuse box is in the engine compartment." },
   { pdfPage: 14, label: null, section: null, text: "Foreword. Congratulations on choosing a SUBARU vehicle and welcome to the manual." },
 ];
-const index = new ManualIndex({ version: 1, source, pages } satisfies ManualFile);
+const index = new MemoryIndex({ version: 1, source, pages } satisfies ManualFile);
 
 test("1: tokeniza sin tildes ni palabras vacías y junta singular con plural", () => {
   assert.deepEqual(tokenize("Where are the Tires? ¡Neumáticos!"), ["tire", "neumatico"]);
@@ -47,4 +47,9 @@ test("6: from() ubica por numeración impresa o por hoja del PDF y sigue con las
   assert.deepEqual(index.from("pdf:14").map((p) => p.pdfPage), [14]);
   assert.deepEqual(index.from("99-1"), []);
   assert.deepEqual(index.from("11-38", 3).map((p) => p.label), ["11-38", null]);
+});
+
+test("7: expandWords conserva las palabras sin reducir para FTS5", () => {
+  assert.deepEqual(expandWords("replacing tires"), ["replacing", "tires"]);
+  assert.ok(expandWords("varilla").includes("gauge"));
 });

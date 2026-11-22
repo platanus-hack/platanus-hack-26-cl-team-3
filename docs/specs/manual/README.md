@@ -48,10 +48,52 @@ el índice con él ya corriendo.
 Léxico, sin dependencias: BM25 por página, con el título de la sección pesando el triple, un quitaplurales sencillo y la
 traducción de las palabras del auto. Carga en unos 50 ms y cada consulta tarda menos de 2 ms.
 
+## Dónde vive el índice: memoria, SQLite o Postgres
+
+`MANUAL_INDEX` decide el formato por la extensión: `.json` se carga a memoria (BM25 propio) y `.sqlite` se abre como base
+con FTS5, que trae BM25 integrado y usa `node:sqlite`, que el `api` ya usa para los vehículos. Para generar el segundo,
+`tsx scripts/manual/construir-indice.ts … salida.sqlite` (el script de preparación lo hace con `MANUAL_FORMATO=sqlite`).
+
+Se midió con `scripts/manual/evaluar.ts` y 28 preguntas de conductor (`eval/manual/preguntas.json`). Cada una trae un dato que
+debe aparecer en la página devuelta (por ejemplo «3.6 L models: 6.9 US qt»), así que no se juzga a ojo. Cada pregunta se
+probó en español, como la escribe la persona, y en inglés, como la escribe el modelo.
+
+| Índice | Idioma | Top-1 | Top-4 | MRR | Consulta p50 / p95 | Carga | Tamaño |
+|---|---|---|---|---|---|---|---|
+| Memoria (JSON) | es | 18 % | 57 % | 0,33 | | | |
+| | en | 71 % | 89 % | 0,78 | | | |
+| | todo | 45 % | 73 % | 0,56 | 0,10 / 0,17 ms | 53 ms | 0,99 MB |
+| SQLite FTS5 | es | 14 % | 57 % | 0,31 | | | |
+| | en | 68 % | 93 % | 0,76 | | | |
+| | todo | 41 % | 75 % | 0,54 | 0,22 / 0,37 ms | 1 ms | 1,78 MB |
+| Postgres FTS (`ts_rank`) | es | 36 % | 54 % | 0,42 | | | |
+| | en | 57 % | 89 % | 0,70 | | | |
+| | todo | 46 % | 71 % | 0,56 | 2,1 / 7,1 ms | | 1,96 MB |
+
+Postgres 17 en un contenedor local, una conexión por localhost, con la configuración `english` y el título pesando más.
+Otras dos formas de ordenar en Postgres salieron peor (`ts_rank` con normalización 1: 66 % en Top-4; `ts_rank_cd`: 66 % y
+24 ms de mediana). La búsqueda de texto de Postgres **no es BM25**; BM25 de verdad pide una extensión (por ejemplo ParadeDB).
+
+**Lo que dicen los números:**
+
+- Los tres motores quedan empatados en calidad. Son 56 consultas, así que una diferencia de pocos puntos es una o dos
+  preguntas y no se puede leer como ventaja.
+- La velocidad no decide nada: todo está bajo 10 ms. En memoria es lo más rápido, SQLite carga al instante y Postgres suma
+  el viaje a la base.
+- **El punto débil es el español:** 57 % entre las 4 primeras páginas, contra 89–93 % en inglés. Mejorar la búsqueda
+  pasa por el glosario y la forma de preguntar, no por el motor. En el chat el modelo escribe la consulta en inglés, así que
+  lo que se vive se parece más a las filas «en».
+- Postgres tendría sentido por otras razones (varios manuales en un servicio compartido, historial, búsqueda híbrida con
+  embeddings), no por la búsqueda de este manual.
+
+**Límites de la medición:** 28 preguntas escritas por una sola fuente (el asistente de IA que armó esto) a partir de datos que existen una vez en el
+manual; un solo manual; las preguntas en español se escribieron antes de saber en cuáles fallaba el glosario, y no se
+ajustó el glosario a ellas para no sesgar el resultado.
+
 ## Límites conocidos
 
 - **Es búsqueda por palabras:** no entiende sinónimos que no estén en el glosario. Si un tema falla, agregar la palabra
-  allí es lo más barato.
+  allí es lo más barato. Con la pregunta en español, la respuesta está entre las 4 primeras páginas en 57 % de los casos.
 - **Los diagramas no están:** solo el texto. Las tablas salen como texto corrido y pueden perder el orden de las celdas.
 - **El símbolo de grado** sale del PDF como un «8» (`10.48F`). `fixDegrees` lo corrige junto a F o C; no se revisaron otros
   símbolos, y `cm²` pierde el cuadrado.
