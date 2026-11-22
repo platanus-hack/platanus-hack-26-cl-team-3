@@ -32,7 +32,7 @@ import { InitialVisualScan } from './initial-visual-scan';
 import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
-import { ModoVivo } from './vivo/ModoVivo';
+import { ProveedorVivo } from './vivo/ModoVivo';
 import { StepCounter } from './StepCounter';
 import type { ViewCard } from '../chat/history';
 import { color, espacio, radio, tipo } from '../theme';
@@ -802,46 +802,51 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
   }
 
   return (
-    <View style={estilos.raiz}>
-      {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
-      <VistaAR
-        ref={ar}
-        style={StyleSheet.absoluteFill}
-        editingMap={editingMap && !error && !errorAR}
-        debug={debug}
-        outbackParts={outbackParts}
-        swiftParts={swiftParts}
-        selectedPart={selectedIndex}
-        focusedPart={focus}
-        onPart={(e) => choosePart(e.nativeEvent.index)}
-        onEstado={(e) => setEstadoAR(e.nativeEvent)}
-        onGuia={(e) => guide.current?.push(e.nativeEvent)}
-      />
-      <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
-        name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
-      {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
-      {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
-          los toques sobre las piezas del mapa. */}
-      {!anclaje && (
-        <Pressable
+    <ProveedorVivo
+      activo={vivo}
+      capturarVano={capturarVano}
+      preguntar={(t, img, signal) => cameraGuide.ask(t, false, { image: img ?? undefined, mode: 'vivo', signal })}
+    >
+      <View style={estilos.raiz}>
+        {/* Siempre montada: al pasar a segundo plano el módulo nativo pausa ARCore y conserva las anclas. */}
+        <VistaAR
+          ref={ar}
           style={StyleSheet.absoluteFill}
-          delayLongPress={450}
-          onLongPress={(e) => void marcarMotor(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-          accessibilityLabel="Mantén presionado sobre el motor para ayudar a la detección"
+          editingMap={editingMap && !error && !errorAR}
+          debug={debug}
+          outbackParts={outbackParts}
+          swiftParts={swiftParts}
+          selectedPart={selectedIndex}
+          focusedPart={focus}
+          onPart={(e) => choosePart(e.nativeEvent.index)}
+          onEstado={(e) => setEstadoAR(e.nativeEvent)}
+          onGuia={(e) => guide.current?.push(e.nativeEvent)}
         />
-      )}
-      {vivo && <ModoVivo capturarVano={capturarVano} preguntar={(t, img, signal) => cameraGuide.ask(t, false, { image: img ?? undefined, mode: 'vivo', signal })} />}
-      {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
-      {editingMap && !error && !errorAR ? (
-        <View style={[styles.editBar, { bottom: insets.bottom + espacio.m }]}>
-          <Text style={styles.editHint}>{mapTracking ? 'Arrastra o pellizca el mapa' : 'Vuelve a apuntar al motor'}</Text>
-          <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
-        </View>
-      ) : (
-        <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
-          captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
-      )}
-    </View>
+        <PartGuide hidden={editingMap || controls.mode === 'hidden'} key={`${selectedIndex}:${!!mapTracking}`} ref={guide} part={selectedIndex}
+          name={selected ? parts[selected][0] : undefined} active={!!mapTracking && selectedIndex >= 0} onFound={() => void ar.current?.pulso()} />
+        {engineHint && !editingMap && controls.mode !== 'hidden' && <CameraHint text={engineHint} />}
+        {/* Mientras busca: mantener presionado sobre el motor ayuda a la detección. Ya anclado no se pone, para no tapar
+            los toques sobre las piezas del mapa. */}
+        {!anclaje && (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            delayLongPress={450}
+            onLongPress={(e) => void marcarMotor(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+            accessibilityLabel="Mantén presionado sobre el motor para ayudar a la detección"
+          />
+        )}
+        {marca && <View pointerEvents="none" style={[styles.marca, { left: marca.x - 22, top: marca.y - 22 }]} />}
+        {editingMap && !error && !errorAR ? (
+          <View style={[styles.editBar, { bottom: insets.bottom + espacio.m }]}>
+            <Text style={styles.editHint}>{mapTracking ? 'Arrastra o pellizca el mapa' : 'Vuelve a apuntar al motor'}</Text>
+            <Boton texto="Listo" icono="check" onPress={() => setEditingMap(false)} />
+          </View>
+        ) : (
+          <ScannerControls controls={controls} status={status} top={<StepCounter step={cameraGuide.index} total={cameraGuide.steps.length} />}
+            captions={<GuideCaptions guide={cameraGuide} />} step={cameraGuide.current}>{panel}</ScannerControls>
+        )}
+      </View>
+    </ProveedorVivo>
   );
 }
 

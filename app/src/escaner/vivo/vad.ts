@@ -13,7 +13,7 @@ export type OpcionesVad = {
 
 export const OPCIONES_VAD: OpcionesVad = {
   inicioMs: 250,
-  silencioFinMs: 3000,
+  silencioFinMs: 1000,
   fraseMaxMs: 30000,
   sinVozMs: 10000,
   ventanaRuidoMs: 2000,
@@ -54,6 +54,7 @@ export function crearVad(opciones: Partial<OpcionesVad> = {}) {
   };
 
   return {
+    cerrando: () => enFrase && bajoDesde !== null,
     push(db: number, t: number): EventoVad | null {
       const desde = anterior ?? t;
       anterior = t;

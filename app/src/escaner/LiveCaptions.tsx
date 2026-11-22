@@ -7,15 +7,9 @@ import { parts, type PartId } from '../engine-maps/catalog';
 import { video } from '../theme';
 import { captionChunks, readingMs, sourceLabel } from './captions';
 
-export function LiveCaptions({ part, text, citations = [], children }: {
-  part?: PartId;
-  text: string;
-  citations?: ViewCitation[];
-  children?: ReactNode;
-}) {
+export function useCaptionChunk(text: string) {
   const chunks = useMemo(() => captionChunks(text), [text]);
   const [track, setTrack] = useState({ text, shown: 0, round: 0 });
-  const [open, setOpen] = useState(false);
   const shownAt = useRef(0);
   if (track.text !== text) {
     setTrack(text.startsWith(track.text) ? { ...track, text } : { text, shown: 0, round: track.round + 1 });
@@ -36,7 +30,17 @@ export function LiveCaptions({ part, text, citations = [], children }: {
     );
     return () => clearTimeout(timer);
   }, [pending, shown, current, track.round]);
+  return current;
+}
 
+export function LiveCaptions({ part, text, citations = [], children }: {
+  part?: PartId;
+  text: string;
+  citations?: ViewCitation[];
+  children?: ReactNode;
+}) {
+  const current = useCaptionChunk(text);
+  const [open, setOpen] = useState(false);
   const citation = citations.at(-1) ?? null;
   const label = citation ? sourceLabel(citation.title) || citation.source : '';
   return (

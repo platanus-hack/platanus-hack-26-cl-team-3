@@ -4,10 +4,12 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createServer } from "../../src/server/server";
 import { elevenlabsTranscriber } from "../../src/transcribe/elevenlabs";
+import { elevenlabsRealtimeToken } from "../../src/transcribe/realtime-token";
 import { TranscribeError } from "../../src/transcribe/errors";
 import type { TranscribeErrorKind } from "../../src/transcribe/errors";
 import { KEYTERMS } from "../../src/transcribe/keyterms";
 import type { Transcriber } from "../../src/transcribe/handler";
+import type { RealtimeTokenProvider } from "../../src/transcribe/realtime-token";
 
 let server: Server;
 let base: string;
@@ -17,8 +19,10 @@ let behavior: Transcriber = async (audio, contentType) => {
   return "dónde está el sapito";
 };
 
+let tokenBehavior: RealtimeTokenProvider = async () => "sutkn_prueba";
+
 before(async () => {
-  server = createServer({ transcriber: (a, c) => behavior(a, c) });
+  server = createServer({ transcriber: (a, c) => behavior(a, c), realtimeToken: () => tokenBehavior() });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -99,4 +103,44 @@ test("keyterms: menos de 100, sin duplicados y dentro de los límites", () => {
   assert.ok(KEYTERMS.length > 14 && KEYTERMS.length < 100);
   assert.equal(new Set(KEYTERMS).size, KEYTERMS.length);
   assert.ok(KEYTERMS.every((t) => t.length <= 50 && t.split(/\s+/).length <= 5));
+});
+
+const postToken = (headers: Record<string, string> = {}) => fetch(`${base}/api/transcribe/token`, { method: "POST", headers });
+
+test("token realtime: 401 con CHAT_TOKEN puesto y sin header, 200 con header", async () => {
+  process.env.CHAT_TOKEN = "secreto";
+  const r = await postToken();
+  assert.equal(r.status, 401);
+  assert.deepEqual(await r.json(), { error: "No autorizado." });
+  const ok = await postToken({ "x-chat-token": "secreto" });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { token: "sutkn_prueba" });
+});
+
+test("token realtime: mapeo de errores", async () => {
+  const cases: [TranscribeErrorKind, number][] = [
+    ["config", 500],
+    ["auth", 500],
+    ["busy", 503],
+    ["upstream", 502],
+  ];
+  const original = tokenBehavior;
+  for (const [kind, status] of cases) {
+    tokenBehavior = async () => {
+      throw new TranscribeError(kind);
+    };
+    const r = await postToken();
+    assert.equal(r.status, status, kind);
+  }
+  tokenBehavior = original;
+});
+
+test("token realtime sin ELEVENLABS_API_KEY lanza TranscribeError config (sin red)", async () => {
+  const saved = process.env.ELEVENLABS_API_KEY;
+  delete process.env.ELEVENLABS_API_KEY;
+  try {
+    await assert.rejects(elevenlabsRealtimeToken(), (e) => e instanceof TranscribeError && e.kind === "config");
+  } finally {
+    if (saved !== undefined) process.env.ELEVENLABS_API_KEY = saved;
+  }
 });

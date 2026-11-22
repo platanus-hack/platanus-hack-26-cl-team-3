@@ -1,4 +1,9 @@
-# capo-ar — Guía de tu auto en Realidad Aumentada
+<p align="center"><img src="project-logo.png" width="140" alt="Hoodini"></p>
+
+# Hoodini — Guía de tu auto en Realidad Aumentada
+
+> **Hoodini** es el nombre de la app. Equipo: **<WIP>** (nombre por definir) · Track: Physical World · [Descargar el APK](https://github.com/platanus-hack/platanus-hack-26-cl-team-3/releases/latest).
+> Antes se llamaba «Capo AR»: el repositorio, el paquete Android (`com.capoar.app`), el slug, el esquema `capoar` y los módulos conservan ese nombre técnico; **los textos que ve el usuario dicen «Hoodini»**.
 
 > Documento de contexto para el equipo **y para sus agentes de IA**. Léelo completo antes de tocar código.
 > Estado (21-11-2026): **MVP inicial** (hackathon). El resumen para el mentor está en [`docs/brief.md`](docs/brief.md).
@@ -166,7 +171,7 @@ Es la parte más incierta. Evidencia disponible:
 
 El APK conversa con el servidor `api/`, que corre las herramientas y llama al modelo por la API de Anthropic (Claude Sonnet 5.5 por defecto). La key vive solo en el servidor.
 
-1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). El historial de conversaciones se guarda en SQLite en la ruta de `HISTORIAL_DB`; sin esa variable, las rutas del historial responden 503. En esa misma base, cada turno del chat queda en `turns` (modelo, esfuerzo, versión del prompt, pregunta, respuesta, tokens y resultado) y cada herramienta que corre, en `tool_runs`, para analizar las conversaciones; esos logs se leen con `GET /api/logs/turns` y `GET /api/logs/turns/:id`, con `Authorization: Bearer` y el `LOGS_TOKEN` del servidor (sin esa variable, esas rutas no existen). El modelo ve como contexto los últimos 30 mensajes. Tests: `cd api && npm test`. El dictado por voz necesita además `ELEVENLABS_API_KEY` en el entorno del host (key con permiso de Speech to Text).
+1. **Servidor:** el servicio `api` del `docker-compose.yml` necesita `ANTHROPIC_API_KEY` en el entorno del host. En local: `cd api && npm ci && ANTHROPIC_API_KEY=… npm start` (puerto 8787). El historial de conversaciones se guarda en SQLite en la ruta de `HISTORIAL_DB`; sin esa variable, las rutas del historial responden 503. En esa misma base, cada turno del chat queda en `turns` (modelo, esfuerzo, versión del prompt, pregunta, respuesta, tokens y resultado) y cada herramienta que corre, en `tool_runs`, para analizar las conversaciones; esos logs se leen con `GET /api/logs/turns` y `GET /api/logs/turns/:id`, con `Authorization: Bearer` y el `LOGS_TOKEN` del servidor (sin esa variable, esas rutas no existen). El modelo ve como contexto los últimos 30 mensajes. Tests: `cd api && npm test`. El dictado por voz necesita además `ELEVENLABS_API_KEY` en el entorno del host (key con permiso de Speech to Text). El modo vivo del escáner usa la misma key para transcribir en tiempo real: la app pide un token de un solo uso a `POST /api/transcribe/token` y manda el audio directo al WebSocket de ElevenLabs.
 2. **APK:** crea `app/.env.local` con `EXPO_PUBLIC_API_URL=https://ph26.berguecio.cl` (no se commitea) y recompila. Tiene que ser HTTPS: el APK release bloquea HTTP en claro. Tests: `cd app && npx tsx --test src/chat/*.test.ts`.
 
 ## 10. Futuro (fuera del MVP)
