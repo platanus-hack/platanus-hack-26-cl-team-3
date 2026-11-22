@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { GLOSSARY } from "./glossary";
+import { GLOSSARY, PHRASES } from "./glossary";
 import type { ManualPage } from "./pages";
 
 export interface ManualSource {
@@ -32,7 +32,9 @@ export interface ManualIndex {
 
 const STOP = new Set(
   ("the a an of to in on for and or is are be it as at by with from this that what where how do does can i my me " +
-    "de la el los las un una que como donde cual mi es en y o para por con se del al lo su sus").split(" "),
+    "de la el los las un una que como donde cual cuales cuando cuanto cuantos mi mis es en y o para por porque con se del " +
+    "al lo le su sus tu tus no si sin ya hay hago puedo puede puedes debo debe tengo tiene quiero cada vez hacer saber " +
+    "esta este esto algo pero uno ella").split(" "),
 );
 const K1 = 1.4;
 const B = 0.75;
@@ -58,11 +60,24 @@ function words(text: string): string[] {
 
 export const tokenize = (text: string): string[] => words(text).map(stem);
 
-/** Lo que el usuario escribió, más la traducción de las palabras del auto que conocemos. */
+/** `neumaticos` → `neumatico`, `ampolletas` → `ampolleta`: el glosario se escribe en singular. */
+function translate(word: string): string | undefined {
+  if (GLOSSARY[word]) return GLOSSARY[word];
+  for (const stem of [word.slice(0, -1), word.slice(0, -2)]) {
+    if (word.length > 3 && (word.endsWith("s") || word.endsWith("es")) && GLOSSARY[stem]) return GLOSSARY[stem];
+  }
+  return undefined;
+}
+
+/** Lo que el usuario escribió, más la traducción de las palabras y expresiones del auto que conocemos. */
 export function expandWords(query: string): string[] {
-  const plain = unaccent(query.toLowerCase()).match(/[a-z0-9]+/g) ?? [];
-  const extra = plain.flatMap((word) => (GLOSSARY[word] ? words(GLOSSARY[word]) : []));
-  return [...new Set([...words(query), ...extra])];
+  const normal = unaccent(query.toLowerCase()).replace(/[^a-z0-9\s]+/g, " ").replace(/\s+/g, " ").trim();
+  const plain = normal.match(/[a-z0-9]+/g) ?? [];
+  const spanish = [
+    ...plain.map(translate),
+    ...Object.entries(PHRASES).map(([phrase, english]) => (` ${normal} `.includes(` ${phrase} `) ? english : undefined)),
+  ];
+  return [...new Set([...words(query), ...spanish.flatMap((english) => (english ? words(english) : []))])];
 }
 
 export const expandQuery = (query: string): string[] => [...new Set(expandWords(query).map(stem))];
