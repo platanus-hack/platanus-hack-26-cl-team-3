@@ -12,10 +12,13 @@ Open a GLB in a glTF animation viewer and select a named inspection clip. In eac
 | [mazda-cx5-2021-photo-reference-inspection](mazda-cx5-2021-photo-reference-inspection.glb) | 9 |
 | [outback-2016-36r-vano-inspection](outback-2016-36r-vano-inspection.glb) | 27 |
 | [ram-700-bighorn-2022](ram-700-bighorn-2022.glb) | 7 |
+| [RAM 700 Big Horn air filter detail](ram-700-bighorn-2022-air-filter-detail.glb) | 6 |
 | [suzuki-swift](suzuki-swift.glb) | 9 |
 | [toyota-corolla-2020-photo-reference-inspection](toyota-corolla-2020-photo-reference-inspection.glb) | 7 |
 
 The 2022 RAM 700 Big Horn 1.4 L uses seven textured silhouettes from printed page 209 of the [Stellantis manual](https://manualesdigitales.stellantis.com.mx/wp-content/uploads/2021/07/OM_RAM700_2022MY_COpdf.pdf).
+
+The separate [air filter detail](RAM-700-Big-Horn-air-filter-detail.png) uses the 1.4 L illustrations on printed pages 215 and 216. The manual specifies the duct and cover travel directions. Independent clips highlight the three retainers and filter element. Their inspection distances and physical hinge axes remain unmeasured.
 
 The Japanese Suzuki Swift Sport CBA-ZC32S uses nine visible parts from a [photograph by Tokumeigakarinoaoshima](https://commons.wikimedia.org/wiki/File:The_engine_room_of_Suzuki_SWIFT_Sport_(CBA-ZC32S).JPG). The Swift model and its preview adapt that photograph with traced contours and inspection movement and are distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
