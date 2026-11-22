@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { Vano } from '../detector/vano';
-import { encajar, mejorCuadro, piezasSobreImagen } from './mapa2d';
+import { encajar, mejorCuadro, piezasSobreImagen, volumenesBasicos } from './mapa2d';
 
 const vano = (x0: number, y0: number, x1: number, y1: number, extra: Partial<Vano> = {}): Vano => ({
   esquinas: [{ x: x0, y: y0, borde: false }, { x: x1, y: y0, borde: false }, { x: x1, y: y1, borde: false }, { x: x0, y: y1, borde: false }],
@@ -34,4 +34,14 @@ test('de un video se elige el cuadro con el vano completo', () => {
 
 test('la imagen se encaja completa y centrada', () => {
   assert.deepEqual(encajar(400, 200, { w: 300, h: 300 }), { x: 0, y: 75, w: 300, h: 150 });
+});
+
+test('solo se dibujan las piezas con ficha; sin fichas, todas', () => {
+  const volumenes = [
+    { part: 'battery', height: 0.1, outline: [[0, 0], [1, 0], [1, 1]] },
+    { part: 'metal_pulley', height: 0.1, outline: [[0, 0], [1, 0], [1, 1]] },
+  ] as const;
+  assert.deepEqual(volumenesBasicos(volumenes, { battery: 'ficha' }).map((v) => v.part), ['battery']);
+  assert.equal(volumenesBasicos(volumenes, undefined).length, 2);
+  assert.equal(volumenesBasicos(volumenes, {}).length, 2);
 });

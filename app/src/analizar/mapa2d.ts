@@ -34,6 +34,16 @@ export function piezasSobreImagen(vano: Vano, volumes: readonly Volume[]): Pieza
 }
 
 /**
+ * Las piezas que la plantilla 2D ubica con confianza: las que el catálogo describe con ficha (`partDetails`). Las demás
+ * (poleas, broches, tapas…) son demasiado chicas para acertarles con una plantilla sobre una foto sin AR; el modo en vivo
+ * las ubica con el modelo 3D anclado. Si el mapa no trae fichas se usan todas.
+ */
+export function volumenesBasicos(volumes: readonly Volume[], partDetails?: Partial<Record<PartId, string>>): Volume[] {
+  const conFicha = partDetails ? volumes.filter(({ part }) => partDetails[part]) : [];
+  return conFicha.length ? conFicha : [...volumes];
+}
+
+/**
  * De varios cuadros de un video, el más útil: primero los que tienen el vano completo (sirven para ubicar las piezas),
  * después los válidos, y dentro de cada grupo el de mayor confianza por área. -1 si la lista está vacía.
  */

@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { encajar, mejorCuadro, piezasSobreImagen, type Punto } from '../analizar/mapa2d';
+import { encajar, mejorCuadro, piezasSobreImagen, volumenesBasicos, type Punto } from '../analizar/mapa2d';
 import { analizarFoto, cargarDetector } from '../detector/detector';
 import { Encuadre } from '../detector/encuadre';
 import { poligonoVano, Suavizador, type Vano } from '../detector/vano';
@@ -101,7 +101,7 @@ export default function Analizar() {
 
   const cuadro = cuadros[indice];
   const piezas = useMemo(
-    () => (cuadro?.vano && cuadro.valido && map ? piezasSobreImagen(cuadro.vano, map.volumes) : []),
+    () => (cuadro?.vano && cuadro.valido && map ? piezasSobreImagen(cuadro.vano, volumenesBasicos(map.volumes, map.partDetails)) : []),
     [cuadro, map],
   );
   const elegida = piezas[seleccion]?.part;
