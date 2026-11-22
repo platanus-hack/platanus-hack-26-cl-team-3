@@ -17,3 +17,6 @@ app/modules/*/android/build/
 
 # Locally built PRT lookup snapshots and source archives
 /api/data/
+
+# Manual del propietario: el PDF y su índice se preparan en cada máquina, no se redistribuyen (regla 7 del README)
+/api/.manual/

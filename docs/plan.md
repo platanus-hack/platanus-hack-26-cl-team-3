@@ -94,7 +94,7 @@ Antes del ajuste de la PR #21, los centros de las piezas quedaban a 37–87 px e
 - **Listo cuando:** la demo corre de punta a punta sin tocar el menú.
 - **No cubre:** el chat sigue sin ver la cámara (H).
 
-**G · Datos con cita** — parte hoy; falta descargar el PDF.
+**G · Datos con cita** — `buscar_manual` y `leer_manual` listas en una PR a `dev`, con el manual de terceros; falta preparar el índice en el servidor (ver [`specs/manual/`](specs/manual/README.md)). Quedan los fusibles con página y los procedimientos por pasos.
 - `buscar_manual` sobre el PDF oficial (fuera del repo, regla 7); fusibles verificados con su página; procedimientos como pasos con pieza y página.
 - **Zona:** `api/src/data/` y `api/src/tools/`.
 - **Listo cuando:** «¿dónde está el sapito?» responde con la página del manual.
