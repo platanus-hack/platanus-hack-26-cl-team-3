@@ -1,4 +1,5 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useScannerPermission } from '../useScannerPermission';
+import { CameraView } from 'expo-camera';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { AppState, findNodeHandle, StyleSheet, Text, View } from 'react-native';
 
@@ -8,7 +9,7 @@ import { Boton } from '../ui';
 import { readCarPlate } from './lookup';
 
 export function PlateCamera({ onRead }: { onRead: (plate: string) => void }) {
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useScannerPermission(Boolean(readPlatePreview));
   const [active, setActive] = useState(AppState.currentState === 'active');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
