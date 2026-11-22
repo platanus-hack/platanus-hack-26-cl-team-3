@@ -32,6 +32,7 @@ import { GuiaMovimiento } from './GuiaMovimiento';
 import { InitialVisualScan, type ScanProgress } from './initial-visual-scan';
 import { CameraHint, PartGuide, type PartGuideRef } from './PartGuide';
 import { FuseLinks } from '../chat/FuseLinks';
+import { fuseGuideFor } from '../fusibles/guides';
 import { GuideCaptions, useCameraGuide } from './CameraGuide';
 import { vanoParaChat } from './vivo/foto';
 import { useScannerConversation } from './useScannerConversation';
@@ -720,8 +721,8 @@ export default function EscanerAR({ vehicle, initialPart, steps = [], initialSte
                 ))}
               </ScrollView>
             )}
-            {outbackParts && selected === 'fuses' && (
-              <FuseLinks fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
+            {selected === 'fuses' && fuseGuideFor(vehicle?.id) && (
+              <FuseLinks vehicleId={vehicle?.id} fuses={cameraGuide.fuses} disabled={cameraGuide.busy} browse />
             )}
             {fuseLink && (
               <Pressable

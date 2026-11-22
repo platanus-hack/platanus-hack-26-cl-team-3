@@ -23,7 +23,7 @@ export type ToolRegistry = Record<string, Tool>;
 
 export function toolsFor(profile: VehicleProfile): ToolRegistry {
   const list: Tool[] = [
-    ...(profile.fuses ? [lookupFuses, showFuse] : []),
+    ...(profile.fuses ? [lookupFuses(profile.fuses), showFuse(profile.fuses)] : []),
     ...(profile.parts.length > 0 ? [lookupParts(profile), showInCamera(profile)] : []),
     ...(profile.manual ? [buscarManual, leerManual] : []),
   ];

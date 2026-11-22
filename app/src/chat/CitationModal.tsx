@@ -14,7 +14,7 @@ export function CitationModal({ citation, onClose }: { citation: ViewCitation | 
         <Tarjeta estilo={styles.modal}>
           <Text style={styles.title}>{citation?.title}</Text>
           <Text style={[tipo.cuerpo, { marginTop: espacio.m }]}>{citation?.cited_text}</Text>
-          {route && <Boton texto={route.params.fuse ? 'Ver fusible en el diagrama' : 'Ver caja del habitáculo'}
+          {route && <Boton texto={route.params.fuse ? 'Ver fusible en el diagrama' : 'Ver caja de fusibles'}
             onPress={() => { onClose(); router.push(route); }} estilo={{ marginTop: espacio.l }} />}
           <Boton texto="Cerrar" variante="secundario" onPress={onClose} estilo={{ marginTop: espacio.l }} />
         </Tarjeta>

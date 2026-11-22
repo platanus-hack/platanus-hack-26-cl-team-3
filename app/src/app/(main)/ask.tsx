@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cameraRoute } from '../../chat/camera';
 import { FuseLinks } from '../../chat/FuseLinks';
+import { fuseGuideFor } from '../../fusibles/guides';
 import { CitationModal } from '../../chat/CitationModal';
 import { ChoiceButton, GuideChoice } from '../../chat/GuideChoice';
 import { runTurn } from '../../chat/client';
@@ -183,7 +184,7 @@ export default function Ask() {
         {bubbles.map((b, i) => (
           <BubbleView
             key={i} bubble={b} streaming={(live.length > 0 || liveCards.length > 0 || liveFuses.length > 0) && i === bubbles.length - 1}
-            showFuses={chatVehicleId === 'outback'}
+            fuseVehicleId={fuseGuideFor(chatVehicleId) ? chatVehicleId : undefined}
             onCitation={setCitation}
             onCamera={openCamera}
           />
@@ -252,13 +253,13 @@ export default function Ask() {
 function BubbleView({
   bubble,
   streaming,
-  showFuses,
+  fuseVehicleId,
   onCitation,
   onCamera,
 }: {
   bubble: Bubble;
   streaming: boolean;
-  showFuses: boolean;
+  fuseVehicleId?: string;
   onCitation: (c: ViewCitation) => void;
   onCamera: (card: ViewCard, cards: ViewCard[]) => void;
 }) {
@@ -293,8 +294,8 @@ function BubbleView({
       ) : (
         text
       )}
-      {!mine && showFuses && bubble.fuses.length > 0 && (
-        <FuseLinks fuses={bubble.fuses} disabled={streaming} />
+      {!mine && fuseVehicleId && bubble.fuses.length > 0 && (
+        <FuseLinks vehicleId={fuseVehicleId} fuses={bubble.fuses} disabled={streaming} />
       )}
     </View>
   );

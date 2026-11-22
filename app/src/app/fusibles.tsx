@@ -1,23 +1,28 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Animated, Image, Keyboard, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { findOutbackFuses, outbackFuseGuide, outbackFuseManualUrl, outbackFuses, type FuseBox, type OutbackFuse } from '../engine-maps/outback-fuses';
-import { engineFusePhoto } from '../engine-maps/outback-fuse-photo';
+import { boxName, fuseGuideFor, searchFuses } from '../fusibles/guides';
+import type { FuseGuide, FusePhoto, FuseSlot } from '../fusibles/types';
 import { color, espacio, radio, tipo } from '../theme';
 import { useReducedMotion } from '../useReducedMotion';
 import { BotonIcono, Icono } from '../ui';
 
-const images = {
-  engine: require('../../assets/engine-maps/outback-engine-fuses.png'),
-  cabin: require('../../assets/engine-maps/outback-cabin-fuses.png'),
-};
-const boxNames = { engine: 'Motor', cabin: 'Habitáculo' };
-const boxIds = ['engine', 'cabin'] as const;
+type Bounds = { x: number; y: number; width: number; height: number };
 
-function fuseName(fuse: OutbackFuse) {
+function fuseName(fuse: FuseSlot) {
   return fuse.amps == null ? `Posición ${fuse.number}` : `Fusible ${fuse.number} · ${fuse.amps} A`;
+}
+
+function photoZoom(photo: FusePhoto): Bounds {
+  const all = Object.values(photo.bounds);
+  const margin = 0.04;
+  const left = Math.max(0, Math.min(...all.map(b => b.x)) - margin);
+  const top = Math.max(0, Math.min(...all.map(b => b.y)) - margin);
+  const right = Math.min(1, Math.max(...all.map(b => b.x + b.width)) + margin);
+  const bottom = Math.min(1, Math.max(...all.map(b => b.y + b.height)) + margin);
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 function FuseBeacon({ photo }: { photo: boolean }) {
@@ -41,31 +46,52 @@ function FuseBeacon({ photo }: { photo: boolean }) {
   </>;
 }
 
-export default function OutbackFuses() {
-  const params = useLocalSearchParams<{ box?: string; fuse?: string; q?: string }>();
-  const box = params.box === 'cabin' ? 'cabin' : 'engine';
-  const fuse = outbackFuses.find(item => item.box === box && String(item.number) === params.fuse);
-  return <FuseDetail key={JSON.stringify([box, params.fuse, params.q])} initialBox={box} initialFuse={fuse} initialQuery={params.q ?? ''} />;
+export default function Fusibles() {
+  const params = useLocalSearchParams<{ vehicleId?: string; box?: string; fuse?: string; q?: string }>();
+  const guide = fuseGuideFor(params.vehicleId);
+  if (!guide) return <SinGuia />;
+  const box = guide.boxes.find(item => item.id === params.box)?.id ?? guide.photo?.box ?? guide.boxes[0].id;
+  const fuse = guide.slots.find(item => item.box === box && String(item.number) === params.fuse);
+  return <FuseDetail key={JSON.stringify([guide.vehicleId, box, params.fuse, params.q])} guide={guide}
+    initialBox={box} initialFuse={fuse} initialQuery={params.q ?? ''} />;
 }
 
-function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: FuseBox; initialFuse?: OutbackFuse; initialQuery: string }) {
+function SinGuia() {
+  return (
+    <SafeAreaView style={styles.screen}>
+      <View style={styles.header}>
+        <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
+        <View style={styles.flex}>
+          <Text style={styles.heading}>Fusibles</Text>
+          <Text style={tipo.nota}>Todavía no tenemos el mapa de fusibles verificado de este auto.</Text>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function FuseDetail({ guide, initialBox, initialFuse, initialQuery }: { guide: FuseGuide; initialBox: string; initialFuse?: FuseSlot; initialQuery: string }) {
   const [box, setBox] = useState(initialBox);
   const [selected, setSelected] = useState(initialFuse);
-  const [engineView, setEngineView] = useState<'photo' | 'diagram'>('photo');
+  const [view, setView] = useState<'photo' | 'diagram'>('photo');
   const [zoomed, setZoomed] = useState(false);
   const [query, setQuery] = useState(initialQuery);
   const [linkError, setLinkError] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(0);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const searching = query.trim().length > 0;
-  const slots = outbackFuses.filter(fuse => fuse.box === box);
-  const results = searching ? findOutbackFuses(query) : slots;
-  const guide = outbackFuseGuide[box];
-  const photo = box === 'engine' && engineView === 'photo';
-  const diagram = photo ? engineFusePhoto : guide;
-  const viewport = photo && zoomed ? { x: .30, y: .24, width: .40, height: .61 } : { x: 0, y: 0, width: 1, height: 1 };
-  const regionName = (fuse: OutbackFuse) => fuse.amps == null ? 'Posición vacía' : fuse.label;
+  const slots = guide.slots.filter(fuse => fuse.box === box);
+  const results = searching ? searchFuses(guide, query) : slots;
+  const boxGuide = guide.boxes.find(item => item.id === box) ?? guide.boxes[0];
+  const photoData = guide.photo?.box === box ? guide.photo : undefined;
+  const photo = !!photoData && view === 'photo';
+  const diagram = photo && photoData ? photoData : boxGuide;
+  const zoom = useMemo(() => photoData ? photoZoom(photoData) : undefined, [photoData]);
+  const viewport = photo && zoomed && zoom ? zoom : { x: 0, y: 0, width: 1, height: 1 };
+  const image = photo && photoData ? photoData.image : boxGuide.image;
+  const regionName = (fuse: FuseSlot) => fuse.amps == null ? 'Posición vacía' : fuse.label;
 
-  function select(fuse: OutbackFuse) {
+  function select(fuse: FuseSlot) {
     Keyboard.dismiss();
     setQuery('');
     setBox(fuse.box);
@@ -79,14 +105,14 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
         <BotonIcono icono="arrow-left" etiqueta="Volver" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
         <View style={styles.flex}>
           <Text style={styles.heading}>Fusibles</Text>
-          <Text style={tipo.nota}>Outback 2016 · 3.6R · Norteamérica</Text>
+          <Text style={tipo.nota}>{guide.subtitle}</Text>
         </View>
       </View>
       <View style={styles.search}>
         <Icono nombre="magnify" tam={22} tono={color.textoSuave} />
         <TextInput
-          value={query} onChangeText={setQuery} style={styles.input} placeholder="Buscar circuito en ambas cajas"
-          accessibilityLabel="Buscar circuito en ambas cajas" placeholderTextColor={color.textoSuave}
+          value={query} onChangeText={setQuery} style={styles.input} placeholder="Buscar circuito en todas las cajas"
+          accessibilityLabel="Buscar circuito en todas las cajas" placeholderTextColor={color.textoSuave}
           autoCorrect={false} returnKeyType="search"
         />
         {query.length > 0 && <BotonIcono icono="close" etiqueta="Limpiar búsqueda" onPress={() => setQuery('')} />}
@@ -94,17 +120,17 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         {!searching && <>
           <View style={styles.tabs}>
-            {boxIds.map(id => <Pressable key={id} onPress={() => { setBox(id); setSelected(undefined); setLinkError(false); }}
-              accessibilityRole="button" accessibilityState={{ selected: id === box }} style={[styles.tab, id === box && styles.currentTab]}>
-              <Text style={[styles.tabLabel, id === box && styles.currentTabLabel]}>{boxNames[id]}</Text>
+            {guide.boxes.map(item => <Pressable key={item.id} onPress={() => { setBox(item.id); setSelected(undefined); setLinkError(false); }}
+              accessibilityRole="button" accessibilityState={{ selected: item.id === box }} style={[styles.tab, item.id === box && styles.currentTab]}>
+              <Text style={[styles.tabLabel, item.id === box && styles.currentTabLabel]}>{item.name}</Text>
             </Pressable>)}
           </View>
-          {box === 'engine' && <View style={styles.viewOptions}>
+          {photoData && <View style={styles.viewOptions}>
             {(['photo', 'diagram'] as const).map(mode => <Pressable key={mode} accessibilityRole="button"
-              accessibilityState={{ selected: engineView === mode }} onPress={() => setEngineView(mode)} style={styles.viewOption}>
+              accessibilityState={{ selected: view === mode }} onPress={() => setView(mode)} style={styles.viewOption}>
               <Icono nombre={mode === 'photo' ? 'camera-outline' : 'view-grid-outline'} tam={18}
-                tono={engineView === mode ? color.acento : color.textoSuave} />
-              <Text style={[tipo.nota, engineView === mode && styles.activeView]}>{mode === 'photo' ? 'Foto' : 'Diagrama'}</Text>
+                tono={view === mode ? color.acento : color.textoSuave} />
+              <Text style={[tipo.nota, view === mode && styles.activeView]}>{mode === 'photo' ? 'Foto' : 'Diagrama'}</Text>
             </Pressable>)}
             {photo && <Pressable accessibilityRole="button" onPress={() => setZoomed(!zoomed)}
               accessibilityLabel={zoomed ? 'Ver foto completa' : 'Ampliar fusibles'} style={styles.zoom}>
@@ -112,35 +138,40 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
               <Text style={tipo.nota}>{zoomed ? 'Foto completa' : 'Ampliar'}</Text>
             </Pressable>}
           </View>}
-          <View style={[styles.diagram, { aspectRatio: diagram.width * viewport.width / (diagram.height * viewport.height) }]}>
-            <Image source={photo ? engineFusePhoto.image : images[box]} style={{ position: 'absolute', left: `${-100 * viewport.x / viewport.width}%`,
+          <View onLayout={event => setCanvasWidth(event.nativeEvent.layout.width)}
+            style={[styles.diagram, { aspectRatio: diagram.width * viewport.width / (diagram.height * viewport.height) },
+              !image && styles.plainCanvas]}>
+            {image && <Image source={image} style={{ position: 'absolute', left: `${-100 * viewport.x / viewport.width}%`,
                 top: `${-100 * viewport.y / viewport.height}%`, width: `${100 / viewport.width}%`,
-                height: `${100 / viewport.height}%` }} resizeMode="stretch" accessible={false} />
+                height: `${100 / viewport.height}%` }} resizeMode="stretch" accessible={false} />}
             {slots.map(fuse => {
-              const bounds = photo ? engineFusePhoto.bounds[fuse.number] : fuse;
+              const bounds: Bounds | undefined = photo && photoData ? photoData.bounds[fuse.number] : fuse;
               if (!bounds) return null;
+              const current = selected?.box === fuse.box && selected.number === fuse.number;
               return <Pressable key={fuse.number}
               accessibilityRole="button" accessibilityLabel={`${fuseName(fuse)}, ${fuse.description}`}
-              accessibilityState={{ selected: selected?.number === fuse.number }}
+              accessibilityState={{ selected: current }}
               onPress={() => select(fuse)}
-              style={[styles.slot, {
+              style={[styles.slot, !image && (fuse.amps == null ? styles.drawnEmptySlot : styles.drawnSlot), {
                 left: `${100 * (bounds.x - viewport.x) / viewport.width}%`, top: `${100 * (bounds.y - viewport.y) / viewport.height}%`,
                 width: `${100 * bounds.width / viewport.width}%`, height: `${100 * bounds.height / viewport.height}%`,
-              }, selected?.number === fuse.number && styles.selectedSlot]}>
-                {selected?.number === fuse.number && <FuseBeacon photo={photo} />}
+              }, current && styles.selectedSlot]}>
+                {!image && <Text style={[styles.slotNumber, { fontSize: Math.max(9, Math.min(16, canvasWidth * bounds.height / viewport.height * 0.42)) }]}>{fuse.number}</Text>}
+                {current && <FuseBeacon photo={photo} />}
               </Pressable>;
             })}
           </View>
           {selected ? <View accessibilityLiveRegion="polite" style={styles.info}>
-            <Text style={styles.selectedTitle}>{fuseName(selected)} · {boxNames[selected.box]}</Text>
+            <Text style={styles.selectedTitle}>{fuseName(selected)} · {boxName(guide, selected.box)}</Text>
             <Text style={tipo.cuerpo}>{selected.description}</Text>
             {selected.amps != null && <Text style={tipo.nota}>{selected.label}</Text>}
-            {selected.box === 'engine' && engineFusePhoto.emptySlots.includes(selected.number) &&
+            {guide.photo?.box === selected.box && guide.photo.emptySlots.includes(selected.number) &&
               <Text style={tipo.nota}>Esta posición está vacía en la foto del auto de prueba. La asignación y el amperaje corresponden al manual.</Text>}
           </View> : <Text style={tipo.nota}>Toca una posición del diagrama o un circuito de la lista.</Text>}
-          <Pressable accessibilityRole="link" onPress={() => {
-            void Linking.openURL(`${outbackFuseManualUrl.split('#')[0]}#page=${guide.page}`).catch(() => setLinkError(true));
-          }}><Text style={styles.link}>Manual Subaru · Norteamérica · págs. {guide.pages} ↗</Text></Pressable>
+          {guide.manualUrl && <Pressable accessibilityRole="link" onPress={() => {
+            const url = guide.manualUrl!.split('#')[0];
+            void Linking.openURL(boxGuide.page ? `${url}#page=${boxGuide.page}` : url).catch(() => setLinkError(true));
+          }}><Text style={styles.link}>Manual · págs. {boxGuide.pages} ↗</Text></Pressable>}
           <Text style={tipo.nota}>Comprueba la numeración en la tapa de tu vehículo.</Text>
           {linkError && <Text style={tipo.nota}>No se pudo abrir el manual.</Text>}
         </>}
@@ -152,7 +183,7 @@ function FuseDetail({ initialBox, initialFuse, initialQuery }: { initialBox: Fus
           <View style={styles.number}><Text style={styles.numberText}>{fuse.number}</Text></View>
           <View style={styles.flex}>
             <Text style={styles.rowLabel}>{fuse.description}</Text>
-            <Text style={tipo.nota}>{searching ? `${boxNames[fuse.box]} · ` : ''}{regionName(fuse)}</Text>
+            <Text style={tipo.nota}>{searching ? `${boxName(guide, fuse.box)} · ` : ''}{regionName(fuse)}</Text>
           </View>
           {fuse.amps != null && <Text style={tipo.nota}>{fuse.amps} A</Text>}
           <Icono nombre="chevron-right" tam={19} tono={color.textoSuave} />
@@ -181,7 +212,11 @@ const styles = StyleSheet.create({
   activeView: { color: color.acento, fontWeight: '700' },
   zoom: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: espacio.xs },
   diagram: { width: '100%', maxWidth: 650, alignSelf: 'center', overflow: 'hidden' },
-  slot: { position: 'absolute' },
+  plainCanvas: { backgroundColor: color.superficie, borderRadius: radio.s },
+  slot: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+  drawnSlot: { borderWidth: 1.5, borderColor: color.textoSuave, borderRadius: radio.s, backgroundColor: color.superficieAlta },
+  drawnEmptySlot: { borderWidth: 1, borderColor: color.borde, borderRadius: radio.s, borderStyle: 'dashed' },
+  slotNumber: { color: color.texto, fontWeight: '700' },
   beaconCenter: { position: 'absolute', left: '50%', top: '50%', marginLeft: -2, marginTop: -2,
     width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFF' },
   beacon: { position: 'absolute', left: '50%', top: '50%', marginLeft: -13, marginTop: -13,
