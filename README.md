@@ -24,7 +24,7 @@ The selected vehicle determines which tools the Node.js and TypeScript API gives
 
 **Parts and fuses.** Part cards carry a source and an identifier that the camera guide can highlight. The Outback fuse data covers both the cabin and engine boxes and ties each circuit to a manual page. The dashboard guide also links four supported warning lights to their manual entries. [Part and fuse data](api/src/data/) · [Camera tools](api/src/tools/) · [Dashboard guide](app/src/dashboard/guide.ts)
 
-**Conversation in the scanner.** The driver can start and end a voice conversation from the camera. ElevenLabs transcribes speech, and the server holds the provider credentials. Chat and voice require connectivity. Depending on the feature, the server receives text, audio or an engine-bay crop. Saved conversation history replaces images with a text placeholder. [Scanner](app/src/escaner/) · [Transcription](api/src/transcribe/) · [History storage](api/src/conversations/)
+**Conversation in the scanner.** The driver can start and end a voice conversation from the camera. For live transcription, the app obtains a single-use token from the API and streams audio directly to ElevenLabs. Experimental spoken replies use text-to-speech and are off by default. Long-lived provider credentials stay on the server. Chat and voice require connectivity. Depending on the feature, the server receives text, audio or an engine-bay crop. Saved conversation history replaces images with a text placeholder. [Scanner](app/src/escaner/) · [Voice playback](docs/specs/voz-asistente/README.md) · [Transcription](api/src/transcribe/) · [History storage](api/src/conversations/)
 
 ## How the app selects a vehicle
 
@@ -58,7 +58,7 @@ Hoodini retains its original Android package name, `com.capoar.app`, so existing
 
 | Task | Entry point |
 | --- | --- |
-| Run the assistant locally | In `api/`, use Node 22.13 or later, run `npm ci` and then `npm start`. The API listens on port 8787. Set `ANTHROPIC_API_KEY` for chat and `ELEVENLABS_API_KEY` for dictation. Set `HISTORIAL_DB` to enable SQLite conversation history and turn logs. |
+| Run the assistant locally | In `api/`, use Node 22.13 or later, run `npm ci` and then `npm start`. The API listens on port 8787. Set `ANTHROPIC_API_KEY` for chat and `ELEVENLABS_API_KEY` for voice input and playback. Set `HISTORIAL_DB` to enable SQLite conversation history and turn logs. |
 | Connect an Android build | Set `EXPO_PUBLIC_API_URL` in `app/.env.local` before building. Release APKs require an HTTPS endpoint. |
 | Run focused checks | In `api/`, run `npm test`. In `app/`, install dependencies and run `npx tsx --test src/chat/*.test.ts` for the chat client. |
 | Build the ARM64 APK | The [Linux packaging script](scripts/compilar-apk.sh) requires the Android SDK and 5 GB of available memory. It prepares the models and writes `dist/capo-ar.apk`. [Android CI](.github/workflows/android.yml) checks the package identity, update code, signing certificate and bundled Outback asset before publication. The public hackathon signing key preserves update compatibility. Use the project release link above for downloads. |
